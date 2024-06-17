@@ -5,6 +5,30 @@ namespace Cards
         Infantry,
         Cavalry,
         Artillery,
-        Wild
+        Wild,
+        Armageddon,
+        AssassinBomb,
+
+        AssembleMODs,
+        CeaseFire,
+        ColonyInfluence,
+        DeathTrap,
+        DecoysRevealed,
+        EnergyCrisis,
+        EnergyExtraction,
+        Evacuation,
+        FrequencyJam,
+        HiddenEnergy,
+        InvadeEarth,
+        MODReduction,
+        Redeployment,
+        Reinforcements,
+        RocketStrike,
+        ScatterBomb,
+        ScoutForces,
+        StealthMODs,
+        StealthStation,
+        TerritorialStation
+
     }
 }
