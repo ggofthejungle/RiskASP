@@ -122,6 +122,7 @@ public class GameManager : MonoBehaviour
     {
         _tr.RandomlyAssignTerritories(Players);
         DistributeTroops();
+        AssignEnergy();
         EnqueuePlayers();
         DrawStartingCards();
         _turn = 0;
@@ -135,6 +136,14 @@ public class GameManager : MonoBehaviour
             {
                 player.AddCard(_cr.DrawRandomCard());
             }
+        }
+    }
+
+    private void AssignEnergy()
+    {
+        foreach (var player in Players)
+        {
+            player.SetEnergy(0);
         }
     }
 

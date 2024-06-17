@@ -25,6 +25,8 @@ namespace player
 
         public Dictionary<CardType, int> CardTypeCountMap { get; } = new();
 
+        public int _energy;
+
         public PlayerColor Color;
 
 
@@ -76,6 +78,17 @@ namespace player
                 _name += " (Bot)";
                 gameObject.name += " (Bot)";
             }
+        }
+
+        public void SetEnergy(int energy)
+        {
+            _energy = energy;
+
+        }
+
+        public int GetEnergy()
+        {
+            return _energy;
         }
 
 

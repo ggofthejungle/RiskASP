@@ -13,6 +13,8 @@ namespace UI
         [SerializeField] private TMP_Text _troopsText;
         [SerializeField] private TMP_Text _territoriesText;
         [SerializeField] private TMP_Text _cardsText;
+        [SerializeField] private TMP_Text _energyText;
+        
         [SerializeField] private Image _colorImage;
 
         [SerializeField] private RectTransform _backgroundRectTransform;
@@ -83,6 +85,7 @@ namespace UI
         {
             _troopsText.text = _player.GetTroopsCountInTerritories().ToString();
             _territoriesText.text = _player.GetTerritoryCount().ToString();
+            _energyText.text = _player.GetEnergy().ToString();
             UpdateCardsData();
         }
 
