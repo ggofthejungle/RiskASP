@@ -16,6 +16,7 @@ namespace Map
         public List<Territory> NeighbourTerritories = new();
         public Player Owner;
         public int Troops { get; private set; }
+        public bool containsSpaceStation = true;
 
         public Action OnStateChanged;
         public Action<Player,Player> OnOwnerChanged;
@@ -113,6 +114,18 @@ namespace Map
         {
             Troops = troops;
             OnStateChanged?.Invoke();
+        }
+
+        public void AddSpaceStation()
+        {
+            //check if the owner has 4, then have to remove a space station
+            containsSpaceStation = true;
+
+        }
+
+        public void RemoveSpaceStation()
+        {
+            containsSpaceStation = false;
         }
         
 

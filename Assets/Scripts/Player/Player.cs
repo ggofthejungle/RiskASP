@@ -26,6 +26,8 @@ namespace player
         public Dictionary<CardType, int> CardTypeCountMap { get; } = new();
 
         public int _energy;
+        
+        public int _spaceStationCount;
 
         public PlayerColor Color;
 

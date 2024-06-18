@@ -19,6 +19,8 @@ namespace TurnPhases
         public int RemainingTroopsToPlace => _remainingTroopsToPlace;
         private int _remainingTroopsToPlace;
 
+
+
         public Action OnTroopsToPlaceChanged;
         public Action<ReinforceAction> OnTroopsPlaced;
         public Action<ExchangeCardsAction> OnCardsExchanged;
@@ -36,7 +38,18 @@ namespace TurnPhases
         {
             _remainingTroopsToPlace = player.GetTotalTroopBonus();
             OnTroopsToPlaceChanged?.Invoke();
+
+            foreach (var territory in player.Territories)
+            {
+                if (territory.containsSpaceStation)
+                {
+                    territory.AddTroops(1);
+                }
+            }
+
             if (_remainingTroopsToPlace == 0 && !player.HasPossibleExchange()) _gm.NextTurnPhase();
+
+
         }
 
         public void OnAction(Player player, PlayerAction action)
@@ -81,7 +94,7 @@ namespace TurnPhases
                 _gm.NextTurnPhase();
         }
 
-
+       
         public void End(Player player)
         {
         }
