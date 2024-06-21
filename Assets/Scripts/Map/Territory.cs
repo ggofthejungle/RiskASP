@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Expansions;
 using JetBrains.Annotations;
 using player;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.Serialization;
 
 namespace Map
 {
@@ -17,6 +19,7 @@ namespace Map
         public Player Owner;
         public int Troops { get; private set; }
         public bool containsSpaceStation = true;
+        public List<Commander> CommandersList;
 
         public Action OnStateChanged;
         public Action<Player,Player> OnOwnerChanged;

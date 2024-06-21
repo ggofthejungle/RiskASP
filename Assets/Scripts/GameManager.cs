@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Actions;
 using Cards;
+using Expansions;
 using Extensions;
 using Map;
 using player;
@@ -125,6 +126,12 @@ public class GameManager : MonoBehaviour
         AssignEnergy();
         EnqueuePlayers();
         DrawStartingCards();
+        //_tr.Territories.First().CommandersList;
+        for (int i = 0; i < _tr.Territories.Count; i++)
+            _tr.Territories[i].CommandersList.Add(new Commander(CommanderType.LandCommander)); 
+        
+        
+        Debug.Log("GameManager " + _tr.Territories.First().Name + " 8 sided die");
         _turn = 0;
     }
 

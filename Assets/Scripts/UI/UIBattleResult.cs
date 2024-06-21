@@ -59,13 +59,15 @@ namespace UI
             
             for (var index = 0; index < attackResult.AttackingTroops; index++)
             {
-                var attackerRoll = attackResult.AttackerRolls[index];
+                Debug.Log("Attacking troops " + attackResult.AttackingTroops);
+                var attackerRoll = attackResult.AttackerRolls[index]; 
                 _attackDiceRenderers[index].sprite = _diceSprites[attackerRoll - 1];
                 _attackDiceRenderers[index].enabled = true;
             }
             
             for (var index = 0; index < attackResult.DefendingTroops; index++)
             {
+                Debug.Log("Defending troops " + attackResult.DefendingTroops);
                 var defenderRoll = attackResult.DefenderRolls[index];
                 _defenderDiceRenderers[index].sprite = _diceSprites[defenderRoll - 1];
                 _defenderDiceRenderers[index].enabled = true;

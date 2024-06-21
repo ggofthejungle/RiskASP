@@ -8,7 +8,6 @@ namespace Cards
         Wild,
         Armageddon,
         AssassinBomb,
-
         AssembleMODs,
         CeaseFire,
         ColonyInfluence,
