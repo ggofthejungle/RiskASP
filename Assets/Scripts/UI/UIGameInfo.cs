@@ -67,7 +67,10 @@ namespace UI
             _extraInfoTexts[2].text = $"Reinforced with: {reinforceAction.ReinforcingTroops} troops";
         }
 
-        private void UpdatePlayerText(Player player) => _playerTurnText.text = $"{player.Name}'s Turn";
+
+        //private void UpdatePlayerText(Player player) => _playerTurnText.text = $"{player.Name}'s Turn";
+        private void UpdatePlayerText(Player player) => _playerTurnText.text = player?.Name ?? "Bid for energy(0-3) and press submit";
+
         private void UpdateTurnText(int turn) => _turnText.text = $"Turn {turn}";
         private void UpdateTurnPhaseText(IPhase phase)
         {

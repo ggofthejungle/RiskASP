@@ -9,6 +9,7 @@ using Map;
 using player;
 using TurnPhases;
 using UnityEngine;
+using TMPro;
 
 public class GameManager : MonoBehaviour
 {
@@ -24,6 +25,10 @@ public class GameManager : MonoBehaviour
     [SerializeField] private StartingPlayersConfiguration _startingPlayersConfiguration;
 
     public List<Player> Players;
+    
+    //public TextMeshProUGUI BidEnergyOutput;
+    public TMP_InputField BidEnergyInput;
+    //private int[] _energyBids;
 
     private Queue<Player> _playerQueue = new();
     public List<Player> GetPlayersInTurnOrder() => _playerQueue.ToList();
@@ -40,7 +45,7 @@ public class GameManager : MonoBehaviour
     public IPhase CurrentPhase => _currentPhase;
     private IPhase _currentPhase;
 
-
+    public BiddingPhase BiddingPhase { get; private set; }
     public ReinforcePhase ReinforcePhase { get; private set; }
     public AttackPhase AttackPhase { get; private set; }
     public FortifyPhase FortifyPhase { get; private set; }
@@ -71,7 +76,6 @@ public class GameManager : MonoBehaviour
             Instance = this;
 
         SetGamePhase(GamePhase.Setup);
-
 
         _tr = TerritoryRepository.Instance;
         _cr = CardRepository.Instance;
@@ -114,8 +118,14 @@ public class GameManager : MonoBehaviour
     private void Start()
     {
         SetupGame();
-        SetGamePhase(GamePhase.Playing);
-        NextTurn();
+        SetGamePhase(GamePhase.Bidding);
+        //bidEnergyInput.SetActive(true);
+        //bidEnergyButton.SetActive(true);
+        
+        //regular game calls NextTurn(); but we only want some of the functionality
+        _currentPlayer = _playerQueue.Dequeue();
+        //_playerQueue.Enqueue(_currentPlayer);
+        //_turn++; //is this needed?
     }
 
     private void SetupGame()
@@ -123,8 +133,8 @@ public class GameManager : MonoBehaviour
         _tr.RandomlyAssignTerritories(Players);
         DistributeTroops();
         AssignEnergy();
-        EnqueuePlayers();
-        DrawStartingCards();
+        EnqueuePlayers();//call it once so that HandlePlayerBidEnergy can continue
+        //DrawStartingCards();
         _turn = 0;
     }
 
@@ -143,7 +153,7 @@ public class GameManager : MonoBehaviour
     {
         foreach (var player in Players)
         {
-            player.SetEnergy(0);
+            player.SetEnergy(3);
         }
     }
 
@@ -170,7 +180,6 @@ public class GameManager : MonoBehaviour
                     playerCreator.SetUpPlayerFromColor(player, player.Color);
             }
     }
-
 
     private void EnqueuePlayers()
     {
@@ -236,6 +245,53 @@ public class GameManager : MonoBehaviour
 
         _currentPhase.OnAction(_currentPlayer, action);
     }
+    
+    public void HandlePlayerBidEnergy(int energy)
+    {
+        
+        //GameObject bidEnergyInput = GameObject.Find("BidEnergyInput");
+        //_currentPlayer._energyBid = Convert.ToInt32(bidEnergyInput.GetComponent<TMP_InputField>().text);
+        
+        //instead of debug show that to the player in the UI:
+        //BidEnergyOutput.text = "Player " + _currentPlayer.Name + " bid " + _currentPlayer._energyBid + " energy.";
+        
+        
+        
+        
+        if (_currentPlayer._energyBid < 0 || _currentPlayer._energyBid > 3)
+        {
+            GameObject ExtraInfo1 = GameObject.Find("ExtraInfo1");
+            //ExtraInfo1.text = "Invalid bid. Please bid between 0 and 3.";
+            return;
+        }
+        
+        Debug.Log("Player " + _currentPlayer.Name + " bid " + _currentPlayer._energyBid + " energy.");
+
+        //bidEnergyInput.SetActive(false);
+        
+        //after all players have bid, go to the next phase.
+        if (_currentPlayer == _playerQueue.Peek())
+        {
+            //Determine the player with the highest bid looking at their energyBid:
+            /*
+            Player playerWithHighestBid = _playerQueue.Peek();
+            foreach (Player player in _playerQueue)
+            {
+                if (player._energyBid > playerWithHighestBid._energyBid)
+                {
+                    playerWithHighestBid = player;
+                }
+            }
+
+            //Set the player with the highest bid as the current player:
+            _currentPlayer = playerWithHighestBid;
+            //set the next player in the queue as the current player:
+            _playerQueue.Enqueue(_playerQueue.Dequeue());*/
+            
+            SetGamePhase(GamePhase.Playing);
+            NextTurn();
+        }
+    }
 
     private void NextTurn()
     {
@@ -281,7 +337,6 @@ public class GameManager : MonoBehaviour
         OnGamePhaseChanged?.Invoke(gamePhase);
     }
 
-
     private void GameOver()
     {
         SetGamePhase(GamePhase.Over);
@@ -296,6 +351,7 @@ public class GameManager : MonoBehaviour
 public enum GamePhase
 {
     Setup,
+    Bidding,
     Playing,
     Over
 }
