@@ -57,17 +57,26 @@ namespace UI
                 defenderDiceRenderer.sprite = null;
             }
             
+            Debug.Log("Attacking troops " + attackResult.AttackingTroops);
+            Debug.Log( "_attackDiceRenderers.Length " + _attackDiceRenderers.Length );
+            
+            Debug.Log( "_diceSprites.Length " + _diceSprites.Length );
+    
             for (var index = 0; index < attackResult.AttackingTroops; index++)
             {
-                Debug.Log("Attacking troops " + attackResult.AttackingTroops);
-                var attackerRoll = attackResult.AttackerRolls[index]; 
+                Debug.Log("i " + index + " " + attackResult.AttackerRolls[index]);
+                var attackerRoll = attackResult.AttackerRolls[index];
+                    
                 _attackDiceRenderers[index].sprite = _diceSprites[attackerRoll - 1];
                 _attackDiceRenderers[index].enabled = true;
             }
             
+            Debug.Log("Defending troops " + attackResult.DefendingTroops);
+            Debug.Log( "_defenderDiceRenderers.Length " + _defenderDiceRenderers.Length );
+
             for (var index = 0; index < attackResult.DefendingTroops; index++)
             {
-                Debug.Log("Defending troops " + attackResult.DefendingTroops);
+                Debug.Log("i " + index + " " + attackResult.DefenderRolls[index]);
                 var defenderRoll = attackResult.DefenderRolls[index];
                 _defenderDiceRenderers[index].sprite = _diceSprites[defenderRoll - 1];
                 _defenderDiceRenderers[index].enabled = true;

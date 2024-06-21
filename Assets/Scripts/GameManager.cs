@@ -126,10 +126,17 @@ public class GameManager : MonoBehaviour
         AssignEnergy();
         EnqueuePlayers();
         DrawStartingCards();
-        //_tr.Territories.First().CommandersList;
+        
+        _tr.Territories.First().CommandersList.Add(new Commander(CommanderType.LandCommander)); 
+        //_tr.Territories.First().Name += " L"; //dont change territory name i guess
+        //_tr.Territories.First().tr
+        
+        
+        /*
+        // Test code for adding commanders to ALL territories
         for (int i = 0; i < _tr.Territories.Count; i++)
             _tr.Territories[i].CommandersList.Add(new Commander(CommanderType.LandCommander)); 
-        
+        */
         
         Debug.Log("GameManager " + _tr.Territories.First().Name + " 8 sided die");
         _turn = 0;

@@ -231,12 +231,12 @@ MonoBehaviour:
   m_margin: {x: 0, y: 0, z: 0, w: 0}
   m_isUsingLegacyAnimationComponent: 0
   m_isVolumetricText: 0
-  m_hasFontAssetChanged: 0
-  m_renderer: {fileID: 1056763752979359733}
-  m_maskType: 0
   _SortingLayer: 0
   _SortingLayerID: 0
   _SortingOrder: 0
+  m_hasFontAssetChanged: 0
+  m_renderer: {fileID: 1056763752979359733}
+  m_maskType: 0
 --- !u!1 &7257965793165761802
 GameObject:
   m_ObjectHideFlags: 0
@@ -487,12 +487,12 @@ MonoBehaviour:
   m_margin: {x: -0.06366539, y: -0.052456856, z: -0.05816132, w: -0.052456856}
   m_isUsingLegacyAnimationComponent: 0
   m_isVolumetricText: 0
-  m_hasFontAssetChanged: 0
-  m_renderer: {fileID: 7974584294302472630}
-  m_maskType: 0
   _SortingLayer: 0
   _SortingLayerID: 0
   _SortingOrder: 0
+  m_hasFontAssetChanged: 0
+  m_renderer: {fileID: 7974584294302472630}
+  m_maskType: 0
 --- !u!1 &7777340886161212016
 GameObject:
   m_ObjectHideFlags: 0
@@ -579,6 +579,8 @@ MonoBehaviour:
   Continent: {fileID: 0}
   NeighbourTerritories: []
   Owner: {fileID: 0}
+  containsSpaceStation: 1
+  CommandersList: []
 --- !u!114 &5853463515120772916
 MonoBehaviour:
   m_ObjectHideFlags: 0

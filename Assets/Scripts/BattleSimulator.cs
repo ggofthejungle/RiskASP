@@ -33,7 +33,7 @@ public class BattleSimulator : MonoBehaviour
 
         if (attackAction.Origin.CommandersList.Count == 0)
         {
-            attackerRolls = RollDices(attackingTroops);
+            attackerRolls = Roll6SidedDies(attackingTroops);
         }
         else
         {
@@ -46,16 +46,16 @@ public class BattleSimulator : MonoBehaviour
             {
                 if (attackAction.Origin.CommandersList[i].Type == CommanderType.LandCommander)
                 {
-                    attackerRolls = RollCommanderDices(attackingTroops);
+                    attackerRolls = Roll8SidedDies(attackingTroops);
                 }else if (attackAction.Origin.CommandersList[i].Type == CommanderType.NuclearCommander) 
-                    attackerRolls = RollCommanderDices(attackingTroops);
+                    attackerRolls = Roll8SidedDies(attackingTroops);
             }
         }
         
         int[] defenderRolls = null;
         if (attackAction.Target.CommandersList.Count > 0)
         {
-            defenderRolls = RollCommanderDices(defendingTroops);
+            defenderRolls = Roll8SidedDies(defendingTroops);
         }
         
         attackerRolls = attackerRolls.OrderByDescending(c => c).ToArray();
@@ -87,28 +87,35 @@ public class BattleSimulator : MonoBehaviour
         );
     }
 
-    private int Roll() => UnityEngine.Random.Range(1, 7);
+    //roll 6 sided die (1 thru 6)
+    private int SixSidedRoll() => UnityEngine.Random.Range(1, 7);
     
-    private int CommanderRoll() => UnityEngine.Random.Range(1, 9);
+    //roll 8 sided die (1 thru 8)
+    private int EightSidedRoll() => UnityEngine.Random.Range(1, 9); 
 
-    private int[] RollDices(int dices)
+    private int[] Roll6SidedDies(int dices)
     {
         // var rolls = new List<int>(dices);
         var rolls = new int[dices];
 
         for (int i = 0; i < dices; i++) 
-            rolls[i] = Roll();
+            rolls[i] = SixSidedRoll();
 
         return rolls;
     }
     
-    private int[] RollCommanderDices(int dices)
+    //Some Commanders and Space Stations use 8 sided dies
+    private int[] Roll8SidedDies(int dices)
     {
         // var rolls = new List<int>(dices);
         var rolls = new int[dices];
 
         for (int i = 0; i < dices; i++) 
-            rolls[i] = CommanderRoll();
+            rolls[i] = EightSidedRoll();
+        
+        //can we access _diceSprites in here and change it from 6 to 8? 
+        //Debug.Log("BattleSimulator " + _diceSprites.Length);
+        
 
         return rolls;
     }
