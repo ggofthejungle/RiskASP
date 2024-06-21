@@ -49,6 +49,10 @@ public class BattleSimulator : MonoBehaviour
                     attackerRolls = Roll8SidedDies(attackingTroops);
                 }else if (attackAction.Origin.CommandersList[i].Type == CommanderType.NuclearCommander) 
                     attackerRolls = Roll8SidedDies(attackingTroops);
+                else //different commander other than Land and Nuclear: Space and Naval (only to/from space or to/from Water) 
+                {
+                    attackerRolls = Roll8SidedDies(attackingTroops);
+                }
             }
         }
         
@@ -57,6 +61,11 @@ public class BattleSimulator : MonoBehaviour
         {
             defenderRolls = Roll8SidedDies(defendingTroops);
         }
+        else
+        {
+            defenderRolls = Roll6SidedDies(defendingTroops);
+        }
+        //also need to add logic if defender has a space station -> defends with 8 sided die
         
         attackerRolls = attackerRolls.OrderByDescending(c => c).ToArray();
         defenderRolls = defenderRolls.OrderByDescending(c => c).ToArray();

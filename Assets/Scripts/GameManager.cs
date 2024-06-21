@@ -127,9 +127,16 @@ public class GameManager : MonoBehaviour
         EnqueuePlayers();
         DrawStartingCards();
         
-        _tr.Territories.First().CommandersList.Add(new Commander(CommanderType.LandCommander)); 
+        //_tr.Territories.First().CommandersList.Add(new Commander(CommanderType.LandCommander));
+        _tr.Territories.First().AddCommander(new Commander(CommanderType.LandCommander));
+        _tr.Territories.First().AddCommander(new Commander(CommanderType.Diplomat));
+        _tr.Territories.First().AddCommander(new Commander(CommanderType.NuclearCommander));
+        _tr.Territories.First().AddSpaceStation();
+        //_tr.Territories.First().SetCommanderAndSpaceStationLabels("L");
+        
+        //SetCommanderAndSpaceStationLabels
         //_tr.Territories.First().Name += " L"; //dont change territory name i guess
-        //_tr.Territories.First().tr
+        //_tr.Territories.First().Comm
         
         
         /*

@@ -4,6 +4,7 @@ using System.Linq;
 using Expansions;
 using JetBrains.Annotations;
 using player;
+using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.Serialization;
@@ -18,19 +19,21 @@ namespace Map
         public List<Territory> NeighbourTerritories = new();
         public Player Owner;
         public int Troops { get; private set; }
+
         public bool containsSpaceStation = true;
-        public List<Commander> CommandersList;
+        
+        public List<Commander> CommandersList; //corresponds to _commandersText in TerritoryGraphics.cs
 
         public Action OnStateChanged;
         public Action<Player,Player> OnOwnerChanged;
         public Action<int, int> OnTroopsChanged;
+        public Action<List<Commander>, List<Commander>> OnCommandersChanged;
+        public Action<bool> OnSpaceStationChanged;
         
-
         public void Start()
         {
             SetupChecks();
         }
-
 
         private void SetupChecks()
         {
@@ -59,7 +62,6 @@ namespace Map
             }
         }
 
-
         public void AddTroops(int amount)
         {
             var oldTroops = Troops;
@@ -81,7 +83,7 @@ namespace Map
             OnTroopsChanged?.Invoke(oldTroops, Troops);
             OnStateChanged?.Invoke();
         }
-
+        
         public void SetOwner(Player newOwner)
         {
             Player oldOwner = Owner;
@@ -118,19 +120,27 @@ namespace Map
             Troops = troops;
             OnStateChanged?.Invoke();
         }
+                
+        public void AddCommander(Commander commander)
+        {
+            List<Commander>  OldCommandersList = CommandersList;
+            CommandersList.Add(commander);
+            OnCommandersChanged?.Invoke(OldCommandersList, CommandersList);
+            OnStateChanged?.Invoke();
+        }
 
+        //add RemoveCommander
         public void AddSpaceStation()
         {
             //check if the owner has 4, then have to remove a space station
             containsSpaceStation = true;
-
-        }
+            OnSpaceStationChanged?.Invoke(containsSpaceStation); }
 
         public void RemoveSpaceStation()
         {
             containsSpaceStation = false;
+            OnSpaceStationChanged?.Invoke(containsSpaceStation);
         }
-        
 
         public IEnumerable<Territory> GetEnemyNeighbours()
         {

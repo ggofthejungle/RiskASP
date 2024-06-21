@@ -1314,7 +1314,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 29.45
+  m_fontSize: 31.2
   m_fontSizeBase: 24
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -2471,7 +2471,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.14572155, y: 0.22423382}
   m_AnchorMax: {x: 0.14572155, y: 0.7918962}
-  m_AnchoredPosition: {x: 55.800003, y: -0.4972334}
+  m_AnchoredPosition: {x: 55.800003, y: -0.49723434}
   m_SizeDelta: {x: 134.0087, y: 3.611}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &249026412
@@ -9811,7 +9811,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 26
+  m_fontSize: 30.6
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -11193,7 +11193,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0.9336667}
   m_AnchorMax: {x: 0.123, y: 1}
-  m_AnchoredPosition: {x: 1.8276367, y: 0.66793823}
+  m_AnchoredPosition: {x: 1.8276367, y: 0.66796875}
   m_SizeDelta: {x: 3.6552734, y: 0.664093}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &705180095
@@ -16476,6 +16476,8 @@ MonoBehaviour:
   - {fileID: 21300000, guid: c0e7e43297d269d73bab1c0323209de7, type: 3}
   - {fileID: 21300000, guid: bfda73e21a0b602e0ba9f2fd53bd1596, type: 3}
   - {fileID: 21300000, guid: 19bfa9afbdfdecd288c319e8c96def96, type: 3}
+  - {fileID: 21300000, guid: 4d868888ec3f392489bf4fe9760a2080, type: 3}
+  - {fileID: 21300000, guid: fc73b8b222078cf448326919e2d6f367, type: 3}
   _attackerWonSprite: {fileID: 21300000, guid: 52bda5495accc6aef982034f1422dd8f, type: 3}
   _defenderWonSprite: {fileID: 21300000, guid: 8c18088d64d72ad6c8bd898dd2d98084, type: 3}
   _attackerColor: {r: 0.532, g: 0, b: 0, a: 1}
@@ -16694,7 +16696,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 20.75
+  m_fontSize: 22
   m_fontSizeBase: 24
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -32014,7 +32016,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 26
+  m_fontSize: 30.6
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
