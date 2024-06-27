@@ -11,6 +11,7 @@ using TurnPhases;
 using UnityEngine;
 using TMPro;
 using UnityEngine.UI;
+using Random = System.Random;
 
 public class GameManager : MonoBehaviour
 {
@@ -124,7 +125,7 @@ public class GameManager : MonoBehaviour
         //bidEnergyButton.SetActive(true);
         
         //regular game calls NextTurn(); but we only want some of the functionality
-        _currentPlayer = _playerQueue.Dequeue(); //pick the first player in the queue to start the bidding
+        _currentPlayer = _playerQueue.Peek(); //pick the first player in the queue to start the bidding
         //_playerQueue.Enqueue(_currentPlayer);
         //_turn++; //is this needed? 
         
@@ -180,6 +181,7 @@ public class GameManager : MonoBehaviour
             Players.Add(playerCreator.CreateBotPlayer());
 
         foreach (var player in Players)
+        {
             if (player.Name == "")
             {
                 if (player.Color == null || player.Color.name == "UNDEFINED")
@@ -187,6 +189,8 @@ public class GameManager : MonoBehaviour
                 else
                     playerCreator.SetUpPlayerFromColor(player, player.Color);
             }
+            player._energyBid = -1; //This needs to be changed to a .setEnergyBid() method later
+        }
     }
 
     private void EnqueuePlayers() //only called once before bidding
@@ -277,32 +281,57 @@ public class GameManager : MonoBehaviour
         
         Debug.Log("Player " + _currentPlayer.Name + " bid " + _currentPlayer._energyBid + " energy.");
         bidEnergyInput.GetComponent<TMP_InputField>().text = "";
-        _turn++; // doesn't do anything
-        //bidEnergyInput.text = "";
+        NextTurnBiddingPhase();
         
-        //bidEnergyInput.SetActive(false);
+        //if all players have bid, go to next phase: #1#
+        
+        //loop through all players and check if they have bid:
+        bool allPlayersBid = true;
+        foreach (Player player in _playerQueue)
+        {
+            if (player._energyBid == -1)
+            {
+                allPlayersBid = false;
+                break;
+            }
+        }
         
         //after all players have bid, go to the next phase.
-        if (_currentPlayer == _playerQueue.Peek())
+        if (allPlayersBid)
         {
-            //Determine the player with the highest bid looking at their energyBid:
-            /*
-            Player playerWithHighestBid = _playerQueue.Peek();
-            foreach (Player player in _playerQueue)
-            {
-                if (player._energyBid > playerWithHighestBid._energyBid)
-                {
-                    playerWithHighestBid = player;
-                }
-            }
 
-            //Set the player with the highest bid as the current player:
-            _currentPlayer = playerWithHighestBid;
-            //set the next player in the queue as the current player:
-            _playerQueue.Enqueue(_playerQueue.Dequeue());*/
+            //order the players by player._energyBid:   
+            List<Player> playersList = new List<Player>(_playerQueue);
+            playersList.Sort((x, y) =>
+            {
+                // Compare by energy bid
+                int result = y._energyBid.CompareTo(x._energyBid); // Reverse order (higher bids first)
+
+                // If bids are the same, shuffle randomly
+                if (result == 0)
+                {
+                    result = new Random().Next(-1, 2); // -1, 0, or 1 randomly
+                }
+
+                return result;
+            });
+
+            _playerQueue.Clear();
+
+            //Re-enqueue the players in the order of their bids by looking at player._energyBid: #2#
+            foreach (var player in playersList)
+            {
+                _playerQueue.Enqueue(player);
+                player._energy = player._energy - player._energyBid;
+                //need to verify next round if the old bid energy - should be overwritten by new bid
+            }
             
+            foreach (var player in _playerQueue)
+            {
+                Debug.Log($"Name: {player.Name}, Ordered Energy Bid: {player._energyBid}");
+            }
             SetGamePhase(GamePhase.Playing);
-            NextTurn(); //nextTurn calls NextTurnPhase (reinforce), we don't want this until all players finished the bidding phase
+            NextTurn(); // hopefully this picks up the first player in the queue
         }
     }
 
@@ -321,6 +350,25 @@ public class GameManager : MonoBehaviour
 
         _turn++;
         SetTurnPhase(ReinforcePhase);
+        OnPlayerTurnChanged?.Invoke(oldPlayer, _currentPlayer);
+    }
+    
+    private void NextTurnBiddingPhase()
+    {
+        var oldPlayer = _currentPlayer;
+        if (oldPlayer != null)
+            OnPlayerTurnEnded?.Invoke(oldPlayer);
+
+        //no one can die this turn so we don't need to check if they are dead, but leaving it here for now
+        do
+        {
+            _currentPlayer = _playerQueue.Dequeue();
+        } while (_currentPlayer.IsDead());
+
+        _playerQueue.Enqueue(_currentPlayer);
+
+        _turn++;
+        //SetTurnPhase(ReinforcePhase);
         OnPlayerTurnChanged?.Invoke(oldPlayer, _currentPlayer);
     }
 

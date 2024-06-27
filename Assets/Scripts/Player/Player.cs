@@ -84,14 +84,12 @@ namespace player
         public void SetEnergy(int energy)
         {
             _energy = energy;
-
         }
 
         public int GetEnergy()
         {
             return _energy;
         }
-
 
         public int DistributeNTroopsPerTerritory(int troopsPerTerritory, int troops)
         {
@@ -131,12 +129,10 @@ namespace player
             return territoriesBonus + continentBonus;
         }
 
-
         public void ClearTroops()
         {
             foreach (var territory in _territories) territory.SetTroops(0);
         }
-
 
         #region Cards
 
