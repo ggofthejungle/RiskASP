@@ -10,6 +10,7 @@ using player;
 using TurnPhases;
 using UnityEngine;
 using TMPro;
+using UnityEngine.UI;
 
 public class GameManager : MonoBehaviour
 {
@@ -123,9 +124,13 @@ public class GameManager : MonoBehaviour
         //bidEnergyButton.SetActive(true);
         
         //regular game calls NextTurn(); but we only want some of the functionality
-        _currentPlayer = _playerQueue.Dequeue();
+        _currentPlayer = _playerQueue.Dequeue(); //pick the first player in the queue to start the bidding
         //_playerQueue.Enqueue(_currentPlayer);
-        //_turn++; //is this needed?
+        //_turn++; //is this needed? 
+        
+        //listen for the player's bid:
+        GameObject bidEnergyButton = GameObject.Find("BidEnergyButton");
+        bidEnergyButton.GetComponent<Button>().onClick.AddListener(() => HandlePlayerBidEnergy());
     }
 
     private void SetupGame()
@@ -133,9 +138,12 @@ public class GameManager : MonoBehaviour
         _tr.RandomlyAssignTerritories(Players);
         DistributeTroops();
         AssignEnergy();
-        EnqueuePlayers();//call it once so that HandlePlayerBidEnergy can continue
+        EnqueuePlayers();//this order can be random to start bidding. after bidding, the order will be set for this turn only
+        //Next turn, the order will be set again by bidding
+                         //call it once so that HandlePlayerBidEnergy can continue
         //DrawStartingCards();
-        _turn = 0;
+        
+        //I think we are done with Setup.
     }
 
     private void DrawStartingCards()
@@ -181,7 +189,7 @@ public class GameManager : MonoBehaviour
             }
     }
 
-    private void EnqueuePlayers()
+    private void EnqueuePlayers() //only called once before bidding
     {
         _playerQueue = new Queue<Player>();
 
@@ -246,27 +254,32 @@ public class GameManager : MonoBehaviour
         _currentPhase.OnAction(_currentPlayer, action);
     }
     
-    public void HandlePlayerBidEnergy(int energy)
+    public void HandlePlayerBidEnergy()
     {
         
-        //GameObject bidEnergyInput = GameObject.Find("BidEnergyInput");
-        //_currentPlayer._energyBid = Convert.ToInt32(bidEnergyInput.GetComponent<TMP_InputField>().text);
+        GameObject bidEnergyInput = GameObject.Find("BidEnergyInput");
+        _currentPlayer._energyBid = Convert.ToInt32(bidEnergyInput.GetComponent<TMP_InputField>().text);
         
-        //instead of debug show that to the player in the UI:
+        //Later, instead of debug show that to the player in the UI under ExtraInfo:
         //BidEnergyOutput.text = "Player " + _currentPlayer.Name + " bid " + _currentPlayer._energyBid + " energy.";
         
+        //UpdatePlayerText
+        //_extraInfo[1].gameObject.SetActive(true);
+        //_extraInfoTexts[1].text = $"Losses: Atk: {attackResult.AttackerLosses}, Def: {attackResult.DefenderLosses}";
         
-        
-        
-        if (_currentPlayer._energyBid < 0 || _currentPlayer._energyBid > 3)
+        if (_currentPlayer._energyBid < 0 || _currentPlayer._energyBid > _currentPlayer.GetEnergy())
         {
             GameObject ExtraInfo1 = GameObject.Find("ExtraInfo1");
-            //ExtraInfo1.text = "Invalid bid. Please bid between 0 and 3.";
+            //ExtraInfo1.text = 
+            Debug.Log("Invalid bid. Please bid between 0 and " + _currentPlayer.GetEnergy());
             return;
         }
         
         Debug.Log("Player " + _currentPlayer.Name + " bid " + _currentPlayer._energyBid + " energy.");
-
+        bidEnergyInput.GetComponent<TMP_InputField>().text = "";
+        _turn++; // doesn't do anything
+        //bidEnergyInput.text = "";
+        
         //bidEnergyInput.SetActive(false);
         
         //after all players have bid, go to the next phase.
@@ -289,7 +302,7 @@ public class GameManager : MonoBehaviour
             _playerQueue.Enqueue(_playerQueue.Dequeue());*/
             
             SetGamePhase(GamePhase.Playing);
-            NextTurn();
+            NextTurn(); //nextTurn calls NextTurnPhase (reinforce), we don't want this until all players finished the bidding phase
         }
     }
 

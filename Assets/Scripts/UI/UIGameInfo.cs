@@ -69,6 +69,7 @@ namespace UI
 
 
         //private void UpdatePlayerText(Player player) => _playerTurnText.text = $"{player.Name}'s Turn";
+        //not sure if this is breaking anything, but I'm using updatePlayerText(Player player) for energy bidding instead of just player.Name
         private void UpdatePlayerText(Player player) => _playerTurnText.text = player?.Name ?? "Bid for energy(0-3) and press submit";
 
         private void UpdateTurnText(int turn) => _turnText.text = $"Turn {turn}";
