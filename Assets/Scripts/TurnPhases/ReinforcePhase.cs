@@ -37,6 +37,8 @@ namespace TurnPhases
         public void Start(Player player)
         {
             _remainingTroopsToPlace = player.GetTotalTroopBonus();
+            player.SetEnergy( player.GetEnergy() + CalculateEnergyOnTerritories(player));
+            
             OnTroopsToPlaceChanged?.Invoke();
 
             foreach (var territory in player.Territories)
@@ -116,6 +118,16 @@ namespace TurnPhases
             msg.Remove(msg.Length - 2, 2);
             msg.Append(".");
             Debug.Log(msg.ToString());
+        }
+
+        private int CalculateEnergyOnTerritories(Player player)
+        {
+            int numOfTerritories = player.GetTerritoryCount();
+
+            if (numOfTerritories < 12)
+                return 3;
+            
+            return numOfTerritories / 3;
         }
     }
 }

@@ -20,7 +20,7 @@ namespace Map
         public Player Owner;
         public int Troops { get; private set; }
 
-        public bool containsSpaceStation = true;
+        public bool containsSpaceStation = false;
         
         public List<Commander> CommandersList; //corresponds to _commandersText in TerritoryGraphics.cs
 
