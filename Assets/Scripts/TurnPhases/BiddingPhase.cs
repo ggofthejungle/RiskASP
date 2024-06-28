@@ -32,7 +32,7 @@ namespace TurnPhases
                 _gm.NextTurnPhase();
             }
             else
-                Debug.LogError($"ReinforcePhase: Received action of type {action.GetType().Name}");
+                Debug.LogError($"BiddingPhase: Received action of type {action.GetType().Name}");
         }
 
         public void End(Player player)
