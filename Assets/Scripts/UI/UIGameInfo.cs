@@ -6,6 +6,7 @@ using TurnPhases;
 using UnityEngine;
 
 namespace UI
+
 {
     public class UIGameInfo : MonoBehaviour
     {
@@ -13,11 +14,12 @@ namespace UI
         [SerializeField] private TMP_Text _turnPhaseText;
         [SerializeField] private TMP_Text _turnText;
         [SerializeField] private RectTransform[] _extraInfo;
+        [SerializeField] private PlayerInstructions _playerInstructions;
+        public TMP_Text[] ExtraInfoTexts => _extraInfoTexts;
         private TMP_Text[] _extraInfoTexts;
         
         private GameManager _gm;
-
-
+        
         private void Awake()
         {
             _extraInfoTexts = new TMP_Text[_extraInfo.Length];
@@ -33,20 +35,27 @@ namespace UI
             _gm.OnPlayerTurnChanged += OnPlayerTurnChanged;
             _gm.OnTurnPhaseChanged += OnTurnPhaseChanged;
             
+             ChangeInstructionWindowMessage("Bid for turn order. 0-3 energy");
             _gm.ReinforcePhase.OnTroopsToPlaceChanged += () =>
             {
                 if (_gm.CurrentPhase is ReinforcePhase reinforcePhase)
+                {
                     DisplayReinforceInfo(reinforcePhase);
+                }
             };
             _gm.AttackPhase.OnAttacked += (attackResult) =>
             {
                 if (_gm.CurrentPhase is AttackPhase attackPhase)
+                {
                     DisplayAttackResult(attackPhase, attackResult);
+                }
             };
             _gm.AttackPhase.OnReinforced += (reinforceAction) =>
             {
                 if (_gm.CurrentPhase is AttackPhase attackPhase)
+                {
                     DisplayAttackReinforce(attackPhase, reinforceAction);
+                }
             };
             
             UpdatePlayerText(_gm.CurrentPlayer);
@@ -107,6 +116,18 @@ namespace UI
         {
             UpdatePlayerText(newPlayer);
             UpdateTurnText(_gm.Turn);
+        }
+
+        public void ChangeInstructionWindowMessage(string message)
+        {
+            _playerInstructions.gameObject.SetActive(true);
+            _playerInstructions.OkButton.onClick.AddListener(CloseInstructionWindow);
+            _playerInstructions.MessageText.text = message;
+        }
+
+        public void CloseInstructionWindow()
+        {
+            _playerInstructions.gameObject.SetActive(false);
         }
     }
 }

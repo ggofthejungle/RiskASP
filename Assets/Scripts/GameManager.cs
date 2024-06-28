@@ -10,6 +10,7 @@ using player;
 using TurnPhases;
 using UnityEngine;
 using TMPro;
+using UI;
 using UnityEngine.UI;
 using Random = System.Random;
 
@@ -56,7 +57,7 @@ public class GameManager : MonoBehaviour
 
     [SerializeField] private int _startingCardsPerPlayer = 4;
     [SerializeField] private int _maxCardsPerPlayer = 5;
-
+    
 
     public Action<IPhase> OnPhaseStarted;
     public Action<IPhase> OnPhaseEnded;
@@ -66,6 +67,7 @@ public class GameManager : MonoBehaviour
 
     public Action<GamePhase> OnGamePhaseChanged;
 
+    public UIGameInfo UIGameInfo;
 
     private void Awake()
     {
@@ -264,6 +266,7 @@ public class GameManager : MonoBehaviour
         GameObject bidEnergyInput = GameObject.Find("BidEnergyInput");
         _currentPlayer._energyBid = Convert.ToInt32(bidEnergyInput.GetComponent<TMP_InputField>().text);
         
+        
         //Later, instead of debug show that to the player in the UI under ExtraInfo:
         //BidEnergyOutput.text = "Player " + _currentPlayer.Name + " bid " + _currentPlayer._energyBid + " energy.";
         
@@ -276,10 +279,12 @@ public class GameManager : MonoBehaviour
             GameObject ExtraInfo1 = GameObject.Find("ExtraInfo1");
             //ExtraInfo1.text = 
             Debug.Log("Invalid bid. Please bid between 0 and " + _currentPlayer.GetEnergy());
+            UIGameInfo.ChangeInstructionWindowMessage("Invalid bid. Please bid between 0 and " + _currentPlayer.GetEnergy());
             return;
         }
         
         Debug.Log("Player " + _currentPlayer.Name + " bid " + _currentPlayer._energyBid + " energy.");
+        UIGameInfo.ChangeInstructionWindowMessage("Player " + _currentPlayer.Name + " bid " + _currentPlayer._energyBid + " energy.");
         bidEnergyInput.GetComponent<TMP_InputField>().text = "";
         NextTurnBiddingPhase();
         
@@ -330,6 +335,11 @@ public class GameManager : MonoBehaviour
             {
                 Debug.Log($"Name: {player.Name}, Ordered Energy Bid: {player._energyBid}");
             }
+            
+            UIGameInfo.CloseInstructionWindow();
+            GameObject bidEnergyButton = GameObject.Find("BidEnergyButton");
+            bidEnergyButton.SetActive(false);
+            bidEnergyInput.SetActive(false);
             SetGamePhase(GamePhase.Playing);
             NextTurn(); // hopefully this picks up the first player in the queue
         }
