@@ -111,6 +111,7 @@ public class GameManager : MonoBehaviour
 
     private void SetupPhases()
     {
+        BiddingPhase = new BiddingPhase(this);
         ReinforcePhase = new ReinforcePhase(this, _cr);
         AttackPhase = new AttackPhase(this, _bs);
         FortifyPhase = new FortifyPhase(this);
@@ -122,9 +123,7 @@ public class GameManager : MonoBehaviour
     private void Start()
     {
         SetupGame();
-        SetGamePhase(GamePhase.Bidding);
-        //bidEnergyInput.SetActive(true);
-        //bidEnergyButton.SetActive(true);
+        //SetGamePhase(GamePhase.Bidding); //Bidding moved to 
         
         //regular game calls NextTurn(); but we only want some of the functionality
         _currentPlayer = _playerQueue.Peek(); //pick the first player in the queue to start the bidding
