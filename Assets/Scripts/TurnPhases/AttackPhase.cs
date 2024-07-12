@@ -105,7 +105,7 @@ namespace TurnPhases
         private void HandleAttackReinforceAction(AttackReinforceAction attackReinforceAction)
         {
             if (_state != AttackState.Fortifying)
-                Debug.LogWarning($"AttackPhase: Cannot reinforce while in state {_state}");
+                Debug.LogWarning($"AttackPhase:  Player {attackReinforceAction.Player.Name} Cannot reinforce while in state {_state}");
 
             var troops = attackReinforceAction.ReinforcingTroops;
             attackReinforceAction.From.RemoveTroops(troops);
@@ -114,8 +114,10 @@ namespace TurnPhases
             
             SetState(AttackState.Attacking);
 
+            //add player name to this log:
+            
             Debug.Log(
-                $"AttackPhase: Reinforced {troops} troops from {attackReinforceAction.From.Name} to {attackReinforceAction.To.Name}");
+                $"AttackPhase: Player {attackReinforceAction.Player.Name} reinforced {troops} troops from {attackReinforceAction.From.Name} to {attackReinforceAction.To.Name}");
             
             OnReinforced?.Invoke(attackReinforceAction);
             OnAttackTurn?.Invoke();

@@ -75,7 +75,7 @@ namespace TurnPhases
                 return;
             }
             else
-                Debug.LogError($"ReinforcePhase: Received action of type {action.GetType().Name}");
+                Debug.LogError($"ReinforcePhase:  Player {player.Name} Received action of type {action.GetType().Name}");
 
             if (_remainingTroopsToPlace == 0)
                 _gm.NextTurnPhase();

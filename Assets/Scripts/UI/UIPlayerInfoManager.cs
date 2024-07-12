@@ -18,9 +18,9 @@ namespace UI
         {
             _gm = GameManager.Instance;
             _gm.Players.ForEach(CreatePlayerInfo);
-            _gm.OnGamePhaseChanged += phase =>
+            _gm.OnGameStateChanged += state =>
             {
-                if (phase == GamePhase.Playing)
+                if (state == GameState.Playing)
                 {
                     OrderPlayerInfos(_gm.GetPlayersInTurnOrder());
                 }

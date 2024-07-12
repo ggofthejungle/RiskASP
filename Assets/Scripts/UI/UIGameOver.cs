@@ -17,13 +17,13 @@ namespace UI
         {
             
             _gameManager = GameManager.Instance;
-            _gameManager.OnGamePhaseChanged += OnGamePhaseChanged;
+            _gameManager.OnGameStateChanged += OnGamePhaseChanged;
             gameObject.SetActive(false);
         }
 
-        private void OnGamePhaseChanged(GamePhase phase)
+        private void OnGamePhaseChanged(GameState state)
         {
-            if (phase == GamePhase.Over) 
+            if (state == GameState.Over) 
                 GameOver();
         }
 

@@ -48,7 +48,7 @@ namespace Map
 
         private void OnTroopsChanged(int oldTroops, int newTroops)
         {
-            if(GameManager.Instance.GamePhase == GamePhase.Setup)
+            if(GameManager.Instance.GameState == GameState.Setup)
                 return;
             
             var difference = newTroops - oldTroops;

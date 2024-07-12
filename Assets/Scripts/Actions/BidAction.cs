@@ -17,17 +17,19 @@ namespace Actions
         public override bool IsValid()
         {
             var gm = GameManager.Instance;
-            if (gm.CurrentPhase != gm.BiddingPhase)
+            
+            //Annual bidding is not a phase anymore, so this check is not needed
+            /*if (gm.CurrentPhase != gm.AnnualBidding)
             {
-                LogError($"Current phase ({gm.CurrentPhase.Name}) is not BiddingPhase ({gm.BiddingPhase.Name})");
+                LogError($"Current phase ({gm.CurrentPhase.Name}) is not AnnualBidding ({gm.AnnualBidding.Name})");
                 return false;
-            }
+            }*/
             
             var EnergyThePlayerHas = Player.GetEnergy();
             if (EnergyThePlayerBid > EnergyThePlayerHas)
             {
                 LogError(
-                    $"BiddingPhase: Player ({Player.Name}) tried to bid more energyThePlayerBid ({EnergyThePlayerBid}) than they have left ({EnergyThePlayerHas})");
+                    $"AnnualBidding: Player ({Player.Name}) tried to bid more energyThePlayerBid ({EnergyThePlayerBid}) than they have left ({EnergyThePlayerHas})");
                 return false;
             }
             return base.IsValid();

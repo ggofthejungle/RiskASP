@@ -94,10 +94,11 @@ namespace UI
 
         private void AddPlayer()
         {
-            Debug.Log("AddPlayer");
+            //Debug.Log("AddPlayer");
             if(PlayerCreated) return;
 
             var playerConfiguration = _uiPlayerCreationManager.PlayerConfigurations[0];
+            
             var colorIndex = Random.Range(0, _uiPlayerCreationManager.PlayerColors.Length);
             var playerColor = _uiPlayerCreationManager.PlayerColors[colorIndex];
             PlayerCreationConfiguration = new PlayerCreationConfiguration
@@ -109,7 +110,7 @@ namespace UI
             
             _playerNameInputField.text = PlayerCreationConfiguration.PlayerName;
             _playerColorDropdown.value = colorIndex;
-            _playerConfigurationDropdown.value = 0;
+            _playerConfigurationDropdown.value = 2;
 
             _playerCreatedGfx.SetActive(PlayerCreated);
             _playerNotCreatedGfx.SetActive(!PlayerCreated);

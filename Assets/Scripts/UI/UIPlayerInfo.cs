@@ -56,7 +56,7 @@ namespace UI
             
             gameManager.OnPlayerTurnChanged += (_, newPlayer) => OnPlayerTurnChanged(newPlayer);
             gameManager.AttackPhase.OnAttacked += (_) => UpdatePlayerData();
-            gameManager.OnGamePhaseChanged += (_) => UpdatePlayerData();
+            gameManager.OnGameStateChanged += (_) => UpdatePlayerData();
             gameManager.ReinforcePhase.OnTroopsPlaced += (_) => UpdatePlayerData();
         }
 

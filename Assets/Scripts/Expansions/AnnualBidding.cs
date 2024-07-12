@@ -1,16 +1,17 @@
 ﻿using Actions;
 using player;
+using TurnPhases;
 using UnityEngine;
 
-namespace TurnPhases
+namespace Expansions
 {
-    public class BiddingPhase: IPhase
+    public class AnnualBidding: IPhase
     {
         public string Name => "Bidding";
         
         private readonly GameManager _gm;
         
-        public BiddingPhase(GameManager gm)
+        public AnnualBidding(GameManager gm)
         {
             _gm = gm;
         }
@@ -32,7 +33,7 @@ namespace TurnPhases
                 _gm.NextTurnPhase();
             }
             else
-                Debug.LogError($"BiddingPhase: Received action of type {action.GetType().Name}");
+                Debug.LogError($"AnnualBidding: Received action of type {action.GetType().Name}");
         }
 
         public void End(Player player)
