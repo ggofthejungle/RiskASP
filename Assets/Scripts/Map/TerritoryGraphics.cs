@@ -75,15 +75,15 @@ namespace Map
             // loop thru commanders list and add to _commandersText
             foreach (var commander in newCommandersList)
             {
-                if (commander.Type == CommanderType.LandCommander)
+                if (commander.CommanderType == CommanderType.LandCommander)
                     _commandersText.text += " " + "L";
-                else if (commander.Type == CommanderType.Diplomat)
+                else if (commander.CommanderType == CommanderType.Diplomat)
                     _commandersText.text += " " + "D";
-                else if (commander.Type == CommanderType.SpaceCommander)
+                else if (commander.CommanderType == CommanderType.SpaceCommander)
                     _commandersText.text += " " + "S";
-                else if (commander.Type == CommanderType.NuclearCommander)
+                else if (commander.CommanderType == CommanderType.NuclearCommander)
                     _commandersText.text += " " + "N";
-                else if (commander.Type == CommanderType.NavalCommander)
+                else if (commander.CommanderType == CommanderType.NavalCommander)
                     _commandersText.text += " " + "W";
             }
 

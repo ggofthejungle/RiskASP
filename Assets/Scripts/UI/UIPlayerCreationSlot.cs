@@ -109,7 +109,7 @@ namespace UI
             
             _playerNameInputField.text = PlayerCreationConfiguration.PlayerName;
             _playerColorDropdown.value = colorIndex;
-            _playerConfigurationDropdown.value = 0;
+            _playerConfigurationDropdown.value = 2;
 
             _playerCreatedGfx.SetActive(PlayerCreated);
             _playerNotCreatedGfx.SetActive(!PlayerCreated);

@@ -34,11 +34,11 @@ namespace EmbASP.predicates
         
         public CardPredicate(int turn, string player, Card card)
         {
-            Turn = turn;
-            Player = player;
-            CardName = card.Name;
-            CardType = card.Type.ToString();
-            CardTerritory = card.Territory != null ? card.Territory.Name : "";
+            // Turn = turn;
+            // Player = player;
+            // CardName = card.Name;
+            // CardType = card.Type.ToString();
+            // CardTerritory = card.Territory != null ? card.Territory.Name : "";
         }
         
         public int setTurn(int turn) => Turn = turn;

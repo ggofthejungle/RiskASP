@@ -164,7 +164,7 @@ public class GameManager : MonoBehaviour
     {
         foreach (var player in Players)
         {
-            player.SetEnergy(0);
+            player.SetEnergy(3);
         }
     }
 
