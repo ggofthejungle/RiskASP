@@ -2,6 +2,7 @@ using System;
 using Expansions;
 using JetBrains.Annotations;
 using Map;
+using player;
 
 namespace Cards
 {
@@ -10,13 +11,13 @@ namespace Cards
     {
         public CardType CardType;
         private CommanderType CommanderType;
-        private Abilities.AbilityDelegate Ability;
         public string Name;
+        private Delegate _method;
 
-        public Card(Abilities.AbilityDelegate ability, CardType cardType)
+        public Card(Delegate method, CardType cardType)
         {
+            _method = method;
             Enum  cardName = cardType;
-            Ability = ability;
             CardType = cardType;
             Name = cardName.ToString();
         }
@@ -26,9 +27,9 @@ namespace Cards
             CommanderType = commanderType;
         }
 
-        public void UseAbility()
+        public void UseAbility(params object[] parameters)
         {
-            Ability.Invoke();
+            _method.DynamicInvoke();
         }
 
         // if (name != null)

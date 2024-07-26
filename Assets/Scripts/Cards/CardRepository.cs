@@ -8,6 +8,7 @@ using Map;
 using player;
 using UnityEngine;
 using Expansions;
+using Unity.VisualScripting;
 
 namespace Cards
 {
@@ -32,9 +33,6 @@ namespace Cards
         public Commander NuclearCommander = new Commander(CommanderType.NuclearCommander);
         private Card card;
         Abilities abilities = new Abilities();
-        Abilities.AbilityDelegate[] abiltyArr = new Abilities.AbilityDelegate[41];
-        
-        
         
         private void Awake()
         {
@@ -59,91 +57,19 @@ namespace Cards
             // ExchangeTypes = GenerateExchangeTypes().ToArray();
         }
 
-        private void initalizeAbilities()
-        {
-            //Diplomat
-            abiltyArr[0] = abilities.CeaseFire;
-            abiltyArr[1] = abilities.ColonyInfluence;
-            abiltyArr[2] = abilities.DecoyRevealed;
-            abiltyArr[3] = abilities.EnergyCrisis;
-            abiltyArr[4] = abilities.Evacuation;
-            abiltyArr[5] = abilities.Redeployment;
-            abiltyArr[6] = abilities.TerritorialStation;
-            //Land
-            abiltyArr[7] = abilities.AssembleMods;
-            abiltyArr[8] = abilities.ColonyInfluence;
-            abiltyArr[9] = abilities.FrequencyJam;
-            abiltyArr[10] = abilities.LandDeathTrap;
-            abiltyArr[11] = abilities.Reinforcements;
-            abiltyArr[12] = abilities.ScoutForces;
-            abiltyArr[13] = abilities.StealthMods;
-            abiltyArr[14] = abilities.StealthStation;
-            //Naval
-            abiltyArr[15] = abilities.AssembleMods;
-            abiltyArr[16] = abilities.ColonyInfluence;
-            abiltyArr[17] = abilities.FrequencyJam;
-            abiltyArr[18] = abilities.HiddenEnergy;
-            abiltyArr[19] = abilities.Reinforcements;
-            abiltyArr[20] = abilities.StealthMods;
-            abiltyArr[21] = abilities.WaterDeathTrap;
-            //Nuclear
-            abiltyArr[22] = abilities.AquaBrother;
-            abiltyArr[23] = abilities.Armageddon;
-            abiltyArr[24] = abilities.AssassinBomb;
-            abiltyArr[25] = abilities.NickyBoy;
-            abiltyArr[26] = abilities.RocketStrikeLand;
-            abiltyArr[27] = abilities.RocketStrikeMoon;
-            abiltyArr[28] = abilities.RocketStrikeWater;
-            abiltyArr[29] = abilities.ScatterBombLand;
-            abiltyArr[30] = abilities.ScatterBombWater;
-            abiltyArr[31] = abilities.ScatterBombMoon;
-            abiltyArr[32] = abilities.TheMother;
-            //Space
-            abiltyArr[33] = abilities.AssembleMods;
-            abiltyArr[34] = abilities.ColonyInfluence;
-            abiltyArr[35] = abilities.EnergyExtraction;
-            abiltyArr[36] = abilities.FrequencyJam;
-            abiltyArr[37] = abilities.InvadeSurface;
-            abiltyArr[38] = abilities.OrbitalMines;
-            abiltyArr[39] = abilities.Reinforcements;
-            abiltyArr[40] = abilities.StealthMods;
-
-        }
-
-
         private Card[] GenerateCards()
         {
            //6 commanders each with their own card deck 
-           initalizeAbilities();
-           
            Card[] cards = new Card[41];
            int count = 0;
            foreach (CardType cardType in Enum.GetValues(typeof(CardType)))
            {
-               // CardType and ability array need to line up
-               card = new Card(abiltyArr[count], cardType);
+               card = new Card(abilities.methods[count], cardType);
                cards[count] = card;
                count++;
-
            }
            AssignCardsToCommanders(cards);
            return cards;
-           
-           
-
-            // var territories = _tr.Territories.ToArray();
-            // territories.Shuffle();
-            
-            // for (int i = 0; i < 14; i++)
-            // {
-            // //   
-            // //     cards[i + 14] = new Card(CardType.Cavalry, territories[i + 14]);
-            // //     cards[i + 28] = new Card(CardType.Artillery, territories[i + 28]);
-            // // }
-
-            // cards[42] = new Card(CardType.Wild, name: "Wild_1");
-            // cards[43] = new Card(CardType.Wild, name: "Wild_2");
-            // cards.Shuffle();
         }
 
         private void AssignCardsToCommanders(Card[] cards)

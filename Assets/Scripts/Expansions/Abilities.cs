@@ -1,4 +1,7 @@
-﻿using player;
+﻿using System;
+using System.Collections.Generic;
+using System.Xml;
+using player;
 using UnityEngine;
 
 namespace Expansions
@@ -6,18 +9,65 @@ namespace Expansions
     public class Abilities
     {
         private GameManager gm;
-        public delegate void AbilityDelegate();
-        
-        //Diplomat
-        public static void ExecuteAbility(AbilityDelegate ability)
+        public readonly List<Delegate> methods;
+
+        public Abilities()
         {
-            ability();
+            methods = new List<Delegate>
+            {
+                new Action(CeaseFire),
+                new Action(ColonyInfluence),
+                new Action(DecoyRevealed),
+                new Action<Player>(EnergyCrisis),
+                new Action(Evacuation),
+                new Action(ModReduction),
+                new Action(Redeployment),
+                new Action(TerritorialStation),
+                new Action(AssembleMods),
+                new Action(ColonyInfluence),
+                new Action(FrequencyJam),
+                new Action(LandDeathTrap),
+                new Action(Reinforcements),
+                new Action(ScoutForces),
+                new Action(StealthMods),
+                new Action(StealthStation),
+                new Action(AssembleMods),
+                new Action(ColonyInfluence),
+                new Action(FrequencyJam),
+                new Action(HiddenEnergy),
+                new Action(Reinforcements),
+                new Action(StealthMods),
+                new Action(WaterDeathTrap),
+                new Action(AquaBrother),
+                new Action(Armageddon),
+                new Action(AssassinBomb),
+                new Action(NickyBoy),
+                new Action(RocketStrikeLand),
+                new Action(RocketStrikeMoon),
+                new Action(RocketStrikeWater),
+                new Action(ScatterBombLand),
+                new Action(ScatterBombMoon),
+                new Action(ScatterBombWater),
+                new Action(TheMother),
+                new Action(AssembleMods),
+                new Action(ColonyInfluence),
+                new Action(EnergyExtraction),
+                new Action(FrequencyJam),
+                new Action(InvadeSurface),
+                new Action(OrbitalMines),
+                new Action(Reinforcements),
+                new Action(StealthMods)
+            };
         }
+
+        //Diplomat
+        
         
         public void CeaseFire()
         {
             //Play when an opponent declares invasion in any territory
             //stops the invasion and can not attack your territories for the rest of your turn
+            Debug.Log("CeaseFire");
         }
 
         public void ColonyInfluence()
@@ -33,21 +83,21 @@ namespace Expansions
             //Move any number of your commanders to any number of territories you control.
         }
 
-        public void EnergyCrisis()
+        public void EnergyCrisis(Player cardOwner)
         {
-            //Before First Invasion
-            //Collect one energy from each opponent
-            // int count = 0;
-            // for (int x = 0; x < gm.Players.Count; x++)
-            // {
-            //     if (gm.Players[x].Name != cardOwner.Name)
-            //     {
-            //         gm.Players[x].SetEnergy(gm.Players[x].GetEnergy() - 1); 
-            //         count++;
-            //     }
-            // }
-            //
-            // cardOwner.SetEnergy(cardOwner.GetEnergy() + count);
+            // Before First Invasion
+            // Collect one energy from each opponent
+             int count = 0;
+             for (int x = 0; x < gm.Players.Count; x++)
+             {
+                 if (gm.Players[x].Name != cardOwner.Name)
+                 {
+                     gm.Players[x].SetEnergy(gm.Players[x].GetEnergy() - 1); 
+                     count++;
+                 }
+             }
+            
+             cardOwner.SetEnergy(cardOwner.GetEnergy() + count);
 
         }
 
