@@ -115,6 +115,7 @@ namespace TurnPhases
             attackReinforceAction.To.AddTroops(troops);
             _attackTurn++;
             
+            
             SetState(AttackState.Attacking);
 
             Debug.Log(

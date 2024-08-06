@@ -1,6 +1,10 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Xml;
+using Antlr4.Runtime.Misc;
+using Map;
 using player;
 using UnityEngine;
 
@@ -17,30 +21,30 @@ namespace Expansions
             {
                 new Action(CeaseFire),
                 new Action(ColonyInfluence),
-                new Action(DecoyRevealed),
+                new Action<Player>(DecoyRevealed),
                 new Action<Player>(EnergyCrisis),
-                new Action(Evacuation),
+                new Action<Territory, Territory>(Evacuation),
                 new Action(ModReduction),
                 new Action(Redeployment),
-                new Action(TerritorialStation),
+                new Action<Territory>(TerritorialStation),
                 new Action(AssembleMods),
                 new Action(ColonyInfluence),
-                new Action(FrequencyJam),
-                new Action(LandDeathTrap),
+                new Action<Player>(FrequencyJam),
+                new Action<Territory>(LandDeathTrap),
                 new Action(Reinforcements),
                 new Action(ScoutForces),
                 new Action(StealthMods),
-                new Action(StealthStation),
+                new Action<Territory>(StealthStation),
                 new Action(AssembleMods),
                 new Action(ColonyInfluence),
-                new Action(FrequencyJam),
+                new Action<Player>(FrequencyJam),
                 new Action(HiddenEnergy),
                 new Action(Reinforcements),
                 new Action(StealthMods),
-                new Action(WaterDeathTrap),
+                new Action<Territory>(WaterDeathTrap),
                 new Action(AquaBrother),
                 new Action(Armageddon),
-                new Action(AssassinBomb),
+                new Action<Commander>(AssassinBomb),
                 new Action(NickyBoy),
                 new Action(RocketStrikeLand),
                 new Action(RocketStrikeMoon),
@@ -52,9 +56,9 @@ namespace Expansions
                 new Action(AssembleMods),
                 new Action(ColonyInfluence),
                 new Action(EnergyExtraction),
-                new Action(FrequencyJam),
+                new Action<Player>(FrequencyJam),
                 new Action(InvadeSurface),
-                new Action(OrbitalMines),
+                new Action<Territory>(OrbitalMines),
                 new Action(Reinforcements),
                 new Action(StealthMods)
             };
@@ -67,7 +71,7 @@ namespace Expansions
         {
             //Play when an opponent declares invasion in any territory
             //stops the invasion and can not attack your territories for the rest of your turn
-            Debug.Log("CeaseFire");
+            
         }
 
         public void ColonyInfluence()
@@ -77,10 +81,27 @@ namespace Expansions
             
         }
 
-        public void DecoyRevealed()
+        public void DecoyRevealed(Player cardowner)
         {
             //Before First Invasion
             //Move any number of your commanders to any number of territories you control.
+           List<Territory> territoriesList = cardowner.Territories.ToList();
+           ArrayList<Commander> commandersToRemove = new ArrayList<Commander>();
+           
+           
+           //Ask user what commanders they want to remove
+           //and to where they want to move it
+           Territory selectedTerritory = territoriesList[0];
+
+           for (int x = 0; x < commandersToRemove.Count; x++)
+           { 
+               selectedTerritory.AddCommander(commandersToRemove[x]);
+           }
+           
+           
+
+           
+           //How to select certain territories, need to change phase?
         }
 
         public void EnergyCrisis(Player cardOwner)
@@ -101,10 +122,13 @@ namespace Expansions
 
         }
 
-        public void Evacuation()
+        public void Evacuation(Territory attackedTerritory, Territory destinationTerritory)
         {
             // Opponent Invades.
             // Move all units from the attacked territory to any territory you occupy.
+            int troopCount = attackedTerritory.Troops;
+            attackedTerritory.RemoveTroops(troopCount);
+            destinationTerritory.AddTroops(troopCount);
         }
 
         public void ModReduction()
@@ -119,11 +143,12 @@ namespace Expansions
             //Take an extra free move this turn. You may only take this free move after you have finished attacking.
         }
 
-        public void TerritorialStation()
+        public void TerritorialStation(Territory destinationTerritory)
         {
             //Before First Invasion
             //Place a space station on any land territory you occupy.
-            
+            destinationTerritory.containsSpaceStation = true;
+
         }
         
         //LandCommanders
@@ -139,16 +164,19 @@ namespace Expansions
         //     //If your Land Commander is still alive, move your score marker ahead 3 spaces
         // }
 
-        public void FrequencyJam()
+        public void FrequencyJam(Player chosenPlayer)
         {
             //Before First Invasion
             //Choose a player. The chosen player cannot play command cards during your turn
+            chosenPlayer.canPlayCommandCards = false;
         }
 
-        public void LandDeathTrap()
+        public void LandDeathTrap(Territory invadingTerritory)
         {
             //Opponent Invades.
             //Your opponent must destroy half the units in the invading territory. Round up.
+            double troopsCount = invadingTerritory.GetAvailableTroops();
+            invadingTerritory.SetTroops((int)Math.Ceiling(troopsCount/2));
         }
 
         public void Reinforcements()
@@ -171,10 +199,12 @@ namespace Expansions
             // territory immediately place the MODS. Discard the territory card
         }
 
-        public void StealthStation()
+        public void StealthStation(Territory defendingTerritory)
         {
             //Opponent Invades.
             //Place a space station in the defending land territory.
+            defendingTerritory.containsSpaceStation = true;
+
         }
         
         //NavalCommanderAbilities
@@ -218,10 +248,12 @@ namespace Expansions
         //     //Place 3 additional defending MODS in the defending water or lava territory
         // }
 
-        public void WaterDeathTrap()
+        public void WaterDeathTrap(Territory invadingTerritory)
         {
             //Opponent Invades.
             //Your opponent must destroy half the units in the invading territory. Round up
+            double troopsCount = invadingTerritory.GetAvailableTroops();
+            invadingTerritory.SetTroops((int)Math.Ceiling(troopsCount/2));
         }
         
         //NuclearCommanderAbilities
@@ -240,10 +272,11 @@ namespace Expansions
 
         }
 
-        public void AssassinBomb()
+        public void AssassinBomb(Commander oppenentsCommander)
         {
             // Before First Invasion
             // Choose an opponent's commander. Roll an 8-sided die. If you roll a 3 or higher destroy the chosen commander
+            
         }
 
         public void NickyBoy()
@@ -329,10 +362,12 @@ namespace Expansions
             //you may attack this land territory from any surrounding lunar or asteroid territories you occupy
         }
 
-        public void OrbitalMines()
+        public void OrbitalMines(Territory invadingTerritory)
         {
             //Opponent Invades.
             //Your opponent must destroy half the units in the invading territory. Round up. 
+            double troopsCount = invadingTerritory.GetAvailableTroops();
+            invadingTerritory.SetTroops((int)Math.Ceiling(troopsCount/2));
         }
 
         // public void Reinforcements()

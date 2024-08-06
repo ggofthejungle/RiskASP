@@ -21,6 +21,7 @@ namespace Map
         public int Troops { get; private set; }
 
         public bool containsSpaceStation = false;
+        public bool containsCommanders = false;
         
         public List<Commander> CommandersList; //corresponds to _commandersText in TerritoryGraphics.cs
 
@@ -127,9 +128,24 @@ namespace Map
             CommandersList.Add(commander);
             OnCommandersChanged?.Invoke(OldCommandersList, CommandersList);
             OnStateChanged?.Invoke();
+            containsCommanders = true;
         }
 
         //add RemoveCommander
+        public void RemoveCommander(Commander commander)
+        {
+            if (CommandersList.Contains(commander))
+            {
+                List<Commander> oldCommandersList = new List<Commander>(CommandersList);
+                CommandersList.Remove(commander);
+                OnCommandersChanged?.Invoke(oldCommandersList, CommandersList);
+                OnStateChanged?.Invoke();
+            }
+
+            if (CommandersList.Count == 0)
+                containsCommanders = false;
+        }
+
         public void AddSpaceStation()
         {
             //check if the owner has 4, then have to remove a space station

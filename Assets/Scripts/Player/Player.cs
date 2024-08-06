@@ -34,6 +34,7 @@ namespace player
         public int _spaceStationCount;
 
         public PlayerColor Color;
+        public bool canPlayCommandCards = true;
 
 
         public List<CardExchange> BestCardExchangeCombinations { get; private set; } = new();
