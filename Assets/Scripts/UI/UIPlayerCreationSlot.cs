@@ -33,7 +33,7 @@ namespace UI
         private void Awake()
         {
             if(_uiPlayerCreationManager == null)
-                _uiPlayerCreationManager = FindFirstObjectByType<UIPlayerCreationManager>();
+                _uiPlayerCreationManager = FindAnyObjectByType<UIPlayerCreationManager>();
             
             PlayerCreationConfiguration = null;
             

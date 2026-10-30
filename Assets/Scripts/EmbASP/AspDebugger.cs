@@ -56,7 +56,7 @@ namespace EmbASP
             if (_botBrain == null)
             {
                 Debug.LogWarning("BotBrain not set, trying to find it in scene");   
-                _botBrain = FindFirstObjectByType<BotBrain>();
+                _botBrain = FindAnyObjectByType<BotBrain>();
             }
             
             _botBrain.OnPhaseInfoLoaded += PhaseLoaded;

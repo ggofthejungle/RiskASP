@@ -196,7 +196,7 @@ public class GameManager : MonoBehaviour
     private void CreatePlayers()
     {
         if (Players.Count == 0)
-            Players.AddRange(FindObjectsByType<Player>(FindObjectsInactive.Exclude, FindObjectsSortMode.None));
+            Players.AddRange(FindObjectsByType<Player>(FindObjectsInactive.Exclude));
 
         var playerCreator = PlayerCreator.Instance;
         
