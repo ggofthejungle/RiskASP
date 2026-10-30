@@ -182,6 +182,17 @@ public class GameManager : MonoBehaviour
 
     // Turn banner + instructions + turn splash, and the attack/move arrow on the map.
     public UI.TurnHud TurnHud { get; private set; }
+    public UI.CommandHud CommandHud { get; private set; }
+
+    // Who is sitting at THIS device. Online, set it to this client's player: the UI then only shows that
+    // player's hand and prompts. null = every human plays on this device (local testing / hot-seat).
+    public Player LocalPlayer { get; set; }
+    public bool IsLocal(Player p) => p != null && !p.IsBot() && (LocalPlayer == null || LocalPlayer == p);
+
+    // Hot-seat only (testing): cover screens "Pass the device to Bob" around a defender's decision.
+    // Off by default because the real game is online, where each player has their own device.
+    [SerializeField] private bool _passTheDeviceScreens = false;
+    public bool PassTheDeviceScreens { get => _passTheDeviceScreens; set => _passTheDeviceScreens = value; }
     public Map.SelectionArrow SelectionArrow { get; private set; }
 
     private void CreateHud()
@@ -189,7 +200,10 @@ public class GameManager : MonoBehaviour
         var canvas = UIGameInfo != null ? UIGameInfo.GetComponentInParent<Canvas>() : null;
         if (canvas != null) canvas = canvas.rootCanvas;
         if (canvas != null)
+        {
             TurnHud = UI.TurnHud.Create(this, canvas);
+            CommandHud = UI.CommandHud.Create(this, canvas);
+        }
         SelectionArrow = Map.SelectionArrow.Create(this);
     }
 

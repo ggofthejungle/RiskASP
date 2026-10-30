@@ -183,7 +183,7 @@ namespace UI
             {
                 case ReinforcePhase rp:
                     return rp.RemainingTroopsToPlace > 0
-                        ? $"Click your territories to place troops (1 per click). <b>{rp.RemainingTroopsToPlace}</b> left."
+                        ? $"Click your territories to place troops (1 per click). <b>{rp.RemainingTroopsToPlace}</b> left. Buy cards / hire below."
                         : "All troops placed. Press <b>Skip phase</b> to start attacking.";
 
                 case AttackPhase ap:
@@ -203,7 +203,7 @@ namespace UI
                     if (to == null)
                         return $"Attacking from <b>{Nice(from.Name)}</b>: click a highlighted enemy territory to roll. " +
                                $"Click {Nice(from.Name)} again to cancel.";
-                    return $"Rolling: <b>{Nice(from.Name)}</b> → <b>{Nice(to.Name)}</b>…";
+                    return $"Rolling: <b>{Nice(from.Name)}</b> -> <b>{Nice(to.Name)}</b>…";
                 }
 
                 case FortifyPhase:
@@ -365,7 +365,7 @@ namespace UI
             if (t != null && t.text != s) t.text = s;
         }
 
-        private static Image NewImage(string name, Transform parent, Color color)
+        internal static Image NewImage(string name, Transform parent, Color color)
         {
             var go = new GameObject(name, typeof(RectTransform), typeof(Image));
             go.transform.SetParent(parent, false);
@@ -375,7 +375,7 @@ namespace UI
             return img;
         }
 
-        private static TMP_Text NewText(string name, Transform parent, float size, FontStyles style, TextAlignmentOptions align)
+        internal static TMP_Text NewText(string name, Transform parent, float size, FontStyles style, TextAlignmentOptions align)
         {
             var go = new GameObject(name, typeof(RectTransform), typeof(TextMeshProUGUI));
             go.transform.SetParent(parent, false);
@@ -389,7 +389,7 @@ namespace UI
             return t;
         }
 
-        private static void Place(RectTransform rt, Vector2 anchorMin, Vector2 anchorMax, Vector2 offsetMin, Vector2 offsetMax)
+        internal static void Place(RectTransform rt, Vector2 anchorMin, Vector2 anchorMax, Vector2 offsetMin, Vector2 offsetMax)
         {
             rt.anchorMin = anchorMin;
             rt.anchorMax = anchorMax;
@@ -397,6 +397,6 @@ namespace UI
             rt.offsetMax = offsetMax;
         }
 
-        private static void Stretch(RectTransform rt) => Place(rt, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+        internal static void Stretch(RectTransform rt) => Place(rt, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
     }
 }

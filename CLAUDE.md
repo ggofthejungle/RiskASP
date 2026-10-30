@@ -1,6 +1,6 @@
 # Invade Earth (RiskASP fork): handoff for Claude
 
-Read this first. Last updated: Oct 30, 2026. Owner: George (ggofthejungle).
+Read this first. Last updated: Oct 30, 2026 (afternoon). Owner: George (ggofthejungle).
 
 ## Where things are
 - Unity project: `C:\Users\georg\source\RiskASP`, Unity **6000.4.0f1**. Work on branch **`dev`**. It is local only and NOT pushed yet.
@@ -63,56 +63,58 @@ Read this first. Last updated: Oct 30, 2026. Owner: George (ggofthejungle).
 - Card system: analysis in **`docs/card-system-overhaul.md`** (classic vs 2210, turn-phase comparison incl. George's Trello table, the Java reference, Land-only map). Pilot 2210 command cards: `Cards/CommandCards.cs`, `Actions/CommandCardActions.cs`. Buy 1 energy, max 4 per turn, commander in play, Naval/Space decks off. Playable: Energy Crisis, Assemble MODs (Land). `CommandCardTests.cs` (14). **47/47 passing.**
 - Reference: Java 2210 `avioane/InvadeEarth` has NO license. Read it for rules only, never copy code.
 
+- Oct 30 (afternoon), all on `dev`, **106/106 tests**:
+  - `f3cdb4d` choose turn order after bidding;
+  - `1287df3` CC-1 real decks, classic cards removed;
+  - `b04348d` CC-2 starting units / hire / build / conquest / d8 (defender max 2 dice);
+  - `893be6a` reaction window + 5 defense cards + DefenderAI;
+  - `ce47408` CC-4 remaining land-map cards, scoring, 4/5-player tests;
+  - then the UI (`UI/CommandHud.cs`): command bar (hand, buy/hire/build, map targeting via `SelectionManager.BeginTargeting`) and the defender prompt;
+  - `GameManager.LocalPlayer` / `IsLocal`; `PassTheDeviceScreens` (off by default, testing only).
+  - Docs: `docs/card-system-overhaul.md`, `docs/online-plan.md`.
+
 ## Decisions (locked)
 - **Approach:** keep RiskASP and pull the rules out gradually into pure C#. No full rewrite.
 - **Reaction window (defender interrupts):**
   - It opens after an attack is declared and before **every** dice roll.
-  - It only prompts a defender who holds a playable defense card (commander alive and enough energy).
+  - It only prompts THE DEFENDER (not other players, even though the rulebook lets anyone play Stealth MODs; asking everyone wastes time). Only if they hold a playable defense card (commander alive, enough energy, not jammed).
   - Multiple cards per invasion are allowed. Buttons: Play / Pass / Pass for rest of turn.
   - Frequency Jam skips the target's window for the rest of that turn.
   - There is no card-vs-card stack.
-  - Who answers: hot-seat shows a "pass the device" screen; the AI decides instantly; online uses an RPC with a 15–20s timer that auto-passes.
+  - Who answers: the AI decides instantly; online, the defender's own device, with a 15–20 s timer that auto-passes. The "pass the device" screens exist for local testing only (`PassTheDeviceScreens`, off by default).
+- **Space station** gives +1 unit (MOD) per turn, per the rules (not energy).
+- **Turn order:** after bidding, the highest bidder chooses their position (2210 rule).
+- **Map is land-only:** Naval/Space commanders and decks are out; the Nuclear deck has land variants only.
+- **Card effects never empty a territory** (we have no neutral territories). Evacuation is the exception: the attacker takes the emptied territory.
   - Defense cards: Cease Fire, Stealth MODs, Evacuation, Death Trap, Stealth Station.
-- **Online** uses the Battle Planes stack (PlayFab/CBS + UGS Lobby + Photon PUN) on all platforms. Async play-by-turn comes later.
+- **Online** means **PlayFab + UGS** (not hot-seat). See `docs/online-plan.md`. Whether Photon PUN stays is OPEN (recommendation: server authority via UGS Cloud Code / PlayFab CloudScript, no Photon).
 - **Legal:** before any sale, rewrite all card names and text and use an ORIGINAL map (it's currently Hasbro's Risk/2210). Don't ship DLV2.
 
 ## Next steps (in order)
-Every task has a unique ID. When George says "do RW-1", that is the task. **CURRENT TASK: RW-2** (RW-1 done), unless George says otherwise.
+Every task has a unique ID. **CURRENT TASK: PT-2**, unless George says otherwise.
 
-- **PT-1: Hot-seat play-test (George does it).** Play from the Menu scene with 2 humans. Check the bid rejection message, that both players get a turn, and that year 2 bidding opens. Fix any UI issues he reports. Not a blocker for RW-1.
+- **PT-2: George play-tests** the new turn flow from the Menu scene:
+  - bid, then choose order;
+  - command bar: buy/hire/build, play cards;
+  - attack with the arrow;
+  - defender prompt.
 
-### Reaction window (defender interrupts): do these in order, each one depends on the one before
-- **RW-1: Separate turn owner from input owner (refactor).** ✅ DONE (see "Done so far"; the names differ slightly from this plan).
-  - Problem: `GameManager` assumes the only player who ever gives input is `CurrentPlayer`, so a defender can't answer during the attacker's turn. That's why the old interrupt attempt broke everything.
-  - Add `PendingDecision { Player Player; DecisionKind Kind; ... }` to `GameManager`, separate from `CurrentPlayer`. Kinds: `TurnAction` (normal) and `Reaction` (defender).
-  - Inputs go through `HandlePlayerAction(action)`, which validates `action.Player == PendingDecision.Player` (not just the current player).
-  - Start with **AttackPhase only**. Add `DeclareAttack` / `PassReaction` / `PlayReactionCard` actions, but the window doesn't open yet. With no defense cards it behaves exactly as now.
-  - Done when: HotSeatGameTests still 7/7, and a new EditMode or PlayMode test proves that an action from a non-pending player is rejected.
-- **RW-2: Open the window in AttackPhase before EVERY dice roll.**
-  - Implement by setting `AttackPhase.ShouldOpenReactionWindow` and adding `Card:<id>` options to the decision.
-  - After `DeclareAttack`: if the defender has a playable defense card (commander alive, enough energy) and isn't jammed or passed for the turn, set `PendingDecision` to the defender (Reaction). Otherwise roll immediately.
-  - The defender plays 0+ cards, then Done / Pass / PassRestOfTurn. Recheck that the attack is still valid, then roll.
-  - Tests: no card → no window; window opens every roll; PassRestOfTurn is honored.
-- **RW-3: Defender prompt UI.**
-  - A hot-seat "Pass the device to <Defender>" cover screen.
-  - A card list with energy costs and the Play / Pass / Pass-rest-of-turn buttons.
-  - A log line for the attacker.
-- **RW-4: AI defender.** A simple C# heuristic that answers Reaction decisions instantly.
-- **RW-5: Defense cards plus Frequency Jam, each with tests.**
-  - Cease Fire (blocks further attacks on that player this turn)
-  - Stealth MODs (+3 defenders, can be played several times)
-  - Evacuation
-  - Death Trap
-  - Stealth Station
-  - Frequency Jam (the attacker plays it; the target gets no window for the rest of the turn)
-
-### After the reaction window
-- **MM-1: Main menu modes and seat types.** Hot-seat / vs AI / online; each seat is Local / AI / Remote.
-- **MM-2: C# AI for mobile and WebGL.** The ASP solver is desktop-only.
-- **ON-1: Online.** Copy the login, lobby and PUN sync from Battle Planes (see above). The reaction window goes over RPC with a 15–20s timer.
+  Fix UI issues he reports.
+- Done: RW-1..5, CC-1, CC-2, CC-4, the command-card UI. Still open:
+  - Decoys Revealed and Armageddon (not implemented);
+  - Evacuation destination is automatic (the defender's strongest territory);
+  - MOD Reduction is automated.
+- **ON-1: Online (PlayFab + UGS)**, per `docs/online-plan.md`:
+  1. bid/choose as actions + full ActionCodec;
+  2. `IRandom`;
+  3. server authority (needs the pure C# rules);
+  4. reaction-window timer;
+  5. snapshot/rejoin + hidden info.
+- **MM-1: Main menu modes and seat types.** Online / vs AI / local test; seats Local / AI / Remote.
+- **MM-2: C# AI for mobile/WebGL and online.** The ASP solver is desktop-only. The ASP bots don't know about command cards, cease fire, or hiring.
 - **GIT-1: Push `dev` and open a PR into `main`,** only when George says so.
 
 ## Known gaps
-- Energy income: now +3 per turn, or territories / 3 with 12+ territories (from main, `ReinforcePhase.Start`). Bot bids are still always 0.
-- Commanders and the space station are test-placed on the first territory in `SetupGame()`; remove that once buying them works.
+- Energy income: +3 per turn, or territories / 3 with 12+ territories (from main, `ReinforcePhase.Start`). The rulebook uses a score-chart lookup instead; this is close enough for now. Bot bids are still always 0.
+- Starting units are placed automatically (commanders on the strongest border territory, the station on the next). The rules let players place them.
 - Bots: the ASP solver bots are untested since the fix.

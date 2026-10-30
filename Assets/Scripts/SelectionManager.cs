@@ -67,6 +67,12 @@ public class SelectionManager : MonoBehaviour
             {
                 // Map clicks belong to the turn owner; ignore them while someone else is deciding.
                 if (_gm.PendingDecision != null) return;
+                // A card / purchase is waiting for a territory: give it the click instead.
+                if (_targeting != null)
+                {
+                    if (_targeting(selection.Territory)) EndTargeting();
+                    return;
+                }
                 _currentSelectionPhase.OnClicked(_gm.CurrentPlayer, selection);
             };
         }
@@ -95,6 +101,28 @@ public class SelectionManager : MonoBehaviour
         _currentSelectionPhase.Start(_gm.CurrentPlayer);
     }
 
+
+    // ---------------- Targeting (cards, hiring, building) ----------------
+    // While targeting, only territories accepted by canTarget are clickable, and each click goes to onClick,
+    // which returns true when it has everything it needs. Then the normal phase selection comes back.
+    private System.Func<Territory, bool> _targeting;
+    public bool IsTargeting => _targeting != null;
+
+    public void BeginTargeting(System.Func<Territory, bool> onClick, System.Func<Territory, bool> canTarget)
+    {
+        _currentSelectionPhase.End(_gm.CurrentPlayer);
+        _targeting = onClick;
+        DisableAllTerritories();
+        foreach (var kv in TerritoryToSelectionMap)
+            if (canTarget(kv.Key)) kv.Value.Enable();
+    }
+
+    public void EndTargeting()
+    {
+        if (_targeting == null) return;
+        _targeting = null;
+        _currentSelectionPhase.Start(_gm.CurrentPlayer);
+    }
 
     public void DisableAllTerritories()
     {
