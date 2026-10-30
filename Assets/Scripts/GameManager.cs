@@ -161,7 +161,21 @@ public class GameManager : MonoBehaviour
         _bidInputGO = GameObject.Find("BidEnergyInput");
         if (_bidButton != null)
             _bidButton.GetComponent<Button>().onClick.AddListener(HandlePlayerBidEnergy);
+        CreateHud();
         StartYear();
+    }
+
+    // Turn banner + instructions + turn splash, and the attack/move arrow on the map.
+    public UI.TurnHud TurnHud { get; private set; }
+    public Map.SelectionArrow SelectionArrow { get; private set; }
+
+    private void CreateHud()
+    {
+        var canvas = UIGameInfo != null ? UIGameInfo.GetComponentInParent<Canvas>() : null;
+        if (canvas != null) canvas = canvas.rootCanvas;
+        if (canvas != null)
+            TurnHud = UI.TurnHud.Create(this, canvas);
+        SelectionArrow = Map.SelectionArrow.Create(this);
     }
 
     private void StartYear()

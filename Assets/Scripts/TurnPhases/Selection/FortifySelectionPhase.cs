@@ -11,6 +11,10 @@ namespace TurnPhases.Selection
         private readonly SelectionManager _sm;
         private readonly ActionReader _ar;
         
+        // Read-only view of the current selection, for the HUD instructions and the arrow.
+        public Territory From => _from != null ? _from.Territory : null;
+        public Territory To => _to != null ? _to.Territory : null;
+
         private TerritorySelection _from;
         private TerritorySelection _to;
         
