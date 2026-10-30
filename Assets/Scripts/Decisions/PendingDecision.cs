@@ -9,6 +9,7 @@ namespace Decisions
     {
         DefenseReaction, // defender may react before an attack's dice are rolled
         RemoveUnits,     // MOD Reduction: pick one of your territories to lose a unit (options = territory names)
+        PlaceStartingUnit, // game start: pick the territory for a starting unit (Subject = Diplomat / LandCommander / SpaceStation)
     }
 
     // Option ids a player can answer with. Defense cards will be added later as "Card:<id>".
@@ -27,16 +28,18 @@ namespace Decisions
         public int PlayerId { get; }
         public DecisionKind Kind { get; }
         public IReadOnlyList<string> Options { get; }
+        public string Subject { get; } // what the decision is about (e.g. which starting unit), optional
 
-        public PendingDecision(int playerId, DecisionKind kind, IEnumerable<string> options)
+        public PendingDecision(int playerId, DecisionKind kind, IEnumerable<string> options, string subject = null)
         {
             PlayerId = playerId;
             Kind = kind;
             Options = (options ?? Enumerable.Empty<string>()).ToList().AsReadOnly();
+            Subject = subject;
         }
 
         public bool HasOption(string option) => Options.Contains(option);
 
-        public override string ToString() => $"{Kind} for player {PlayerId} [{string.Join(", ", Options)}]";
+        public override string ToString() => $"{Kind}{(Subject != null ? $"({Subject})" : "")} for player {PlayerId} [{string.Join(", ", Options)}]";
     }
 }

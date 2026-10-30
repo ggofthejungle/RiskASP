@@ -15,6 +15,11 @@ Read this first. Last updated: Oct 30, 2026 (afternoon). Owner: George (ggofthej
   - `Unity_GetConsoleLogs`
   - `Unity_RunCommand`: C# that must be `internal class CommandScript : IRunCommand`; no System.Reflection.
 - After editing .cs files, call `AssetDatabase.Refresh()` through RunCommand. It returns "Unity not detected" during the domain reload; wait about 35s, then continue.
+- **Run tests (only the classes a change can break, George Oct 30):**
+  - Write the test class names, one per line, to `Logs/test-filter.txt`. The next run uses that file once and then deletes it.
+  - `Logs/test-results.txt` shows a `RUNNING <test>` line while a test runs, so a freeze names the test.
+  - Never add an NUnit `[SetUpFixture]`: it froze Unity between PlayMode tests (3 restarts). Each test class sets `GameManager.AutoPlaceStartingUnits = true` in its own SetUp.
+  - The runner switches the Console's Error Pause off.
 - **Run tests:**
   - Start them: `EditorApplication.ExecuteMenuItem("Invade Earth/Run Hot-Seat Tests")`
   - Wait for `FINISHED` in `Logs/test-results.txt`. A full run takes about 1 minute.
@@ -109,7 +114,7 @@ Every task has a unique ID. **CURRENT TASK: PT-2**, unless George says otherwise
 - Done: RW-1..5, CC-1, CC-2, CC-4, the command-card UI. Still open:
   - Decoys Revealed and Armageddon (not implemented);
   - Evacuation destination is automatic (the defender's strongest territory);
-- **CC-5: Pick placement of starting commanders + station** (player clicks territories, like MOD Reduction; via decisions so it works online).
+- Done: **CC-5**, players pick where their starting Diplomat, Land Commander and Space Station go (before year 1; `GameManager.AutoPlaceStartingUnits` skips it for tests).
 - **ON-1: Online (PlayFab + UGS, no Photon)**, per `docs/online-plan.md`:
   1. bid/choose as actions + full ActionCodec;
   2. `IRandom`;

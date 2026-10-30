@@ -519,7 +519,7 @@ namespace UI
 
         private void OnDecisionChanged(PendingDecision decision)
         {
-            if (decision != null && decision.Kind == DecisionKind.RemoveUnits)
+            if (decision != null && (decision.Kind == DecisionKind.RemoveUnits || decision.Kind == DecisionKind.PlaceStartingUnit))
             {
                 BeginRemoval(decision);
                 return;
@@ -557,16 +557,19 @@ namespace UI
             _sm.BeginTargeting(t =>
             {
                 var d = _gm.PendingDecision;
-                if (d == null || d.Kind != DecisionKind.RemoveUnits || !d.HasOption(t.Name)) return false;
-                _gm.HandlePlayerAction(new DecisionResponseAction(who, _gm.Turn, t.Name));
+                if (d == null || !IsTerritoryDecision(d) || !d.HasOption(t.Name)) return false;
+                _gm.HandlePlayerAction(new DecisionResponseAction(_gm.GetPlayerById(d.PlayerId), _gm.Turn, t.Name));
                 return false; // the next question re-arms the targeting; Update ends it when MOD Reduction is over
             }, t => names.Contains(t.Name));
         }
 
+        private static bool IsTerritoryDecision(PendingDecision d) =>
+            d.Kind == DecisionKind.RemoveUnits || d.Kind == DecisionKind.PlaceStartingUnit;
+
         public bool ClickRemoval(Territory t)
         {
             var d = _gm.PendingDecision;
-            if (d == null || d.Kind != DecisionKind.RemoveUnits || !d.HasOption(t.Name)) return false;
+            if (d == null || !IsTerritoryDecision(d) || !d.HasOption(t.Name)) return false;
             return _gm.HandlePlayerAction(new DecisionResponseAction(_gm.GetPlayerById(d.PlayerId), _gm.Turn, t.Name));
         }
 
@@ -587,7 +590,7 @@ namespace UI
 
         private void RefreshPrompt()
         {
-            if (_removalTargeting && (_gm.PendingDecision == null || _gm.PendingDecision.Kind != DecisionKind.RemoveUnits
+            if (_removalTargeting && (_gm.PendingDecision == null || !IsTerritoryDecision(_gm.PendingDecision)
                                       || !_gm.IsLocal(_gm.InputPlayer)))
             {
                 _removalTargeting = false;

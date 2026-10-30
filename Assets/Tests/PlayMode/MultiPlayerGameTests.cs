@@ -30,6 +30,7 @@ public class MultiPlayerGameTests
     [TearDown]
     public void TearDown()
     {
+        UnityEngine.Debug.Log($"[TEST] end {NUnit.Framework.TestContext.CurrentContext.Test.Name}");
         if (_config != null && _savedConfig != null)
         {
             _config.PlayersConfiguration.Clear();
@@ -138,6 +139,7 @@ public class MultiPlayerGameTests
 
     private IEnumerator LoadGame(int n)
     {
+        GameManager.AutoPlaceStartingUnits = true;
 #if UNITY_EDITOR
         _config = AssetDatabase.LoadAssetAtPath<StartingPlayersConfiguration>(ConfigPath);
         var human = AssetDatabase.LoadAssetAtPath<PlayerConfiguration>(HumanConfigPath);

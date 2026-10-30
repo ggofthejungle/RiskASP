@@ -134,13 +134,15 @@ namespace UI
             _colorBar.color = color;
             SetText(_title, _gm.GameState == GameState.Over ? "GAME OVER"
                 : _gm.IsChoosingOrder && p != null ? $"{p.Name.ToUpperInvariant()} CHOOSES"
+                : _gm.IsPlacingStartingUnits && p != null ? $"{p.Name.ToUpperInvariant()} PLACES"
                 : TurnTitle(p));
             SetText(_sub, $"Year {_gm.Year}/{GameManager.MaxYears}  ·  Turn {Mathf.Max(_gm.Turn, 1)}");
 
             // Phase stepper
             if (_gm.IsBidding || _gm.IsChoosingOrder || _gm.GameState != GameState.Playing)
             {
-                SetChip(0, _gm.IsBidding ? "Bidding for turn order" : _gm.IsChoosingOrder ? "Choosing turn order" : "—", true, color);
+                SetChip(0, _gm.IsBidding ? "Bidding for turn order" : _gm.IsChoosingOrder ? "Choosing turn order"
+                    : _gm.IsPlacingStartingUnits ? "Placing starting units" : "—", true, color);
                 _chips[1].gameObject.SetActive(false);
                 _chips[2].gameObject.SetActive(false);
             }
@@ -222,6 +224,15 @@ namespace UI
             if (_gm.GameState == GameState.Over) return "The game is over.";
             var p = _gm.CurrentPlayer;
             if (p == null) return "";
+
+            if (_gm.IsPlacingStartingUnits && _gm.PendingDecision is { Kind: Decisions.DecisionKind.PlaceStartingUnit } placing)
+            {
+                var unit = placing.Subject == "SpaceStation" ? "Space Station" : Map.MapBadges.FullName(
+                    (Expansions.CommanderType)System.Enum.Parse(typeof(Expansions.CommanderType), placing.Subject));
+                return _gm.IsLocal(_gm.InputPlayer)
+                    ? $"<b>{_gm.InputPlayer.Name}</b>, click one of your territories for your <b>{unit}</b> ({_gm.PlacementIndex} of 3)."
+                    : $"Waiting for <b>{_gm.InputPlayer?.Name}</b> to place their {unit}…";
+            }
 
             if (_gm.IsBidding)
                 return $"<b>{p.Name}</b>: type a bid from 0 to {p.GetEnergy()} energy and press <b>Submit</b>. " +
@@ -308,7 +319,7 @@ namespace UI
                 return;
             }
 
-            if (newPlayer.IsBot() || _gm.IsChoosingOrder) return;
+            if (newPlayer.IsBot() || _gm.IsChoosingOrder || _gm.IsPlacingStartingUnits) return;
 
             var handOff = oldPlayer != null && !oldPlayer.IsBot() && oldPlayer != newPlayer
                 ? $"Pass the device to {newPlayer.Name}"

@@ -178,7 +178,14 @@ public class GameManager : MonoBehaviour
             _bidButton.GetComponent<Button>().onClick.AddListener(HandlePlayerBidEnergy);
         SetUpBidBox();
         CreateHud();
-        StartYear();
+        if (AutoPlaceStartingUnits)
+        {
+            foreach (var player in Players)
+                Purchases.PlaceStartingUnits(player);
+            StartYear();
+        }
+        else
+            StartPlacement();
     }
 
     // Turn banner + instructions + turn splash, and the attack/move arrow on the map.
@@ -370,6 +377,63 @@ public class GameManager : MonoBehaviour
         PromptNextChooser();
     }
 
+    // ---------------- Placing starting units (before year 1) ----------------
+    // In turn order, each player picks a territory for their Diplomat, then their Land Commander, then their
+    // Space Station: one PlaceStartingUnit decision per unit, addressed to that player (online: their device;
+    // bots: DefenderAI picks instantly).
+    public static bool AutoPlaceStartingUnits = false; // tests / quick start: place them automatically instead
+    public static readonly string[] StartingUnits = { "Diplomat", "LandCommander", "SpaceStation" };
+    public bool IsPlacingStartingUnits => _isPlacing;
+    private bool _isPlacing;
+    private readonly Queue<(Player player, string unit, int index)> _placements = new();
+    public int PlacementIndex { get; private set; } // 1..3 for the current player
+
+    private void StartPlacement()
+    {
+        _isPlacing = true;
+        foreach (var player in _playerQueue.Where(p => !p.IsDead()))
+            for (int i = 0; i < StartingUnits.Length; i++)
+                _placements.Enqueue((player, StartingUnits[i], i + 1));
+        NextPlacement();
+    }
+
+    private void NextPlacement()
+    {
+        if (_placements.Count == 0)
+        {
+            _isPlacing = false;
+            Debug.Log("Starting units placed.");
+            StartYear();
+            return;
+        }
+
+        var (player, unit, index) = _placements.Dequeue();
+        PlacementIndex = index;
+        if (_currentPlayer != player)
+        {
+            var old = _currentPlayer;
+            _currentPlayer = player;
+            OnPlayerTurnChanged?.Invoke(old, _currentPlayer);
+        }
+        var options = player.Territories
+            .Where(t => unit != "SpaceStation" || !t.containsSpaceStation)
+            .Select(t => t.Name).ToList();
+        OpenDecision(new PendingDecision(GetPlayerId(player), DecisionKind.PlaceStartingUnit, options, unit), OnPlaced);
+    }
+
+    private void OnPlaced(DecisionResponseAction response)
+    {
+        var territory = _tr.FromName(response.Option);
+        var unit = PendingSubjectOf(response);
+        if (unit == "SpaceStation") territory.AddSpaceStation();
+        else territory.AddCommander(new Commander((CommanderType)Enum.Parse(typeof(CommanderType), unit)));
+        Debug.Log($"{response.Player.Name} placed their {unit} in {territory.Name}.");
+        NextPlacement();
+    }
+
+    private string _lastSubject;
+    private string PendingSubjectOf(DecisionResponseAction _) => _lastSubject;
+
     // ---------------- Choosing turn order (after bidding) ----------------
     public bool IsChoosingOrder => _isChoosingOrder;
     private bool _isChoosingOrder;
@@ -509,9 +573,8 @@ public class GameManager : MonoBehaviour
         EnqueuePlayers();
         //this order can be random to start bidding. after bidding, the order will be set on a turn-by-turn basis
         //call it once so that HandlePlayerBidEnergy can continue
-        // 2210: every player starts with a Diplomat, a Land Commander and a Space Station.
-        foreach (var player in Players)
-            Purchases.PlaceStartingUnits(player);
+        // 2210: every player starts with a Diplomat, a Land Commander and a Space Station: they pick where
+        // (StartPlacement, before year 1), unless AutoPlaceStartingUnits.
     }
 
 
@@ -657,6 +720,7 @@ public class GameManager : MonoBehaviour
             throw new ArgumentException($"Unknown player id {decision.PlayerId}");
 
         _pendingDecision = decision;
+        _lastSubject = decision.Subject;
         _onDecisionAnswered = onAnswered;
         Debug.Log($"Decision opened: {decision} ({InputPlayer.Name})");
         OnPendingDecisionChanged?.Invoke(decision);

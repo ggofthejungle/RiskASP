@@ -30,6 +30,8 @@ public class CommandersAndStationsTests
     [UnitySetUp]
     public IEnumerator SetUp()
     {
+        GameManager.AutoPlaceStartingUnits = true; // start right at bidding
+        UnityEngine.Debug.Log($"[TEST] start {NUnit.Framework.TestContext.CurrentContext.Test.Name}");
 #if UNITY_EDITOR
         _config = AssetDatabase.LoadAssetAtPath<StartingPlayersConfiguration>(ConfigPath);
         var human = AssetDatabase.LoadAssetAtPath<PlayerConfiguration>(HumanConfigPath);
@@ -55,6 +57,7 @@ public class CommandersAndStationsTests
     [TearDown]
     public void TearDown()
     {
+        UnityEngine.Debug.Log($"[TEST] end {NUnit.Framework.TestContext.CurrentContext.Test.Name}");
         if (_config != null && _savedConfig != null)
         {
             _config.PlayersConfiguration.Clear();

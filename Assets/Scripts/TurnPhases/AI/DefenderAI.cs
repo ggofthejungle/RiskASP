@@ -9,6 +9,19 @@ public static class DefenderAI
     {
         var defender = gm.GetPlayerById(decision.PlayerId);
 
+        // Starting units: commanders on the strongest border territory; the station on the next strongest.
+        if (decision.Kind == DecisionKind.PlaceStartingUnit)
+        {
+            var ranked = decision.Options
+                .Select(name => Map.TerritoryRepository.Instance.FromName(name))
+                .OrderByDescending(t => t.HasAnyNeighbourEnemy())
+                .ThenByDescending(t => t.Troops)
+                .ToList();
+            if (decision.Subject == "SpaceStation")
+                return (ranked.FirstOrDefault(t => t.CommandersList.Count == 0) ?? ranked[0]).Name;
+            return ranked[0].Name;
+        }
+
         // MOD Reduction: lose the unit where it hurts least (the biggest stack).
         if (decision.Kind == DecisionKind.RemoveUnits)
             return decision.Options

@@ -35,7 +35,7 @@ namespace UI
             _gm.OnPlayerTurnChanged += OnPlayerTurnChanged;
             _gm.OnTurnPhaseChanged += OnTurnPhaseChanged;
             
-             ChangeInstructionWindowMessage("Bid for turn order. 0-3 energy");
+            // (No start-up message: the game prompts each step itself and the turn banner explains it.)
             _gm.ReinforcePhase.OnTroopsToPlaceChanged += () =>
             {
                 if (_gm.CurrentPhase is ReinforcePhase reinforcePhase)
