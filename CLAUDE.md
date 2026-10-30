@@ -1,14 +1,14 @@
 # Invade Earth (RiskASP fork): handoff for Claude
 
-Read this first. Last updated: Oct 30, 2026 (afternoon). Owner: George (ggofthejungle).
+Read this first. Last updated: Oct 30, 2026 (evening). Owner: George (ggofthejungle).
 
 ## Where things are
-- Unity project: `C:\Users\georg\source\RiskASP`, Unity **6000.4.0f1**. Work on branch **`dev`**. It is local only and NOT pushed yet.
+- Unity project: `C:\Users\georg\source\RiskASP`, Unity **6000.4.0f1**. Work on branch **`dev`**. It's on GitHub; George pushes from Windows because the Linux shell has no GitHub login.
 - Trello board "Invade Earth" (https://trello.com/b/BaUFhOdd/invade-earth): lists 📌 Decisions & Rules, 🔨 NOW, ⚡ NEXT: Reaction window, 🎮 NEXT: Menu & modes, 🌐 Online, ✅ Done. Use Trello only for detail; this file is the summary.
 - Battle Planes (GitHub `ggofthejungle/Mine-master`) is the source to copy the online stack from:
   - PlayFab via CBS: `AuthController.cs`, `LobbyManager.cs`
   - UGS Lobby join codes: `UGS/LobbyUGSManager.cs`, `UI/Private Lobby/*`
-  - Photon PUN turns: `Multiiplayer/TurnManagerMP.cs`
+  - (Photon PUN turns: `Multiiplayer/TurnManagerMP.cs`. NOT used: Photon was dropped on Oct 30.)
 
 ## Tools and how to work here
 - **Unity MCP** is set up (`com.unity.ai.assistant`, relay in Claude Desktop config). Tools:
@@ -78,6 +78,20 @@ Read this first. Last updated: Oct 30, 2026 (afternoon). Owner: George (ggofthej
   - `GameManager.LocalPlayer` / `IsLocal`; `PassTheDeviceScreens` (off by default, testing only).
   - Docs: `docs/card-system-overhaul.md`, `docs/online-plan.md`.
 
+## Session log Oct 30 (evening), last commit `a6239a3`, pushed
+- Commanders:
+  - Map badges (D/L/N, S = station) with a hover label; d8 dice tagged "d8" in the dice panel.
+  - The player picks which commanders attack and how many units; commanders move along on move-in and Fortify.
+  - Red toast when a commander dies (`OnCommanderKilled`).
+- Command bar:
+  - "SHOP" / "YOUR CARDS" labels; confirmation before buy/hire/build ("You got X").
+  - Bid box: bigger, Enter submits.
+  - Left status panel and black message box removed; messages flash in the banner.
+- MOD Reduction asks each player to click their territories.
+- CC-5: players place their starting units by clicking.
+- Tests: targeted runs only. All classes touched today pass. A global [SetUpFixture] froze Unity (now removed).
+- Untracked in the folder: `Assets/_Recovery/` (Unity crash-recovery scenes from the freezes). George to keep or delete.
+
 ## Decisions (locked)
 - **Approach:** keep RiskASP and pull the rules out gradually into pure C#. No full rewrite.
 - **Reaction window (defender interrupts):**
@@ -103,6 +117,7 @@ Read this first. Last updated: Oct 30, 2026 (afternoon). Owner: George (ggofthej
 
 ## Next steps (in order)
 Every task has a unique ID. **CURRENT TASK: PT-2**, unless George says otherwise.
+**Open question to George:** after PT-2, start ON-1 part 1 (bid/choose as actions, full ActionCodec, one seeded IRandom; medium) or part 2 (pure C# rules engine for server authority; large)?
 
 - **PT-2: George play-tests** the new turn flow from the Menu scene:
   - bid, then choose order;
