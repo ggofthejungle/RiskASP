@@ -24,14 +24,14 @@ namespace Expansions
                 new Action<Player>(DecoyRevealed),
                 new Action<Player>(EnergyCrisis),
                 new Action<Territory, Territory>(Evacuation),
-                new Action(ModReduction),
+                new Action<Player>(ModReduction),
                 new Action(Redeployment),
                 new Action<Territory>(TerritorialStation),
                 new Action<Territory>(AssembleMods),
                 new Action(ColonyInfluence),
                 new Action<Player>(FrequencyJam),
                 new Action<Territory>(LandDeathTrap),
-                new Action(Reinforcements),
+                new Action<Territory, Territory, Territory>(Reinforcements),
                 new Action(ScoutForces),
                 new Action<Territory>(StealthMods),
                 new Action<Territory>(StealthStation),
@@ -39,17 +39,17 @@ namespace Expansions
                 new Action(ColonyInfluence),
                 new Action<Player>(FrequencyJam),
                 new Action(HiddenEnergy),
-                new Action(Reinforcements),
+                new Action<Territory, Territory, Territory>(Reinforcements),
                 new Action<Territory>(StealthMods),
                 new Action<Territory>(WaterDeathTrap),
                 new Action(AquaBrother),
                 new Action(Armageddon),
-                new Action<Commander>(AssassinBomb),
+                new Action<Territory, CommanderType>(AssassinBomb),
                 new Action(NickyBoy),
-                new Action(RocketStrikeLand),
+                new Action<Territory>(RocketStrikeLand),
                 new Action(RocketStrikeMoon),
                 new Action(RocketStrikeWater),
-                new Action(ScatterBombLand),
+                new Action<Player>(ScatterBombLand),
                 new Action(ScatterBombMoon),
                 new Action(ScatterBombWater),
                 new Action(TheMother),
@@ -59,7 +59,7 @@ namespace Expansions
                 new Action<Player>(FrequencyJam),
                 new Action(InvadeSurface),
                 new Action<Territory>(OrbitalMines),
-                new Action(Reinforcements),
+                new Action<Territory, Territory, Territory>(Reinforcements),
                 new Action<Territory>(StealthMods)
             };
         }
@@ -164,10 +164,30 @@ namespace Expansions
             }
         }
 
-        public void ModReduction()
+        public void ModReduction(Player cardOwner)
         {
-            // Before First Invasion
             // All of your opponents must remove 4 MODs in turn order. Then you remove 2 MODs.
+            // Automated: units come off each player's biggest territories; a territory always keeps 1.
+            foreach (var opponent in gm.GetPlayersInTurnOrder().Where(p => p != cardOwner && !p.IsDead()))
+                RemoveUnitsFromLargest(opponent, 4);
+            RemoveUnitsFromLargest(cardOwner, 2);
+        }
+
+        private static void RemoveUnitsFromLargest(Player player, int count)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                var largest = player.Territories.Where(t => t.Troops > 1).OrderByDescending(t => t.Troops).FirstOrDefault();
+                if (largest == null) return;
+                largest.RemoveTroops(1);
+            }
+        }
+
+        // Destroy some units but always leave 1 (our game has no empty/neutral territories).
+        private static void DestroyUnits(Territory territory, int count)
+        {
+            var destroy = Math.Min(count, territory.Troops - 1);
+            if (destroy > 0) territory.RemoveTroops(destroy);
         }
 
         public void Redeployment()
@@ -212,10 +232,12 @@ namespace Expansions
             DestroyHalfRoundUp(invadingTerritory);
         }
 
-        public void Reinforcements()
+        public void Reinforcements(Territory a, Territory b, Territory c)
         {
-            // Before First Invasion
-            // Place 3 MODS, one each on 3 different land territories you occupy
+            // Before First Invasion: place 3 MODs, one each on 3 different land territories you occupy.
+            a.AddTroops(1);
+            b.AddTroops(1);
+            c.AddTroops(1);
         }
 
         public void ScoutForces()
@@ -303,12 +325,18 @@ namespace Expansions
 
         }
 
-        public void AssassinBomb(Commander oppenentsCommander)
+        public void AssassinBomb(Territory territory, CommanderType commanderType)
         {
-            // Before First Invasion
-            // Choose an opponent's commander. Roll an 8-sided die. If you roll a 3 or higher destroy the chosen commander
-            
+            // Choose an opponent's commander. Roll an 8-sided die. On 3 or higher, destroy the chosen commander.
+            var commander = territory.CommandersList.FirstOrDefault(c => c.CommanderType == commanderType);
+            if (commander == null) return;
+            var roll = UnityEngine.Random.Range(1, 9);
+            LastRoll = roll;
+            if (roll >= 3)
+                territory.RemoveCommander(commander);
         }
+
+        public int LastRoll { get; private set; } // last die rolled by a card (for the log / UI / tests)
 
         public void NickyBoy()
         {
@@ -320,9 +348,12 @@ namespace Expansions
         // Before First Invasion
         // Choose a planet, then roll a 6-sided die. Constul the table to see the lunar or asteroid zone(s) affected. Destroy one unit in
         //each territory in the zone(s) rolled
-        public void RocketStrikeLand()
+        public void RocketStrikeLand(Territory target)
         {
-            
+            // Choose any opponent's land territory. Roll a 6-sided die. Destroy that many units there.
+            var roll = UnityEngine.Random.Range(1, 7);
+            LastRoll = roll;
+            DestroyUnits(target, roll);
         }
 
         public void RocketStrikeMoon()
@@ -338,10 +369,17 @@ namespace Expansions
         //Before First Invasion
         //Choose a planet and turn over 3 land territory cards for that planet. Destroy half the opponents' units on territories drawn.
         //Round up
-        public void ScatterBombLand()
+        public void ScatterBombLand(Player cardOwner)
         {
-            
+            // Turn over 3 land territory cards. Destroy half the opponents' units on those territories (round up).
+            var all = Map.TerritoryRepository.Instance.Territories;
+            var drawn = all.OrderBy(_ => UnityEngine.Random.value).Take(3).ToList();
+            LastScatterTargets = drawn;
+            foreach (var t in drawn.Where(t => t.Owner != cardOwner))
+                DestroyHalfRoundUp(t);
         }
+
+        public List<Territory> LastScatterTargets { get; private set; } = new();
 
         public void ScatterBombMoon()
         {
@@ -355,9 +393,18 @@ namespace Expansions
 
         public void TheMother()
         {
-            //Before First Invasion Choose a planet, then roll a 6-sided die. Constul the table to see the land zone(s) affected. Destroy one unit in each territory
-            //in the zone(s) rolled. 
+            // Roll a 6-sided die. Destroy one unit in each territory of the continent rolled (everyone's).
+            var continents = Map.ContinentRepository.Instance.Continents.Values.OrderBy(c => c.Name).ToList();
+            if (continents.Count == 0) return;
+            var roll = UnityEngine.Random.Range(1, 7);
+            LastRoll = roll;
+            var continent = continents[(roll - 1) % continents.Count];
+            LastContinentHit = continent;
+            foreach (var t in continent.Territories)
+                DestroyUnits(t, 1);
         }
+
+        public Map.Continent LastContinentHit { get; private set; }
         
         
         //SpaceCommandersAbilities

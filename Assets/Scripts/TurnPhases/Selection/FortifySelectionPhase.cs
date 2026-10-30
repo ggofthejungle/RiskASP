@@ -25,6 +25,14 @@ namespace TurnPhases.Selection
             _gm = gm;
             _sm = sm;
             _ar = ar;
+            _gm.FortifyPhase.OnFortifyAction += _ =>
+            {
+                if (_gm.CurrentPhase is FortifyPhase) // extra move (Redeployment): start a new selection
+                {
+                    UnselectAll();
+                    EnableTerritoriesToFortifyFrom(_gm.CurrentPlayer);
+                }
+            };
         }
 
         

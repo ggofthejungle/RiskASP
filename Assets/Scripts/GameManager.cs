@@ -633,8 +633,15 @@ public class GameManager : MonoBehaviour
         OnGameStateChanged?.Invoke(gameState);
     }
 
+    // Final ranking (2210 scoring), set when the game ends.
+    public List<Player> FinalRanking { get; private set; } = new();
+    public Player Winner => FinalRanking.FirstOrDefault();
+
     private void GameOver()
     {
+        if (_gameState == GameState.Over) return;
+        FinalRanking = Scoring.Ranking(Players);
+        Debug.Log("Game over. " + string.Join(", ", FinalRanking.Select(p => $"{p.Name}: {Scoring.ScoreOf(p)}")));
         SetGameState(GameState.Over);
     }
 

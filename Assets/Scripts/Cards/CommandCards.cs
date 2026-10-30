@@ -40,6 +40,35 @@ namespace Cards
                 ? null
                 : "Choose one territory you occupy.";
 
+        private static string OwnTerritoryForStation(Player p, object[] targets)
+        {
+            if (OwnTerritory(p, targets) is { } why) return why;
+            if (((Map.Territory)targets[0]).containsSpaceStation) return "That territory already has a space station.";
+            if (Purchases.StationsOf(p) >= Purchases.MaxStations) return $"You already have {Purchases.MaxStations} space stations.";
+            return null;
+        }
+
+        private static string ThreeDifferentOwnTerritories(Player p, object[] targets) =>
+            targets is { Length: 3 } && targets.All(x => x is Map.Territory t && t.Owner == p) && targets.Distinct().Count() == 3
+                ? null
+                : "Choose three different territories you occupy.";
+
+        private static string AnOpponent(Player p, object[] targets) =>
+            targets is { Length: 1 } && targets[0] is Player o && o != p && !o.IsDead()
+                ? null
+                : "Choose an opponent.";
+
+        private static string OpponentTerritory(Player p, object[] targets) =>
+            targets is { Length: 1 } && targets[0] is Map.Territory t && t.Owner != p
+                ? null
+                : "Choose an opponent's territory.";
+
+        private static string OpponentCommander(Player p, object[] targets) =>
+            targets is { Length: 2 } && targets[0] is Map.Territory t && t.Owner != p && targets[1] is CommanderType type
+            && t.CommandersList.Any(c => c.CommanderType == type)
+                ? null
+                : "Choose an opponent's commander.";
+
         // Pilot: only Energy Crisis is playable. Add cards here one at a time, each with a test.
         public static CardSpec For(CardType type) => type switch
         {
@@ -47,10 +76,25 @@ namespace Cards
             // Diplomat
             CardType.EnergyCrisis => new CardSpec(0, CardTiming.BeforeFirstInvasion, ownerIsFirstArgument: true),
             CardType.CeaseFire => new CardSpec(2, CardTiming.OpponentInvades),
+            CardType.TerritorialStation => new CardSpec(1, CardTiming.BeforeFirstInvasion, checkTargets: OwnTerritoryForStation),
+            CardType.ModReduction => new CardSpec(2, CardTiming.BeforeFirstInvasion, ownerIsFirstArgument: true),
+            CardType.Redeployment => new CardSpec(0, CardTiming.EndOfTurn),
+            CardType.ColonyInfluenceD => new CardSpec(0, CardTiming.EndOfGame),
             CardType.Evacuation => new CardSpec(0, CardTiming.OpponentInvades),
             // Land
             CardType.AssembleModsL => new CardSpec(1, CardTiming.BeforeFirstInvasion, checkTargets: OwnTerritory),
             CardType.StealthModsL => new CardSpec(0, CardTiming.OpponentInvades),
+            CardType.ReinforcementsL => new CardSpec(0, CardTiming.BeforeFirstInvasion, checkTargets: ThreeDifferentOwnTerritories),
+            CardType.FrequencyJamL => new CardSpec(0, CardTiming.BeforeFirstInvasion, checkTargets: AnOpponent),
+            CardType.ScoutForces => new CardSpec(0, CardTiming.BeforeFirstInvasion),
+            CardType.ColonyInfluenceL => new CardSpec(0, CardTiming.EndOfGame),
+            // Nuclear (land variants)
+            CardType.RocketStrikeLand => new CardSpec(2, CardTiming.BeforeFirstInvasion, checkTargets: OpponentTerritory),
+            CardType.ScatterBombLand => new CardSpec(1, CardTiming.BeforeFirstInvasion, ownerIsFirstArgument: true),
+            CardType.TheMother => new CardSpec(3, CardTiming.BeforeFirstInvasion),
+            CardType.AssassinBomb => new CardSpec(1, CardTiming.BeforeFirstInvasion, checkTargets: OpponentCommander),
+            // Not implemented yet: DecoyRevealed (move any commanders anywhere: needs a multi-step UI),
+            // Armageddon (every player plays nuclear cards in turn order: needs its own turn flow).
             CardType.LandDeathTrap => new CardSpec(3, CardTiming.OpponentInvades),
             CardType.StealthStation => new CardSpec(0, CardTiming.OpponentInvades),
             _ => new CardSpec(0, CardTiming.NotImplemented),
@@ -86,6 +130,36 @@ namespace Cards
 
         public void OnTurnStarted() => BuysThisTurn = 0;
 
+        // ---------------- Scout Forces ----------------
+        // "Draw a land territory card and secretly place it facedown. Place 5 MODs on it. When you occupy this
+        //  territory, immediately place the MODs." We pick a random territory the player doesn't occupy.
+        private readonly Dictionary<Map.Territory, Player> _scouted = new();
+        public IEnumerable<Map.Territory> ScoutedBy(Player p) => _scouted.Where(kv => kv.Value == p).Select(kv => kv.Key).ToList();
+        public const int ScoutForcesUnits = 5;
+
+        private void Scout(Player p)
+        {
+            var candidates = Map.TerritoryRepository.Instance.Territories.Where(t => t.Owner != p && !_scouted.ContainsKey(t)).ToList();
+            if (candidates.Count == 0) return;
+            var t = candidates[_rng.Next(candidates.Count)];
+            _scouted[t] = p;
+            t.OnOwnerChanged += OnScoutedOwnerChanged(t);
+        }
+
+        private Action<Player, Player> OnScoutedOwnerChanged(Map.Territory t)
+        {
+            Action<Player, Player> handler = null;
+            handler = (_, newOwner) =>
+            {
+                if (!_scouted.TryGetValue(t, out var scout) || newOwner != scout) return;
+                _scouted.Remove(t);
+                t.OnOwnerChanged -= handler;
+                t.AddTroops(ScoutForcesUnits);
+                Debug.Log($"Scout Forces: {scout.Name} occupied {t.Name} and placed {ScoutForcesUnits} MODs.");
+            };
+            return handler;
+        }
+
         // Our map has only land territories, so the Naval and Space decks (water / Moon cards) are out of play.
         public static bool IsDeckInPlay(CommanderType deck) => DeckLists.DecksInPlay.Contains(deck);
 
@@ -111,11 +185,20 @@ namespace Cards
             if (!p.canPlayCommandCards) return "You are jammed (Frequency Jam) and can't play command cards this turn.";
             if (!p.HasCommanderInPlay(card.Commander)) return $"You need your {card.Commander} in play to play {card.Name}.";
             if (p.GetEnergy() < card.PowerUpCost) return $"{card.Name} costs {card.PowerUpCost} energy to play.";
-            if (card.Timing == CardTiming.BeforeFirstInvasion && !IsOwnTurnBeforeFirstInvasion(p))
-                return $"{card.Name} can only be played on your turn, before your first invasion.";
-            if (card.Timing != CardTiming.BeforeFirstInvasion)
-                return $"{card.Name} ({card.Timing}) can't be played yet.";
-            return null;
+            switch (card.Timing)
+            {
+                case CardTiming.BeforeFirstInvasion:
+                    if (!IsOwnTurnBeforeFirstInvasion(p)) return $"{card.Name} can only be played on your turn, before your first invasion.";
+                    return null;
+                case CardTiming.EndOfTurn:
+                    if (_gm.CurrentPlayer != p || !(_gm.CurrentPhase is FortifyPhase))
+                        return $"{card.Name} is played at the end of your turn, after attacking (Fortify).";
+                    return null;
+                case CardTiming.EndOfGame:
+                    return $"{card.Name} counts automatically in the final score (if its commander is alive).";
+                default:
+                    return $"{card.Name} is played when an opponent invades you.";
+            }
         }
 
         public string WhyCantPlay(Player p, Card card, object[] targets) =>
@@ -221,7 +304,18 @@ namespace Cards
                 ? new object[] { p }.Concat(targets ?? Array.Empty<object>()).ToArray()
                 : targets ?? Array.Empty<object>();
             Debug.Log($"{p.Name} played {card.Name} (cost {card.PowerUpCost}).");
-            card.UseAbility(args);
+            switch (card.CardType)
+            {
+                case CardType.ScoutForces:
+                    Scout(p);
+                    break;
+                case CardType.Redeployment:
+                    _gm.FortifyPhase.AddExtraMove();
+                    break;
+                default:
+                    card.UseAbility(args);
+                    break;
+            }
             OnCardPlayed?.Invoke(p, card);
         }
 

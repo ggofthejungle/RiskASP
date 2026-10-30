@@ -308,14 +308,14 @@ public class CommandCardTests
     // ---------- Nuclear deck today ----------
 
     [UnityTest]
-    public IEnumerator NuclearCards_CanBeBought_ButAreNotPlayableYet()
+    public IEnumerator NuclearCards_CanBeBought_AndAllButArmageddonArePlayable()
     {
         StartAlicesTurn();
         GiveCommander(_alice, CommanderType.NuclearCommander);
         Assert.IsTrue(Buy(_alice, CommanderType.NuclearCommander));
         var card = _alice.Cards.Single();
-        Assert.AreEqual(CardTiming.NotImplemented, card.Timing, $"{card.Name}: no Nuclear card is implemented yet");
-        Assert.IsFalse(_gm.HandlePlayerAction(new PlayCommandCardAction(_alice, _gm.Turn, card)));
+        Assert.AreEqual(CommanderType.NuclearCommander, card.Commander);
+        Assert.AreEqual(card.CardType == CardType.Armageddon, card.Timing == CardTiming.NotImplemented, card.Name);
         yield break;
     }
 

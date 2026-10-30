@@ -30,7 +30,7 @@ namespace Cards
         public Commander SpaceCommander = new Commander(CommanderType.SpaceCommander);
         public Commander NuclearCommander = new Commander(CommanderType.NuclearCommander);
         private Card card;
-        Abilities abilities = new Abilities();
+        public Abilities Abilities { get; } = new Abilities();
         
         private void Awake()
         {
@@ -58,7 +58,7 @@ namespace Cards
             foreach (var deck in DeckLists.DecksInPlay)
                 foreach (var (type, copies) in DeckLists.For(deck))
                     for (int i = 0; i < copies; i++)
-                        cards.Add(new Card(abilities.FindFor(type), type) { Id = cards.Count });
+                        cards.Add(new Card(Abilities.FindFor(type), type) { Id = cards.Count });
             AssignCardsToCommanders(cards.ToArray());
             return cards.ToArray();
         }

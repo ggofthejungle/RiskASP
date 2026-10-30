@@ -19,8 +19,13 @@ namespace TurnPhases
             _gm = gm;
         }
 
+        // Extra free moves granted this turn (Redeployment card).
+        public int ExtraMoves { get; private set; }
+        public void AddExtraMove() => ExtraMoves++;
+
         public void Start(Player player)
         {
+            ExtraMoves = 0;
         }
 
         public void OnAction(Player player, PlayerAction action)
@@ -30,6 +35,11 @@ namespace TurnPhases
                 fortifyAction.From.RemoveTroops(fortifyAction.MovedTroops);
                 fortifyAction.To.AddTroops(fortifyAction.MovedTroops);
                 OnFortifyAction?.Invoke(fortifyAction);
+                if (ExtraMoves > 0)
+                {
+                    ExtraMoves--; // Redeployment: one more free move this turn
+                    return;
+                }
                 _gm.NextTurnPhase();
             }
             else if (action is EndPhaseAction)
