@@ -31,6 +31,7 @@ namespace Map
 
         private LineRenderer _shaftOutline, _shaft, _headOutline, _head;
         private readonly List<Vector3> _points = new();
+        private float _headLength = HeadLength;
 
         private Territory _flashFrom, _flashTo;
         private Color _flashColor;
@@ -172,14 +173,13 @@ namespace Map
                 return;
             }
             dir /= len;
-            start += dir * StartGap;
-            if (to != null) end -= dir * EndGap;
+            // Close neighbours: shrink the gaps and head so the arrow still shows (it used to vanish).
+            var startGap = Mathf.Min(StartGap, len * 0.2f);
+            var endGap = to != null ? Mathf.Min(EndGap, len * 0.2f) : 0f;
+            start += dir * startGap;
+            end -= dir * endGap;
             len = (end - start).magnitude;
-            if (len < HeadLength * 1.2f)
-            {
-                Hide();
-                return;
-            }
+            _headLength = Mathf.Min(HeadLength, len * 0.45f);
 
             // Quadratic Bezier, bent to the left of the direction of travel.
             var perp = new Vector3(-dir.y, dir.x, 0f);
@@ -195,7 +195,7 @@ namespace Map
             // Cut the shaft where the head starts.
             var total = 0f;
             for (int i = 1; i < _points.Count; i++) total += (_points[i] - _points[i - 1]).magnitude;
-            var shaftLen = total - HeadLength;
+            var shaftLen = total - _headLength;
             var shaft = new List<Vector3> { _points[0] };
             var acc = 0f;
             Vector3 headBase = end;

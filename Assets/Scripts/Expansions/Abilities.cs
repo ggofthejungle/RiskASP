@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,7 +12,7 @@ namespace Expansions
 {
     public class Abilities
     {
-        private GameManager gm;
+        private GameManager gm => GameManager.Instance; // was a field that was never assigned (NullReferenceException)
         public readonly List<Delegate> methods;
 
         public Abilities()
@@ -64,6 +64,33 @@ namespace Expansions
             };
         }
 
+        // The ability for a card type, matched by NAME (not by list position, which had drifted:
+        // the list has ModReduction, which has no CardType, so every card after it ran the wrong ability).
+        // Card types that share an ability across commanders carry a suffix: ColonyInfluenceD/L/Na/S, StealthModsL/Na/S...
+        public Delegate FindFor(Cards.CardType cardType)
+        {
+            var name = cardType.ToString();
+            var exact = methods.FirstOrDefault(m => m.Method.Name == name);
+            if (exact != null) return exact;
+            foreach (var suffix in new[] { "Na", "D", "L", "S" })
+                if (name.EndsWith(suffix))
+                {
+                    var baseName = name.Substring(0, name.Length - suffix.Length);
+                    var match = methods.FirstOrDefault(m => m.Method.Name == baseName);
+                    if (match != null) return match;
+                }
+            Debug.LogWarning($"Abilities: no ability for card {name}; it will do nothing.");
+            return new Action(() => { });
+        }
+
+        // "Destroy half the units, round up", but a territory always keeps at least 1 unit.
+        private static void DestroyHalfRoundUp(Territory territory)
+        {
+            var troops = territory.Troops;
+            var destroyed = (int)Math.Ceiling(troops / 2.0);
+            territory.SetTroops(Math.Max(1, troops - destroyed));
+        }
+
         //Diplomat
         
         
@@ -108,16 +135,16 @@ namespace Expansions
         {
             // Before First Invasion
             // Collect one energy from each opponent
+             // Only alive opponents, and only if they have energy to give (never below 0).
              int count = 0;
-             for (int x = 0; x < gm.Players.Count; x++)
+             foreach (var opponent in gm.Players)
              {
-                 if (gm.Players[x].Name != cardOwner.Name)
-                 {
-                     gm.Players[x].SetEnergy(gm.Players[x].GetEnergy() - 1); 
-                     count++;
-                 }
+                 if (opponent == cardOwner || opponent.IsDead() || opponent.GetEnergy() <= 0)
+                     continue;
+                 opponent.SetEnergy(opponent.GetEnergy() - 1);
+                 count++;
              }
-            
+
              cardOwner.SetEnergy(cardOwner.GetEnergy() + count);
 
         }
@@ -175,8 +202,7 @@ namespace Expansions
         {
             //Opponent Invades.
             //Your opponent must destroy half the units in the invading territory. Round up.
-            double troopsCount = invadingTerritory.GetAvailableTroops();
-            invadingTerritory.SetTroops((int)Math.Ceiling(troopsCount/2));
+            DestroyHalfRoundUp(invadingTerritory);
         }
 
         public void Reinforcements()
@@ -252,8 +278,7 @@ namespace Expansions
         {
             //Opponent Invades.
             //Your opponent must destroy half the units in the invading territory. Round up
-            double troopsCount = invadingTerritory.GetAvailableTroops();
-            invadingTerritory.SetTroops((int)Math.Ceiling(troopsCount/2));
+            DestroyHalfRoundUp(invadingTerritory);
         }
         
         //NuclearCommanderAbilities
@@ -366,8 +391,7 @@ namespace Expansions
         {
             //Opponent Invades.
             //Your opponent must destroy half the units in the invading territory. Round up. 
-            double troopsCount = invadingTerritory.GetAvailableTroops();
-            invadingTerritory.SetTroops((int)Math.Ceiling(troopsCount/2));
+            DestroyHalfRoundUp(invadingTerritory);
         }
 
         // public void Reinforcements()

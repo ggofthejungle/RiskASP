@@ -60,33 +60,38 @@ namespace Cards
         private Card[] GenerateCards()
         {
            //6 commanders each with their own card deck 
-           Card[] cards = new Card[41];
-           int count = 0;
-           foreach (CardType cardType in Enum.GetValues(typeof(CardType)))
-           {
-               card = new Card(abilities.methods[count], cardType);
-               cards[count] = card;
-               count++;
-           }
+           var cardTypes = (CardType[])Enum.GetValues(typeof(CardType));
+           Card[] cards = new Card[cardTypes.Length];
+           for (int i = 0; i < cardTypes.Length; i++)
+               cards[i] = new Card(abilities.FindFor(cardTypes[i]), cardTypes[i]);
            AssignCardsToCommanders(cards);
            return cards;
         }
 
         private void AssignCardsToCommanders(Card[] cards)
         {
-            for (int x = 0; x < cards.Length; x++) 
+            // By the card's group in the CardType enum (the old index ranges 7/16/24/34 were off by one or two).
+            foreach (var c in cards)
             {
-                if(x < 7)
-                    DiplomatCommander.AddCard(cards[x]);
-                else if(x < 16)
-                    LandCommander.AddCard(cards[x]);
-                else if(x < 24)
-                    NavalCommander.AddCard(cards[x]);
-                else if(x < 34)
-                    NuclearCommander.AddCard(cards[x]);
-                else
-                    SpaceCommander.AddCard(cards[x]);
+                switch (CommanderFor(c.CardType))
+                {
+                    case CommanderType.Diplomat: DiplomatCommander.AddCard(c); break;
+                    case CommanderType.LandCommander: LandCommander.AddCard(c); break;
+                    case CommanderType.NavalCommander: NavalCommander.AddCard(c); break;
+                    case CommanderType.NuclearCommander: NuclearCommander.AddCard(c); break;
+                    default: SpaceCommander.AddCard(c); break;
+                }
             }
+        }
+
+        // Which commander's deck a card belongs to, from the groups in CardType.cs.
+        public static CommanderType CommanderFor(CardType cardType)
+        {
+            if (cardType <= CardType.TerritorialStation) return CommanderType.Diplomat;
+            if (cardType <= CardType.StealthStation) return CommanderType.LandCommander;
+            if (cardType <= CardType.WaterDeathTrap) return CommanderType.NavalCommander;
+            if (cardType <= CardType.TheMother) return CommanderType.NuclearCommander;
+            return CommanderType.SpaceCommander;
             
         }
 

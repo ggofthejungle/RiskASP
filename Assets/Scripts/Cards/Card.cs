@@ -27,9 +27,14 @@ namespace Cards
             CommanderType = commanderType;
         }
 
+        public CommanderType Commander => CommanderType;
+        public string AbilityName => _method?.Method.Name;
+        public int AbilityParameterCount => _method?.Method.GetParameters().Length ?? 0;
+
         public void UseAbility(params object[] parameters)
         {
-            _method.DynamicInvoke();
+            // Pass the targets through (was DynamicInvoke() with no arguments, which threw for any card with a target).
+            _method?.DynamicInvoke(parameters);
         }
 
         // if (name != null)

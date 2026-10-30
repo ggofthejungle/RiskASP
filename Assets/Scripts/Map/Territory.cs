@@ -118,7 +118,9 @@ namespace Map
         
         public void SetTroops(int troops)
         {
+            var oldTroops = Troops;
             Troops = troops;
+            OnTroopsChanged?.Invoke(oldTroops, Troops); // was missing: the troop label on the map didn't update
             OnStateChanged?.Invoke();
         }
                 

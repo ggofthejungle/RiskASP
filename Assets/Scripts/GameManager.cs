@@ -297,6 +297,9 @@ public class GameManager : MonoBehaviour
         } while (_currentPlayer.IsDead());
 
         _turn++;
+        // Frequency Jam only lasts for the jamming player's turn.
+        foreach (var player in Players)
+            player.canPlayCommandCards = true;
         Debug.Log($"Year {_year}, turn {_turnsTakenThisYear + 1}: {_currentPlayer.Name}");
         OnPlayerTurnChanged?.Invoke(oldPlayer, _currentPlayer);
         SetTurnPhase(ReinforcePhase);
@@ -447,7 +450,8 @@ public class GameManager : MonoBehaviour
             return;
 
         var card = _cr.DrawRandomCard();
-        player.AddCard(card);
+        if (card != null) // deck can run out
+            player.AddCard(card);
     }
 
     // Single entry point for every player action (UI, bots, tests, later the network).

@@ -50,6 +50,16 @@ Read this first. Last updated: Oct 30, 2026. Owner: George (ggofthejungle).
 - `c3e1c1e`: turn banner (top-right: player name in their color, Reinforce > Attack > Fortify stepper, instruction line), "X'S TURN" / "Pass the device" splash, and a curved attack/move arrow on the map (`UI/TurnHud.cs`, `Map/SelectionArrow.cs`, built in code, no scene edits). +4 tests (`TurnHudTests.cs`).
 - Merged `origin/main` (Nikolas: Abilities.cs cards, energy income per turn, commander changes) into dev. Took main's .meta GUIDs for Commander/CommanderType. Updated 2 bidding tests for the energy income. **21/21 passing.**
 
+- Post-merge fixes (main's card code + prefab), with `MergeRegressionTests.cs` (12 tests). **33/33 passing.**
+  - Cards ran the wrong ability from card #6 on (the `Abilities.methods` list has `ModReduction`, which has no `CardType`). Cards are now matched to abilities **by name** (`Abilities.FindFor`); suffixes D/L/Na/S are stripped.
+  - Commander decks were split at the wrong indexes; now done by enum group (`CardRepository.CommanderFor`): Diplomat 7, Land 8, Naval 7, Nuclear 11, Space 8.
+  - `Card.UseAbility` now passes its parameters. `Abilities.gm` was never set (now `GameManager.Instance`).
+  - Energy Crisis can't push opponents below 0. Death Traps / Orbital Mines leave at least 1 unit. `Territory.SetTroops` raises `OnTroopsChanged`.
+  - Frequency Jam is reset at every turn start. Drawing from an empty deck no longer crashes.
+  - `Territory.prefab` had `containsSpaceStation: 1`, so every territory had a station (+1 troop per territory per turn). Set to 0.
+  - Arrow no longer disappears between close neighbours.
+  - Open questions for Nikolas/George: Evacuation leaves the attacked territory with 0 units (intended?). Card exchange for troops is commented out in `ReinforcePhase`.
+
 ## Decisions (locked)
 - **Approach:** keep RiskASP and pull the rules out gradually into pure C#. No full rewrite.
 - **Reaction window (defender interrupts):**

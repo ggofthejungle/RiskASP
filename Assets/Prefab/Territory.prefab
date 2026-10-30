@@ -989,7 +989,7 @@ MonoBehaviour:
   Continent: {fileID: 0}
   NeighbourTerritories: []
   Owner: {fileID: 0}
-  containsSpaceStation: 1
+  containsSpaceStation: 0
   CommandersList: []
 --- !u!114 &5853463515120772916
 MonoBehaviour:
