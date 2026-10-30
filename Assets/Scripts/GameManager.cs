@@ -124,39 +124,189 @@ public class GameManager : MonoBehaviour
     }
 
 
+    // ---------------- Year / bidding / turn flow ----------------
+    // Each year: every alive player bids energy (0..their energy) -> turn order by highest bid
+    // (ties broken randomly but consistently) -> each alive player takes exactly one turn -> next year.
+    // The game ends after MaxYears.
+    public const int MaxYears = 5;
+    public bool IsBidding => _isBidding;
+    private bool _isBidding;
+    public int TurnsTakenThisYear => _turnsTakenThisYear;
+    private int _turnsTakenThisYear;
+    private GameObject _bidButton;
+    private GameObject _bidInputGO;
+    private readonly Random _rng = new Random();
+
     private void Start()
     {
-        OnPlayerTurnChanged += LogPlayerTurnChanged; // subscribe to the OnPlayerTurnChanged event. 
-
+        OnPlayerTurnChanged += LogPlayerTurnChanged;
         SetupGame();
-        
-        //regular game calls NextTurn(); but we only want to call it when we're not bidding
-        //_currentPlayer = _playerQueue.Peek(); //pick the first player in the queue to start the bidding - need to comment this because t was causing the HandlePlayerBidEnergy() method to be called immediately at the start of the game, without waiting for the player to enter their bid.
-        //_turn++; //was used in the classic game.
-        
-        //listen for the player's bid:
-        GameObject bidEnergyButton = GameObject.Find("BidEnergyButton");
-        bidEnergyButton.GetComponent<Button>().onClick.AddListener(() => HandlePlayerBidEnergy());
-        Debug.Log("Start(). Before NextYear():");
-        NextYear();
+        _bidButton = GameObject.Find("BidEnergyButton");
+        _bidInputGO = GameObject.Find("BidEnergyInput");
+        if (_bidButton != null)
+            _bidButton.GetComponent<Button>().onClick.AddListener(HandlePlayerBidEnergy);
+        StartYear();
     }
-    private void LogPlayerTurnChanged(Player oldPlayer, Player newPlayer)
+
+    private void StartYear()
     {
-        if (oldPlayer != null && newPlayer != null && oldPlayer != newPlayer)
-            Debug.Log($"OnPlayerTurnChanged event triggered. Old player: {oldPlayer.Name}, New player: {newPlayer.Name}");
-    }
-    private void NextYear()
-    {
-        Debug.Log("Next year: " + _year);
-        if (_year > 5)
+        Debug.Log($"StartYear(): year {_year}");
+        if (_year > MaxYears)
         {
             GameOver();
             return;
         }
 
-        //Start the bidding phase - NO - this is now called from Start, as a response to the user clicking!
-        //HandlePlayerBidEnergy();
-        NextTurn();
+        _isBidding = true;
+        foreach (var player in Players)
+            player._energyBid = -1;
+        if (_currentPhase != EmptyPhase)
+            SetTurnPhase(EmptyPhase);
+        SetBidUIActive(true);
+
+        var oldPlayer = _currentPlayer;
+        _currentPlayer = _playerQueue.First(p => !p.IsDead());
+        OnPlayerTurnChanged?.Invoke(oldPlayer, _currentPlayer);
+        PromptCurrentBidder();
+    }
+
+    private void PromptCurrentBidder()
+    {
+        if (_currentPlayer.IsBot())
+        {
+            SubmitBid(0); // simple bot bid for now
+            return;
+        }
+        ShowMessage($"Year {_year}: {_currentPlayer.Name}, bid energy for turn order (0-{_currentPlayer.GetEnergy()}).");
+    }
+
+    // Called by the Bid button (reads the input field).
+    public void HandlePlayerBidEnergy()
+    {
+        var input = _bidInputGO != null ? _bidInputGO.GetComponent<TMP_InputField>() : BidEnergyInput;
+        var text = input != null ? input.text : "";
+        if (!int.TryParse(text, out var bid))
+        {
+            ShowMessage("Invalid bid. Please enter a whole number.");
+            return;
+        }
+        if (SubmitBid(bid) && input != null)
+            input.text = "";
+    }
+
+    // Submits a bid for the current bidder. Returns false (and changes nothing) if the bid is invalid.
+    public bool SubmitBid(int bid)
+    {
+        if (!_isBidding || _currentPlayer == null)
+        {
+            Debug.Log("SubmitBid ignored: not in bidding.");
+            return false;
+        }
+
+        var energy = _currentPlayer.GetEnergy();
+        if (bid < 0 || bid > energy)
+        {
+            ShowMessage($"Invalid bid. {_currentPlayer.Name} can bid 0 to {energy} energy.");
+            return false;
+        }
+
+        _currentPlayer._energyBid = bid;
+        Debug.Log($"Year {_year}: {_currentPlayer.Name} bid {bid}");
+
+        var next = _playerQueue.FirstOrDefault(p => !p.IsDead() && p._energyBid < 0);
+        if (next == null)
+        {
+            FinishBidding();
+            return true;
+        }
+
+        var oldPlayer = _currentPlayer;
+        _currentPlayer = next;
+        OnPlayerTurnChanged?.Invoke(oldPlayer, _currentPlayer);
+        PromptCurrentBidder();
+        return true;
+    }
+
+    private void FinishBidding()
+    {
+        var bidders = _playerQueue.Where(p => !p.IsDead()).ToList();
+        var dead = _playerQueue.Where(p => p.IsDead()).ToList();
+        var tieBreak = bidders.ToDictionary(p => p, _ => _rng.Next());
+        var ordered = bidders.OrderByDescending(p => p._energyBid).ThenBy(p => tieBreak[p]).ToList();
+
+        _playerQueue.Clear();
+        foreach (var player in ordered)
+        {
+            player.SetEnergy(player.GetEnergy() - player._energyBid);
+            _playerQueue.Enqueue(player);
+        }
+        foreach (var player in dead)
+            _playerQueue.Enqueue(player);
+
+        Debug.Log($"Bidding done (year {_year}). Turn order: " +
+                  string.Join(", ", ordered.Select(p => $"{p.Name} ({p._energyBid})")));
+
+        _isBidding = false;
+        SetBidUIActive(false);
+        if (UIGameInfo != null)
+            UIGameInfo.CloseInstructionWindow();
+        if (_gameState == GameState.Setup)
+            SetGameState(GameState.Playing);
+
+        _turnsTakenThisYear = 0;
+        StartNextPlayerTurn();
+    }
+
+    private void StartNextPlayerTurn()
+    {
+        var oldPlayer = _currentPlayer;
+        do
+        {
+            _currentPlayer = _playerQueue.Dequeue();
+            _playerQueue.Enqueue(_currentPlayer);
+        } while (_currentPlayer.IsDead());
+
+        _turn++;
+        Debug.Log($"Year {_year}, turn {_turnsTakenThisYear + 1}: {_currentPlayer.Name}");
+        OnPlayerTurnChanged?.Invoke(oldPlayer, _currentPlayer);
+        SetTurnPhase(ReinforcePhase);
+    }
+
+    // Called when the current player's turn is over (Fortify ended).
+    private void NextTurn()
+    {
+        if (_isBidding || _gameState == GameState.Over)
+            return;
+
+        if (_currentPlayer != null)
+            OnPlayerTurnEnded?.Invoke(_currentPlayer);
+
+        _turnsTakenThisYear++;
+        if (_turnsTakenThisYear >= Players.Count(p => !p.IsDead()))
+        {
+            _year++;
+            StartYear();
+            return;
+        }
+        StartNextPlayerTurn();
+    }
+
+    private void SetBidUIActive(bool active)
+    {
+        if (_bidButton != null) _bidButton.SetActive(active);
+        if (_bidInputGO != null) _bidInputGO.SetActive(active);
+    }
+
+    private void ShowMessage(string message)
+    {
+        Debug.Log(message);
+        if (UIGameInfo != null)
+            UIGameInfo.ChangeInstructionWindowMessage(message);
+    }
+    private void LogPlayerTurnChanged(Player oldPlayer, Player newPlayer)
+    {
+        if (oldPlayer != null && newPlayer != null && oldPlayer != newPlayer)
+            Debug.Log($"OnPlayerTurnChanged event triggered. Old player: {oldPlayer.Name}, New player: {newPlayer.Name}");
     }
     private void SetupGame()
     {
@@ -280,164 +430,8 @@ public class GameManager : MonoBehaviour
         _currentPhase.OnAction(_currentPlayer, action);
     }
     
-    public void HandlePlayerBidEnergy()
-    {
-        Debug.Log("HandlePlayerBidEnergy() called.");
-        GameObject bidEnergyInput = GameObject.Find("BidEnergyInput");
-        //_currentPlayer._energyBid = Convert.ToInt32(bidEnergyInput.GetComponent<TMP_InputField>().text);
-        string bidEnergyText = bidEnergyInput.GetComponent<TMP_InputField>().text;
-        if (int.TryParse(bidEnergyText, out int bidEnergy))
-        {
-            _currentPlayer._energyBid = bidEnergy;
-            //loop through all players and check if they have bid:
-            bool allPlayersBid = true;
-            foreach (Player player in _playerQueue)
-            {
-                if (player._energyBid == -1)
-                {
-                    allPlayersBid = false;
-                    break;
-                }
-            }
-            
-            //if all players have bid, save the new turn order and go to the next year.
-            if (allPlayersBid)
-            {
-                //order the players by player._energyBid:   
-                List<Player> playersList = new List<Player>(_playerQueue);
-                playersList.Sort((x, y) =>
-                {
-                    // Compare by energy bid
-                    int result = y._energyBid.CompareTo(x._energyBid); // Reverse order (higher bids first)
 
-                    // If bids are the same, shuffle randomly
-                    if (result == 0)
-                    {
-                        result = new Random().Next(-1, 2); // -1, 0, or 1 randomly
-                    }
-
-                    return result;
-                });
-
-                _playerQueue.Clear();
-
-                //Re-enqueue the players in the order of their bids by looking at player._energyBid: #2#
-                foreach (var player in playersList)
-                {
-                    _playerQueue.Enqueue(player);
-                    player._energy = player._energy - player._energyBid;
-                    //need to verify next round if the old bid energy - should be overwritten by new bid
-                }
-                
-                foreach (var player in _playerQueue)
-                {
-                    Debug.Log($"Name: {player.Name}, Ordered Energy Bid: {player._energyBid}");
-                }
-                
-                UIGameInfo.CloseInstructionWindow();
-                GameObject bidEnergyButton = GameObject.Find("BidEnergyButton");
-                bidEnergyButton.SetActive(false);
-                bidEnergyInput.SetActive(false);
-                //SetGameState(GamePhase.Playing);
-                //debug log the order of the players in a single line:
-                string playerOrder = "";
-                foreach (var player in _playerQueue)
-                {
-                    playerOrder += player.Name + " ";
-                }
-                Debug.Log("HandlePlayerBidEnergy: All players have bid. New turn order set. Player order: " + playerOrder + " Calling NextTurn next.");
-                NextTurn(); //this needs to picks up the first player in the NEW queue
-            }
-            else //there are still players left to bid
-            {
-                Debug.Log("HandlePlayerBidEnergy: we're still waiting for other players to bid. Changing turn orders");
-                var oldPlayer = _currentPlayer;
-                OnPlayerTurnChanged?.Invoke(oldPlayer, _currentPlayer);
-                NextTurnAnnualBidding();
-            }
-        }
-        else
-        {
-            Debug.Log("Invalid bid. Please enter a valid number.");
-            UIGameInfo.ChangeInstructionWindowMessage("Invalid bid. Please enter a valid number.");
-        }
-        
-        /*
-        if (_currentPlayer._energyBid < 0 || _currentPlayer._energyBid > _currentPlayer.GetEnergy())
-        {
-            GameObject ExtraInfo1 = GameObject.Find("ExtraInfo1");
-            Debug.Log("Invalid bid. Please bid between 0 and " + _currentPlayer.GetEnergy());
-            UIGameInfo.ChangeInstructionWindowMessage("Invalid bid. Please bid between 0 and " + _currentPlayer.GetEnergy());
-            return;
-        }
-        
-        Debug.Log("Player " + _currentPlayer.Name + " bid " + _currentPlayer._energyBid + " energy.");
-        UIGameInfo.ChangeInstructionWindowMessage("Player " + _currentPlayer.Name + " bid " + _currentPlayer._energyBid + " energy.");
-        bidEnergyInput.GetComponent<TMP_InputField>().text = "";
-        */
-        
-        
-    }
-
-    //Regular turn. Make sure it doesn't get called when it's bidding time. 
-    private void NextTurn()
-    {
-        Debug.Log("NextTurn() begins. turn= " + _turn);
-        var oldPlayer = _currentPlayer;
-        if (oldPlayer != null)
-            OnPlayerTurnEnded?.Invoke(oldPlayer);
-
-        do
-        {
-            _currentPlayer = _playerQueue.Dequeue();
-        } while (_currentPlayer.IsDead());
-
-        _playerQueue.Enqueue(_currentPlayer);
-        
-        /*if (_turn >= NPlayers) //end of the year if all players have had a turn
-        {
-            _turn = 0;
-            _year++;
-            Debug.Log("NextTurn() end: End of the year. Resetting _turn to zero and incrementing _year = " + _year);
-            NextYear();
-        }
-        else //next player's turn. same year
-        {
-            _turn++;
-            Debug.Log("NextTurn() end: Same year. incrementing _turn = " + _turn);
-            SetTurnPhase(ReinforcePhase);
-        }*/
-        
-        _turn++;
-        if (_turn >= NPlayers)
-        {
-            _turn = 0;
-            NextYear();
-        }
-        Debug.Log("NextTurn increased turn: " + _turn);
-        OnPlayerTurnChanged?.Invoke(oldPlayer, _currentPlayer);
-        SetTurnPhase(ReinforcePhase);
-    }
     
-    //Bidding turn
-    private void NextTurnAnnualBidding()
-    {
-        //need to wait for player input of the bid; can't just go to the next turn already.
-        Debug.Log("NextTurnAnnualBidding(): before dequeue:" + _currentPlayer.Name);
-        var oldPlayer = _currentPlayer;
-        if (oldPlayer != null)
-            OnPlayerTurnEnded?.Invoke(oldPlayer);
-
-        //_playerQueue.Enqueue(_currentPlayer); //doesn't matter what order we're bidding, as long as all players bid.
-        // Dequeue the next player and set them as the current player
-        _currentPlayer = _playerQueue.Dequeue();
-        _playerQueue.Enqueue(_currentPlayer);
-        
-        //_turn++;
-        Debug.Log("NextTurnAnnualBidding after dequeue: " + _currentPlayer.Name);
-        //SetTurnPhase(ReinforcePhase);
-        OnPlayerTurnChanged?.Invoke(oldPlayer, _currentPlayer);
-    }
 
     private void StartTurnPhase()
     {
