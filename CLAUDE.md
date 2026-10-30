@@ -1,6 +1,7 @@
 # Invade Earth (RiskASP fork): handoff for Claude
 
 Read this first. Last updated: Oct 30, 2026 (evening). Owner: George (ggofthejungle).
+**Full project plan (Trello + code, phases, open questions): `docs/PROJECT_PLAN.md`.**
 
 ## Where things are
 - Unity project: `C:\Users\georg\source\RiskASP`, Unity **6000.4.0f1**. Work on branch **`dev`**. It's on GitHub; George pushes from Windows because the Linux shell has no GitHub login.
@@ -142,5 +143,5 @@ Every task has a unique ID. **CURRENT TASK: PT-2**, unless George says otherwise
 
 ## Known gaps
 - Energy income: +3 per turn, or territories / 3 with 12+ territories (from main, `ReinforcePhase.Start`). The rulebook uses a score-chart lookup instead; this is close enough for now. Bot bids are still always 0.
-- Starting units are placed automatically (commanders on the strongest border territory, the station on the next). The rules let players place them.
+- Territories at game start are still random (only commanders and the station are picked, CC-5).
 - Bots: the ASP solver bots are untested since the fix.
