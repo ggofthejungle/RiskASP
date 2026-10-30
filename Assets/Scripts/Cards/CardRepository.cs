@@ -1,11 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Expansions;
 using Extensions;
 using JetBrains.Annotations;
 using Map;
 using player;
 using UnityEngine;
+using Expansions;
+using Unity.VisualScripting;
 
 namespace Cards
 {
@@ -23,6 +26,14 @@ namespace Cards
 
         public CardExchangeType[] ExchangeTypes;
 
+        public Commander DiplomatCommander = new Commander(CommanderType.Diplomat);
+        public Commander LandCommander = new Commander(CommanderType.LandCommander);
+        public Commander NavalCommander = new Commander(CommanderType.NavalCommander);
+        public Commander SpaceCommander = new Commander(CommanderType.SpaceCommander);
+        public Commander NuclearCommander = new Commander(CommanderType.NuclearCommander);
+        private Card card;
+        Abilities abilities = new Abilities();
+        
         private void Awake()
         {
             if (Instance != null && Instance != this)
@@ -43,48 +54,56 @@ namespace Cards
                 _cardNameToCardMap.Add(card.Name, card);
             }
 
-            ExchangeTypes = GenerateExchangeTypes().ToArray();
+            // ExchangeTypes = GenerateExchangeTypes().ToArray();
         }
-
 
         private Card[] GenerateCards()
         {
-            // 2 wild
-            // 14 infantry
-            // 14 cavalry
-            // 14 artillery
-            Card[] cards = new Card[44];
-
-            var territories = _tr.Territories.ToArray();
-            territories.Shuffle();
-
-            for (int i = 0; i < 14; i++)
-            {
-                cards[i] = new Card(CardType.Infantry, territories[i]);
-                cards[i + 14] = new Card(CardType.Cavalry, territories[i + 14]);
-                cards[i + 28] = new Card(CardType.Artillery, territories[i + 28]);
-            }
-
-            cards[42] = new Card(CardType.Wild, name: "Wild_1");
-            cards[43] = new Card(CardType.Wild, name: "Wild_2");
-            cards.Shuffle();
-            return cards;
+           //6 commanders each with their own card deck 
+           Card[] cards = new Card[41];
+           int count = 0;
+           foreach (CardType cardType in Enum.GetValues(typeof(CardType)))
+           {
+               card = new Card(abilities.methods[count], cardType);
+               cards[count] = card;
+               count++;
+           }
+           AssignCardsToCommanders(cards);
+           return cards;
         }
 
-        private IEnumerable<CardExchangeType> GenerateExchangeTypes()
+        private void AssignCardsToCommanders(Card[] cards)
         {
-            return new CardExchangeType[]
+            for (int x = 0; x < cards.Length; x++) 
             {
-                new(requiredCards: new() { { CardType.Artillery, 3 } }, troops: 4),
-                new(requiredCards: new() { { CardType.Infantry,  3 } }, troops: 6),
-                new(requiredCards: new() { { CardType.Cavalry,   3 } }, troops: 8),
-                new(requiredCards: new()
-                    { { CardType.Artillery, 1 }, { CardType.Infantry, 1 }, { CardType.Cavalry, 1 } }, troops: 10),
-                new(requiredCards: new() { { CardType.Wild, 1 }, { CardType.Artillery, 2 } }, troops: 12),
-                new(requiredCards: new() { { CardType.Wild, 1 }, { CardType.Infantry,  2 } }, troops: 12),
-                new(requiredCards: new() { { CardType.Wild, 1 }, { CardType.Cavalry,   2 } }, troops: 12)
-            };
+                if(x < 7)
+                    DiplomatCommander.AddCard(cards[x]);
+                else if(x < 16)
+                    LandCommander.AddCard(cards[x]);
+                else if(x < 24)
+                    NavalCommander.AddCard(cards[x]);
+                else if(x < 34)
+                    NuclearCommander.AddCard(cards[x]);
+                else
+                    SpaceCommander.AddCard(cards[x]);
+            }
+            
         }
+
+        // private IEnumerable<CardExchangeType> GenerateExchangeTypes()
+        // {
+        //     return new CardExchangeType[]
+        //     {
+        //         new(requiredCards: new() { { CardType.Artillery, 3 } }, troops: 4),
+        //         new(requiredCards: new() { { CardType.Infantry,  3 } }, troops: 6),
+        //         new(requiredCards: new() { { CardType.Cavalry,   3 } }, troops: 8),
+        //         new(requiredCards: new()
+        //             { { CardType.Artillery, 1 }, { CardType.Infantry, 1 }, { CardType.Cavalry, 1 } }, troops: 10),
+        //         new(requiredCards: new() { { CardType.Wild, 1 }, { CardType.Artillery, 2 } }, troops: 12),
+        //         new(requiredCards: new() { { CardType.Wild, 1 }, { CardType.Infantry,  2 } }, troops: 12),
+        //         new(requiredCards: new() { { CardType.Wild, 1 }, { CardType.Cavalry,   2 } }, troops: 12)
+        //     };
+        // }
 
         public Card DrawRandomCard()
         {
@@ -103,20 +122,20 @@ namespace Cards
         }
 
 
-        public List<CardExchange> GetBestExchanges(player.Player player)
-        {
-            var bestExchanges = new List<CardExchange>();
-            var cards = player.Cards;
-
-            foreach (var cardExchangeType in ExchangeTypes)
-            {
-                var cardExchange = cardExchangeType.GetBestExchange(cards, player);
-                if (cardExchange != null)
-                    bestExchanges.Add(cardExchange);
-            }
-
-            return bestExchanges;
-        }
+        // public List<CardExchange> GetBestExchanges(player.Player player)
+        // {
+        //     // var bestExchanges = new List<CardExchange>();
+        //     // var cards = player.Cards;
+        //     //
+        //     // foreach (var cardExchangeType in ExchangeTypes)
+        //     // {
+        //     //     var cardExchange = cardExchangeType.GetBestExchange(cards, player);
+        //     //     if (cardExchange != null)
+        //     //         bestExchanges.Add(cardExchange);
+        //     // }
+        //     //
+        //      return new List<CardExchange>();
+        // }
 
         [CanBeNull]
         public CardExchangeType GetExchangeType(Card[] cards)

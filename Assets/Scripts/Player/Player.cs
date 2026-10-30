@@ -35,6 +35,7 @@ namespace player
         public int _spaceStationCount;
 
         public PlayerColor Color;
+        public bool canPlayCommandCards = true;
 
 
         public List<CardExchange> BestCardExchangeCombinations { get; private set; } = new();
@@ -46,7 +47,7 @@ namespace player
 
         private void Awake()
         {
-            OnCardsChanged += () => BestCardExchangeCombinations = CardRepository.Instance.GetBestExchanges(this);
+            // OnCardsChanged += () => BestCardExchangeCombinations = CardRepository.Instance.GetBestExchanges(this);
         }
 
         public bool IsHuman() => GetComponent<HumanPlayer>() != null;
@@ -141,6 +142,13 @@ namespace player
             SetCommandersArray(commander);
         }
 
+        public void PurchaseCommandersCards(Card card)
+        {
+            //comeback
+            _energy -= 1;
+            _cards.Add(card);
+        }
+
         public void SetCommandersArray(Commander commander)
         {
             _CommandersArray.Add(commander);
@@ -165,8 +173,8 @@ namespace player
                 throw new Exception($"Player {Name} already has card {card}");
             _cards.Add(card);
 
-            CardTypeCountMap.TryAdd(card.Type, 0);
-            CardTypeCountMap[card.Type]++;
+            // CardTypeCountMap.TryAdd(LandCardType.Type, 0);
+            // CardTypeCountMap[LandCardType.Type]++;
         }
 
         public void AddCard(Card card)
@@ -187,7 +195,7 @@ namespace player
             if (!Cards.Contains(card))
                 throw new Exception($"Player {Name} doesn't have card {card}");
             _cards.Remove(card);
-            CardTypeCountMap[card.Type]--;
+            // CardTypeCountMap[card.Type]--;
         }
 
         public void RemoveCard(Card card)

@@ -37,6 +37,8 @@ namespace TurnPhases
         public void Start(Player player)
         {
             _remainingTroopsToPlace = player.GetTotalTroopBonus();
+            player.SetEnergy( player.GetEnergy() + CalculateEnergyOnTerritories(player));
+            
             OnTroopsToPlaceChanged?.Invoke();
 
             foreach (var territory in player.Territories)
@@ -56,13 +58,13 @@ namespace TurnPhases
         {
             if (action is ExchangeCardsAction exchangeCardsAction)
             {
-                var cardExchange = exchangeCardsAction.Exchange;
-                exchangeCardsAction.Player.RemoveCards(cardExchange.Cards);
-                _cardRepository.ReturnCardsToDeck(cardExchange.Cards);
-                _remainingTroopsToPlace += cardExchange.ExchangeValue;
-
-                OnCardsExchanged?.Invoke(exchangeCardsAction);
-                OnTroopsToPlaceChanged?.Invoke();
+                // var cardExchange = exchangeCardsAction.Exchange;
+                // exchangeCardsAction.Player.RemoveCards(cardExchange.Cards);
+                // _cardRepository.ReturnCardsToDeck(cardExchange.Cards);
+                // _remainingTroopsToPlace += cardExchange.ExchangeValue;
+                //
+                // OnCardsExchanged?.Invoke(exchangeCardsAction);
+                // OnTroopsToPlaceChanged?.Invoke();
             }
             else if (action is ReinforceAction placeTroopsAction)
             {
@@ -101,21 +103,31 @@ namespace TurnPhases
         
         private void LogCardExchange(ExchangeCardsAction action)
         { 
-            var msg = new StringBuilder($"Player {action.Player.Name} exchanged cards for {action.Exchange.ExchangeValue} troops.\nusing: ");
+            // var msg = new StringBuilder($"Player {action.Player.Name} exchanged cards for {action.Exchange.ExchangeValue} troops.\nusing: ");
+            //
+            // var exchangeType = action.Exchange.ExchangeType;
+            // foreach (var (cardType, amount) in exchangeType.RequiredCards)
+            //     msg.Append($"{amount} {cardType}, ");
+            //
+            // msg.AppendLine($" with {exchangeType.Troops} troops as base exchange value.");
+            // msg.Append("Cards exchanged: ");
+            //
+            // foreach (var card in action.Exchange.Cards)
+            //     msg.Append($"{card.Name}: {card.Type}, ");
+            //
+            // msg.Remove(msg.Length - 2, 2);
+            // msg.Append(".");
+            // Debug.Log(msg.ToString());
+        }
 
-            var exchangeType = action.Exchange.ExchangeType;
-            foreach (var (cardType, amount) in exchangeType.RequiredCards)
-                msg.Append($"{amount} {cardType}, ");
-            
-            msg.AppendLine($" with {exchangeType.Troops} troops as base exchange value.");
-            msg.Append("Cards exchanged: ");
-            
-            foreach (var card in action.Exchange.Cards)
-                msg.Append($"{card.Name}: {card.Type}, ");
+        private int CalculateEnergyOnTerritories(Player player)
+        {
+            int numOfTerritories = player.GetTerritoryCount();
 
-            msg.Remove(msg.Length - 2, 2);
-            msg.Append(".");
-            Debug.Log(msg.ToString());
+            if (numOfTerritories < 12)
+                return 3;
+            
+            return numOfTerritories / 3;
         }
     }
 }

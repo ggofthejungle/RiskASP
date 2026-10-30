@@ -178,15 +178,15 @@ namespace UI
         {
             var uiCard = Instantiate(_cardPrefab, _cardsParent);
             uiCard.gameObject.name = "card " + card.Name;
-            if(card.Type == CardType.Wild)
-                uiCard.SetupWild(card);
-            else
-            {
-                var territorySprite = GetTerritorySprite(card.Territory);
-                var cardTypeSprite = GetCardTypeSprite(card.Type);
-                var territoryColor = GetRandomPlayerColor();
-                uiCard.Setup(card, territorySprite, territoryColor, cardTypeSprite);
-            }
+            // if(card.Type == CardType.Wild)
+            //     uiCard.SetupWild(card);
+            // else
+            // {
+            //     var territorySprite = GetTerritorySprite(card.Territory);
+            //     var cardTypeSprite = GetCardTypeSprite(card.Type);
+            //     var territoryColor = GetRandomPlayerColor();
+            //     uiCard.Setup(card, territorySprite, territoryColor, cardTypeSprite);
+            // }
 
             return uiCard;
         }
@@ -208,11 +208,11 @@ namespace UI
         {
             return cardType switch
             {
-                CardType.Infantry => _infantryCardSprite,
-                CardType.Cavalry => _cavalryCardSprite,
-                CardType.Artillery => _artilleryCardSprite,
-                CardType.Wild => throw new ArgumentException("Card type is wild"),
-                _ => throw new ArgumentOutOfRangeException(nameof(cardType), cardType, null)
+                // CardType.Infantry => _infantryCardSprite,
+                // CardType.Cavalry => _cavalryCardSprite,
+                // CardType.Artillery => _artilleryCardSprite,
+                // CardType.Wild => throw new ArgumentException("Card type is wild"),
+                // _ => throw new ArgumentOutOfRangeException(nameof(cardType), cardType, null)
             };
         }
 

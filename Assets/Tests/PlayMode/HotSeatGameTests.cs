@@ -19,6 +19,7 @@ using UnityEditor;
 //  - Every year starts with bidding: each alive player bids 0..their current energy.
 //  - Invalid bids (negative, or more than the player has) are rejected and change nothing.
 //  - Highest bid plays first; the bid is subtracted from the player's energy; energy never goes negative.
+//  - Each turn starts with energy income (3, or territories / 3 with 12+ territories).
 //  - During a year every alive player takes exactly ONE turn (Reinforce -> Attack -> Fortify).
 //  - After the last player's turn the year increases and bidding opens again.
 //  - After year 5 the game is over.
@@ -116,8 +117,9 @@ public class HotSeatGameTests
         Assert.IsFalse(_gm.IsBidding, "Bidding is over after both bid");
         Assert.AreEqual(first, _gm.CurrentPlayer, "Highest bidder plays first");
         Assert.IsInstanceOf<ReinforcePhase>(_gm.CurrentPhase);
-        Assert.AreEqual(1, first.GetEnergy(), "3 - 2 = 1");
-        Assert.AreEqual(3, second.GetEnergy(), "3 - 0 = 3");
+        // The bid is paid when bidding ends; then the first player's turn starts and adds that turn's income.
+        Assert.AreEqual(3 - 2 + TurnIncome(first), first.GetEnergy(), "3 - 2 + income");
+        Assert.AreEqual(3, second.GetEnergy(), "3 - 0 = 3 (their turn hasn't started yet)");
         Assert.AreEqual(GameState.Playing, _gm.GameState);
         yield break;
     }
@@ -130,7 +132,7 @@ public class HotSeatGameTests
         var second = _gm.CurrentPlayer;
         Assert.IsTrue(_gm.SubmitBid(3));
         Assert.AreEqual(second, _gm.CurrentPlayer, "The player who bid 3 plays first");
-        Assert.AreEqual(0, second.GetEnergy());
+        Assert.AreEqual(0 + TurnIncome(second), second.GetEnergy(), "3 - 3 + income");
         yield break;
     }
 
@@ -171,6 +173,13 @@ public class HotSeatGameTests
     }
 
     // ---------- Helpers ----------
+
+    // Energy gained at the start of a player's turn (ReinforcePhase): 3, or territories / 3 with 12+.
+    private static int TurnIncome(Player p)
+    {
+        var territories = p.GetTerritoryCount();
+        return territories < 12 ? 3 : territories / 3;
+    }
 
     // Every bidder bids `bid`, or all their energy if they have less.
     private void BidAll(int bid)

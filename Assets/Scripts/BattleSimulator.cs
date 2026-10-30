@@ -44,10 +44,10 @@ public class BattleSimulator : MonoBehaviour
             Debug.Log("BattleSimulator test " + attackAction.Origin.CommandersList.Count);
             for (int i = 0; i < attackAction.Origin.CommandersList.Count; i++)
             {
-                if (attackAction.Origin.CommandersList[i].Type == CommanderType.LandCommander)
+                if (attackAction.Origin.CommandersList[i].CommanderType == CommanderType.LandCommander)
                 {
                     attackerRolls = Roll8SidedDies(attackingTroops);
-                }else if (attackAction.Origin.CommandersList[i].Type == CommanderType.NuclearCommander) 
+                }else if (attackAction.Origin.CommandersList[i].CommanderType == CommanderType.NuclearCommander) 
                     attackerRolls = Roll8SidedDies(attackingTroops);
                 else //different commander other than Land and Nuclear: Space and Naval (only to/from space or to/from Water) 
                 {

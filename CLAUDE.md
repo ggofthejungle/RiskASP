@@ -47,6 +47,9 @@ Read this first. Last updated: Oct 30, 2026. Owner: George (ggofthejungle).
   - Serializable actions: `Actions/ActionData.cs` (`ActionData` + `ActionCodec`, JsonUtility round trip) for Attack, AttackReinforce, EndPhase, DecisionResponse. Players are identified by index in `Players`, territories by name.
   - Tests: `Assets/Tests/PlayMode/InputOwnerTests.cs` (10 tests). Full suite **17/17 passing**.
 
+- `c3e1c1e`: turn banner (top-right: player name in their color, Reinforce > Attack > Fortify stepper, instruction line), "X'S TURN" / "Pass the device" splash, and a curved attack/move arrow on the map (`UI/TurnHud.cs`, `Map/SelectionArrow.cs`, built in code, no scene edits). +4 tests (`TurnHudTests.cs`).
+- Merged `origin/main` (Nikolas: Abilities.cs cards, energy income per turn, commander changes) into dev. Took main's .meta GUIDs for Commander/CommanderType. Updated 2 bidding tests for the energy income. **21/21 passing.**
+
 ## Decisions (locked)
 - **Approach:** keep RiskASP and pull the rules out gradually into pure C#. No full rewrite.
 - **Reaction window (defender interrupts):**
@@ -97,6 +100,6 @@ Every task has a unique ID. When George says "do RW-1", that is the task. **CURR
 - **GIT-1: Push `dev` and open a PR into `main`,** only when George says so.
 
 ## Known gaps
-- Energy income each year isn't implemented (only 3 at the start), so later bids are mostly 0.
+- Energy income: now +3 per turn, or territories / 3 with 12+ territories (from main, `ReinforcePhase.Start`). Bot bids are still always 0.
 - Commanders and the space station are test-placed on the first territory in `SetupGame()`; remove that once buying them works.
 - Bots: the ASP solver bots are untested since the fix.

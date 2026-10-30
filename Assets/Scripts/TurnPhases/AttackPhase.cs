@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Actions;
 using Decisions;
+using Expansions;
 using JetBrains.Annotations;
 using Map;
 using player;
@@ -17,11 +18,12 @@ namespace TurnPhases
         private readonly GameManager _gm;
         private readonly BattleSimulator _bs;
 
+
         public int ConqueredTerritoriesCount { get; private set; }
 
         public AttackState State => _state;
         private AttackState _state = AttackState.Attacking;
-
+       
         public int AttackTurn => _attackTurn;
         private int _attackTurn;
 
@@ -63,6 +65,7 @@ namespace TurnPhases
             ConqueredTerritoriesCount = 0;
             _attackTurn = 1;
             SetState(AttackState.Attacking);
+            //_dcca.EnergyCrisis(player);
             OnAttackTurn?.Invoke();
         }
 
@@ -166,6 +169,7 @@ namespace TurnPhases
             attackReinforceAction.From.RemoveTroops(troops);
             attackReinforceAction.To.AddTroops(troops);
             _attackTurn++;
+            
             
             SetState(AttackState.Attacking);
 

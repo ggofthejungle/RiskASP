@@ -33,8 +33,8 @@ namespace Cards
             var cardsDict = new Dictionary<CardType, int>();
             foreach (var card in cards)
             {
-                cardsDict.TryAdd(card.Type, 0);
-                cardsDict[card.Type]++;
+                // cardsDict.TryAdd(card.Type, 0);
+                // cardsDict[card.Type]++;
             }
 
             return CanExchange(cardsDict);
@@ -88,13 +88,14 @@ namespace Cards
 
         public int ExchangeValue(IReadOnlyList<Card> cards, Player player)
         {
-            if (cards.Count != 3)
-                throw new ArgumentException("Must exchange exactly 3 cards");
-
-
-            int ownedCardTerritories = cards.Count(card => player.HasTerritory(card.Territory));
-
-            return Troops + (2 * ownedCardTerritories);
+            // if (cards.Count != 3)
+            //     throw new ArgumentException("Must exchange exactly 3 cards");
+            //
+            //
+            // int ownedCardTerritories = cards.Count(card => player.HasTerritory(card.Territory));
+            //
+            // return Troops + (2 * ownedCardTerritories);
+            return 0;
         }
         
         

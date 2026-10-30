@@ -39,44 +39,44 @@ namespace UI
 
         public void SetupWild(Card card)
         {
-            if(card.Type != CardType.Wild)
-                throw new ArgumentException("Card is not a wild card");
-            _card = card;
-            _wildCardGfx.SetActive(true);
-            _defaultCardGfx.SetActive(false);
-            
+            // if(card.Type != CardType.Wild)
+            //     throw new ArgumentException("Card is not a wild card");
+            // _card = card;
+            // _wildCardGfx.SetActive(true);
+            // _defaultCardGfx.SetActive(false);
+            //
         }
         public void Setup(Card card, Sprite territorySprite, Color territoryColor, Sprite cardTypeSprite)
         {
-            if(card.Type == CardType.Wild)
-                throw new ArgumentException("Card is a wild card");
-            _wildCardGfx.SetActive(false);
-            _defaultCardGfx.SetActive(true);
-            
-            _card = card;
-            _territoryImage.sprite = territorySprite;
-            _territoryImage.color = territoryColor;
-
-            if (card.Territory == null)
-                throw new ArgumentException("Card has no territory");
-            
-            _territoryName.text = card.Territory.Name.Replace('_', ' ');
-            _cardTypeImage.sprite = cardTypeSprite;
-
-            _playerOwner = null;
-            UpdateExtraTroopsMarker();
-            card.Territory.OnOwnerChanged += (_,_) => UpdateExtraTroopsMarker();
+            // if(card.Type == CardType.Wild)
+            //     throw new ArgumentException("Card is a wild card");
+            // _wildCardGfx.SetActive(false);
+            // _defaultCardGfx.SetActive(true);
+            //
+            // _card = card;
+            // _territoryImage.sprite = territorySprite;
+            // _territoryImage.color = territoryColor;
+            //
+            // if (card.Territory == null)
+            //     throw new ArgumentException("Card has no territory");
+            //
+            // _territoryName.text = card.Territory.Name.Replace('_', ' ');
+            // _cardTypeImage.sprite = cardTypeSprite;
+            //
+            // _playerOwner = null;
+            // UpdateExtraTroopsMarker();
+            // card.Territory.OnOwnerChanged += (_,_) => UpdateExtraTroopsMarker();
         }
 
 
         private void UpdateExtraTroopsMarker()
         {
-            if (_card.Territory != null 
-                && _playerOwner != null 
-                && _playerOwner == _card.Territory.Owner)
-                _extraTroopsMarker.SetActive(true);
-            else
-                _extraTroopsMarker.SetActive(false);
+            // if (_card.Territory != null 
+            //     && _playerOwner != null 
+            //     && _playerOwner == _card.Territory.Owner)
+            //     _extraTroopsMarker.SetActive(true);
+            // else
+            //     _extraTroopsMarker.SetActive(false);
         }
 
         public void SetSelected(bool isSelected)
