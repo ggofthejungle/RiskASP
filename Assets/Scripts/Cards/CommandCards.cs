@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Decisions;
 using Expansions;
 using player;
 using TurnPhases;
@@ -129,6 +130,58 @@ namespace Cards
         }
 
         public void OnTurnStarted() => BuysThisTurn = 0;
+
+        // ---------------- MOD Reduction ----------------
+        // "All of your opponents must remove 4 MODs in turn order. Then you remove 2 MODs."
+        // Each player picks: one RemoveUnits decision per unit, addressed to that player (their own device online;
+        // bots answer instantly). A territory always keeps at least 1 unit.
+        public const int ModReductionOpponents = 4;
+        public const int ModReductionOwner = 2;
+        private readonly Queue<(Player player, int count)> _removals = new();
+        private Player _removingPlayer;
+        public int RemovalsLeft { get; private set; }
+        public Player RemovingPlayer => _removingPlayer;
+        public Action OnModReductionFinished;
+
+        private void StartModReduction(Player owner)
+        {
+            foreach (var opponent in _gm.GetPlayersInTurnOrder().Where(o => o != owner && !o.IsDead()))
+                _removals.Enqueue((opponent, ModReductionOpponents));
+            _removals.Enqueue((owner, ModReductionOwner));
+            NextRemoval();
+        }
+
+        private void NextRemoval()
+        {
+            while (_removals.Count > 0)
+            {
+                var (player, count) = _removals.Dequeue();
+                _removingPlayer = player;
+                RemovalsLeft = count;
+                if (AskRemoval()) return;
+            }
+            _removingPlayer = null;
+            RemovalsLeft = 0;
+            OnModReductionFinished?.Invoke();
+        }
+
+        private bool AskRemoval()
+        {
+            var options = _removingPlayer.Territories.Where(t => t.Troops > 1).Select(t => t.Name).ToList();
+            if (RemovalsLeft <= 0 || options.Count == 0) return false;
+            _gm.OpenDecision(new PendingDecision(_gm.GetPlayerId(_removingPlayer), DecisionKind.RemoveUnits, options),
+                OnRemovalAnswered);
+            return true;
+        }
+
+        private void OnRemovalAnswered(Actions.DecisionResponseAction response)
+        {
+            var territory = Map.TerritoryRepository.Instance.FromName(response.Option);
+            territory.RemoveTroops(1);
+            RemovalsLeft--;
+            Debug.Log($"MOD Reduction: {response.Player.Name} removed 1 unit from {territory.Name} ({RemovalsLeft} left).");
+            if (!AskRemoval()) NextRemoval();
+        }
 
         // ---------------- Scout Forces ----------------
         // "Draw a land territory card and secretly place it facedown. Place 5 MODs on it. When you occupy this
@@ -311,6 +364,9 @@ namespace Cards
                     break;
                 case CardType.Redeployment:
                     _gm.FortifyPhase.AddExtraMove();
+                    break;
+                case CardType.ModReduction:
+                    StartModReduction(p);
                     break;
                 default:
                     card.UseAbility(args);

@@ -8,6 +8,7 @@ namespace Decisions
     public enum DecisionKind
     {
         DefenseReaction, // defender may react before an attack's dice are rolled
+        RemoveUnits,     // MOD Reduction: pick one of your territories to lose a unit (options = territory names)
     }
 
     // Option ids a player can answer with. Defense cards will be added later as "Card:<id>".

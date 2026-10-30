@@ -8,6 +8,13 @@ public static class DefenderAI
     public static string Choose(GameManager gm, PendingDecision decision)
     {
         var defender = gm.GetPlayerById(decision.PlayerId);
+
+        // MOD Reduction: lose the unit where it hurts least (the biggest stack).
+        if (decision.Kind == DecisionKind.RemoveUnits)
+            return decision.Options
+                .OrderByDescending(name => Map.TerritoryRepository.Instance.FromName(name).Troops)
+                .First();
+
         var attack = gm.AttackPhase.PendingAttack;
         if (defender == null || attack == null) return DecisionOptions.Pass;
 

@@ -176,6 +176,7 @@ public class GameManager : MonoBehaviour
         _bidInputGO = GameObject.Find("BidEnergyInput");
         if (_bidButton != null)
             _bidButton.GetComponent<Button>().onClick.AddListener(HandlePlayerBidEnergy);
+        SetUpBidBox();
         CreateHud();
         StartYear();
     }
@@ -229,6 +230,49 @@ public class GameManager : MonoBehaviour
         PromptCurrentBidder();
     }
 
+    // Bid box: bigger, digits only, and Enter submits (keyboard), the button still works (touch).
+    private void SetUpBidBox()
+    {
+        var input = BidInput;
+        if (input != null)
+        {
+            input.lineType = TMP_InputField.LineType.SingleLine; // Enter -> onSubmit
+            input.contentType = TMP_InputField.ContentType.IntegerNumber;
+            input.characterLimit = 3;
+            input.onSubmit.AddListener(_ => HandlePlayerBidEnergy());
+            input.pointSize = 30;
+            if (input.placeholder is TMP_Text placeholder)
+            {
+                placeholder.text = "Bid (0-3), Enter";
+                placeholder.fontSize = 24;
+            }
+            var rt = (RectTransform)input.transform;
+            rt.sizeDelta = new Vector2(300, 64);
+            rt.anchoredPosition = new Vector2(-780, 262);
+        }
+        if (_bidButton != null)
+        {
+            var rt = (RectTransform)_bidButton.transform;
+            rt.sizeDelta = new Vector2(300, 52);
+            rt.anchoredPosition = new Vector2(-780, 196);
+            var label = _bidButton.GetComponentInChildren<TMP_Text>();
+            if (label != null) label.fontSize = 26;
+        }
+    }
+
+    private TMP_InputField BidInput => _bidInputGO != null ? _bidInputGO.GetComponent<TMP_InputField>() : BidEnergyInput;
+
+    // Put the cursor in the bid box so the next human bidder can just type and press Enter.
+    private void FocusBidBox()
+    {
+        var input = BidInput;
+        if (input == null || !input.gameObject.activeInHierarchy) return;
+        if (input.placeholder is TMP_Text placeholder && _currentPlayer != null)
+            placeholder.text = $"Bid 0-{_currentPlayer.GetEnergy()}, Enter";
+        input.Select();
+        input.ActivateInputField();
+    }
+
     private void PromptCurrentBidder()
     {
         if (_currentPlayer.IsBot())
@@ -236,21 +280,25 @@ public class GameManager : MonoBehaviour
             SubmitBid(0); // simple bot bid for now
             return;
         }
-        ShowMessage($"Year {_year}: {_currentPlayer.Name}, bid energy for turn order (0-{_currentPlayer.GetEnergy()}).");
+        ShowMessage($"Year {_year}: {_currentPlayer.Name}, bid energy for turn order (0-{_currentPlayer.GetEnergy()}). Type it and press Enter.");
+        FocusBidBox();
     }
 
     // Called by the Bid button (reads the input field).
     public void HandlePlayerBidEnergy()
     {
-        var input = _bidInputGO != null ? _bidInputGO.GetComponent<TMP_InputField>() : BidEnergyInput;
+        var input = BidInput;
         var text = input != null ? input.text : "";
         if (!int.TryParse(text, out var bid))
         {
             ShowMessage("Invalid bid. Please enter a whole number.");
+            FocusBidBox();
             return;
         }
-        if (SubmitBid(bid) && input != null)
+        if (input != null)
             input.text = "";
+        if (!SubmitBid(bid))
+            FocusBidBox();
     }
 
     // Submits a bid for the current bidder. Returns false (and changes nothing) if the bid is invalid.

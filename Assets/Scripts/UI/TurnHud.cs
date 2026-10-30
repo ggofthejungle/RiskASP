@@ -173,6 +173,14 @@ namespace UI
                 return $"<b>{p.Name}</b>, you bid highest: choose when you play this year " +
                        $"({string.Join(", ", _gm.AvailableTurnPositions.ConvertAll(GameManager.Ordinal))}).";
 
+            if (_gm.PendingDecision is { Kind: Decisions.DecisionKind.RemoveUnits })
+            {
+                var who = _gm.InputPlayer;
+                var left = _gm.CommandCards.RemovalsLeft;
+                return _gm.IsLocal(who)
+                    ? $"<b>{who.Name}</b>, MOD Reduction: click your territories to remove <b>{left}</b> more unit{(left == 1 ? "" : "s")}."
+                    : $"Waiting for <b>{who?.Name}</b> to remove units (MOD Reduction)…";
+            }
             if (_gm.PendingDecision != null)
                 return $"Waiting for <b>{_gm.InputPlayer?.Name}</b> to respond to the attack…";
 

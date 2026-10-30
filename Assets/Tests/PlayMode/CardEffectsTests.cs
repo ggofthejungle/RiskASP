@@ -93,6 +93,16 @@ public class CardEffectsTests
         var bobBefore = _bob.GetTroopsCountInTerritories();
         var aliceBefore = _alice.GetTroopsCountInTerritories();
         Assert.IsTrue(Play(card));
+        // Each player picks their territories, one unit per answer: Bob 4, then Alice 2.
+        var askedBob = 0;
+        for (int i = 0; i < 20 && _gm.PendingDecision is { Kind: Decisions.DecisionKind.RemoveUnits } d; i++)
+        {
+            if (_gm.GetPlayerById(d.PlayerId) == _bob) askedBob++;
+            Assert.IsTrue(_gm.HandlePlayerAction(new DecisionResponseAction(_gm.GetPlayerById(d.PlayerId), _gm.Turn,
+                DefenderAI.Choose(_gm, d))));
+        }
+        Assert.AreEqual(4, askedBob, "Bob picked 4 times");
+        Assert.IsNull(_gm.PendingDecision);
         Assert.AreEqual(bobBefore - 4, _bob.GetTroopsCountInTerritories());
         Assert.AreEqual(aliceBefore - 2, _alice.GetTroopsCountInTerritories());
         Assert.IsTrue(_bob.Territories.All(t => t.Troops >= 1));

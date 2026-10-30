@@ -85,7 +85,7 @@ namespace UI
             _bar.gameObject.SetActive(show);
             if (!show)
             {
-                if (_sm != null && _sm.IsTargeting) CancelTargeting();
+                if (_sm != null && _sm.IsTargeting && !_removalTargeting) CancelTargeting();
                 return;
             }
 
@@ -284,6 +284,11 @@ namespace UI
 
         private void OnDecisionChanged(PendingDecision decision)
         {
+            if (decision != null && decision.Kind == DecisionKind.RemoveUnits)
+            {
+                BeginRemoval(decision);
+                return;
+            }
             if (decision != null)
             {
                 var defender = _gm.GetPlayerById(decision.PlayerId);
@@ -304,6 +309,32 @@ namespace UI
             // question for the same defender (several cards per invasion).
         }
 
+        // ---------- MOD Reduction: the local player clicks their territories ----------
+        private bool _removalTargeting;
+
+        private void BeginRemoval(PendingDecision decision)
+        {
+            var who = _gm.GetPlayerById(decision.PlayerId);
+            if (!_gm.IsLocal(who)) return; // AI answers instantly; online, it's asked on their device
+            if (_sm == null) _sm = SelectionManager.Instance;
+            var names = new HashSet<string>(decision.Options);
+            _removalTargeting = true;
+            _sm.BeginTargeting(t =>
+            {
+                var d = _gm.PendingDecision;
+                if (d == null || d.Kind != DecisionKind.RemoveUnits || !d.HasOption(t.Name)) return false;
+                _gm.HandlePlayerAction(new DecisionResponseAction(who, _gm.Turn, t.Name));
+                return false; // the next question re-arms the targeting; Update ends it when MOD Reduction is over
+            }, t => names.Contains(t.Name));
+        }
+
+        public bool ClickRemoval(Territory t)
+        {
+            var d = _gm.PendingDecision;
+            if (d == null || d.Kind != DecisionKind.RemoveUnits || !d.HasOption(t.Name)) return false;
+            return _gm.HandlePlayerAction(new DecisionResponseAction(_gm.GetPlayerById(d.PlayerId), _gm.Turn, t.Name));
+        }
+
         public void ConfirmCover()
         {
             if (Stage == PromptStage.Cover) Stage = PromptStage.Choose;
@@ -321,6 +352,12 @@ namespace UI
 
         private void RefreshPrompt()
         {
+            if (_removalTargeting && (_gm.PendingDecision == null || _gm.PendingDecision.Kind != DecisionKind.RemoveUnits
+                                      || !_gm.IsLocal(_gm.InputPlayer)))
+            {
+                _removalTargeting = false;
+                if (_sm != null) _sm.EndTargeting();
+            }
             if ((Stage == PromptStage.Choose || Stage == PromptStage.Cover) && _gm.PendingDecision == null)
             {
                 var attacker = _gm.CurrentPlayer;

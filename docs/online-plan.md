@@ -59,14 +59,14 @@ and Cloud Code). CLAUDE.md also lists Photon PUN for turns: whether Photon stays
 9. **Longer term** (Trello "clean C# rules engine"): move the rules out of MonoBehaviours into a pure C# library, so
    the same code validates turns on a server. The action/decision/RNG work above is the bridge to that.
 
-## Open decision
-- **Transport for live turns.** (a) Server-only: every action is a Cloud Code/CloudScript call. This is simple and
-  cheat-proof, fits async play, and costs ~0.2–1 s per action. (b) Photon PUN (as in Battle Planes) for live play: the
-  master client is the authority, and the server only stores/validates at turn end. Recommendation: (a), because the
-  game is turn-based and the reaction window already tolerates a few seconds. It also means one rules DLL on the
-  server and no Photon.
-- The rules code must not depend on `UnityEngine` to run in Cloud Code/CloudScript. That makes the pure C# rules
-  extraction (Trello) a prerequisite for server authority.
+## Decided (Oct 30)
+- **No Photon.** Every action goes to the server (UGS Cloud Code or PlayFab CloudScript), which runs the C# rules,
+  stores the state and returns/pushes the outcome. Turn-based play tolerates the ~0.2–1 s per call, and it gives
+  async play, rejoin and anti-cheat for free.
+- Therefore the rules must run **without UnityEngine** in Cloud Code/CloudScript: the pure C# rules extraction
+  (Trello "clean rules engine") is a prerequisite for server authority.
+- Player choices (MOD Reduction picks, later starting placement) are `PendingDecision`s addressed to one player, so
+  the server can ask that player's device.
 
 ## Suggested order (ON-1)
 1. `BidAction`, `ChooseTurnPositionAction`. Full `ActionCodec` with round-trip tests for every action.

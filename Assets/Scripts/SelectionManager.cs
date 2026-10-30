@@ -65,14 +65,14 @@ public class SelectionManager : MonoBehaviour
         {
             territorySelection.OnClicked += selection =>
             {
-                // Map clicks belong to the turn owner; ignore them while someone else is deciding.
-                if (_gm.PendingDecision != null) return;
-                // A card / purchase is waiting for a territory: give it the click instead.
+                // A card / purchase / decision is waiting for a territory: give it the click instead.
                 if (_targeting != null)
                 {
                     if (_targeting(selection.Territory)) EndTargeting();
                     return;
                 }
+                // Otherwise map clicks belong to the turn owner; ignore them while someone else is deciding.
+                if (_gm.PendingDecision != null) return;
                 _currentSelectionPhase.OnClicked(_gm.CurrentPlayer, selection);
             };
         }
@@ -110,7 +110,7 @@ public class SelectionManager : MonoBehaviour
 
     public void BeginTargeting(System.Func<Territory, bool> onClick, System.Func<Territory, bool> canTarget)
     {
-        _currentSelectionPhase.End(_gm.CurrentPlayer);
+        if (_targeting == null) _currentSelectionPhase.End(_gm.CurrentPlayer);
         _targeting = onClick;
         DisableAllTerritories();
         foreach (var kv in TerritoryToSelectionMap)

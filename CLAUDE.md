@@ -87,7 +87,9 @@ Read this first. Last updated: Oct 30, 2026 (afternoon). Owner: George (ggofthej
 - **Map is land-only:** Naval/Space commanders and decks are out; the Nuclear deck has land variants only.
 - **Card effects never empty a territory** (we have no neutral territories). Evacuation is the exception: the attacker takes the emptied territory.
   - Defense cards: Cease Fire, Stealth MODs, Evacuation, Death Trap, Stealth Station.
-- **Online** means **PlayFab + UGS** (not hot-seat). See `docs/online-plan.md`. Whether Photon PUN stays is OPEN (recommendation: server authority via UGS Cloud Code / PlayFab CloudScript, no Photon).
+- **Online** means **PlayFab + UGS** (not hot-seat). **No Photon** (decided Oct 30): the server is the authority (UGS Cloud Code / PlayFab CloudScript running the C# rules). See `docs/online-plan.md`.
+- **Players pick, not automation:** MOD Reduction asks each player to click their territories (done). Starting commanders/station placement will be picked by the player too (todo).
+- **Automated tests are ON HOLD** (George, Oct 30). Keep code compiling; don't run or extend the suite unless asked.
 - **Legal:** before any sale, rewrite all card names and text and use an ORIGINAL map (it's currently Hasbro's Risk/2210). Don't ship DLV2.
 
 ## Next steps (in order)
@@ -103,8 +105,8 @@ Every task has a unique ID. **CURRENT TASK: PT-2**, unless George says otherwise
 - Done: RW-1..5, CC-1, CC-2, CC-4, the command-card UI. Still open:
   - Decoys Revealed and Armageddon (not implemented);
   - Evacuation destination is automatic (the defender's strongest territory);
-  - MOD Reduction is automated.
-- **ON-1: Online (PlayFab + UGS)**, per `docs/online-plan.md`:
+- **CC-5: Pick placement of starting commanders + station** (player clicks territories, like MOD Reduction; via decisions so it works online).
+- **ON-1: Online (PlayFab + UGS, no Photon)**, per `docs/online-plan.md`:
   1. bid/choose as actions + full ActionCodec;
   2. `IRandom`;
   3. server authority (needs the pure C# rules);
