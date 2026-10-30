@@ -148,15 +148,6 @@ namespace Cards
             OnCardPlayed?.Invoke(p, card);
         }
 
-        private bool IsOwnTurnBeforeFirstInvasion(Player p)
-        {
-            if (_gm.IsBidding || _gm.GameState != GameState.Playing || _gm.CurrentPlayer != p) return false;
-            return _gm.CurrentPhase switch
-            {
-                ReinforcePhase => true,
-                AttackPhase ap => !ap.AttackResults.Any() && ap.PendingAttack == null,
-                _ => false
-            };
-        }
+        private bool IsOwnTurnBeforeFirstInvasion(Player p) => _gm.IsCommandStep(p);
     }
 }

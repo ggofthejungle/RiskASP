@@ -192,12 +192,14 @@ public class MergeRegressionTests
     }
 
     [UnityTest]
-    public IEnumerator NewGame_HasNoSpaceStations_ExceptTheOneTestPlacedInSetup()
+    public IEnumerator NewGame_HasExactlyOneSpaceStationPerPlayer()
     {
         // Territory.prefab had containsSpaceStation saved as true, so EVERY territory had a station and
-        // every player got +1 troop per territory each turn.
-        var withStation = Object.FindObjectsByType<Territory>(FindObjectsInactive.Exclude).Count(t => t.containsSpaceStation);
-        Assert.LessOrEqual(withStation, 1, "Only GameManager.SetupGame's test station");
+        // every player got +1 troop per territory each turn. Now: only each player's starting station.
+        var withStation = Object.FindObjectsByType<Territory>(FindObjectsInactive.Exclude).Where(t => t.containsSpaceStation).ToList();
+        Assert.AreEqual(_gm.Players.Count, withStation.Count);
+        foreach (var p in _gm.Players)
+            Assert.AreEqual(1, withStation.Count(t => t.Owner == p), p.Name);
         yield break;
     }
 

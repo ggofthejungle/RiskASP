@@ -69,6 +69,21 @@ public class GameManager : MonoBehaviour
 
     public AnnualBidding AnnualBidding { get; private set; }
     public CommandCards CommandCards { get; private set; }
+    public Purchases Purchases { get; private set; }
+
+    // 2210 "command step": the current player's turn, from Reinforce until their first invasion.
+    // Buying/playing "before first invasion" cards, hiring commanders and building stations happen here.
+    public bool IsCommandStep(Player p)
+    {
+        if (_isBidding || _isChoosingOrder || _gameState != GameState.Playing || _currentPlayer != p || p == null)
+            return false;
+        return _currentPhase switch
+        {
+            global::TurnPhases.ReinforcePhase => true,
+            global::TurnPhases.AttackPhase ap => !ap.AttackResults.Any() && ap.PendingAttack == null,
+            _ => false
+        };
+    }
     public ReinforcePhase ReinforcePhase { get; private set; }
     public AttackPhase AttackPhase { get; private set; }
     public FortifyPhase FortifyPhase { get; private set; }
@@ -104,6 +119,7 @@ public class GameManager : MonoBehaviour
         _bs = BattleSimulator.Instance;
         SetupPhases();
         CommandCards = new CommandCards(this, _cr);
+        Purchases = new Purchases(this);
         AnnualBidding = new AnnualBidding(this);
         CreatePlayers();
 
@@ -421,11 +437,9 @@ public class GameManager : MonoBehaviour
         EnqueuePlayers();
         //this order can be random to start bidding. after bidding, the order will be set on a turn-by-turn basis
         //call it once so that HandlePlayerBidEnergy can continue
-        // Test setup from main (commanders + space station on first territory)
-        _tr.Territories.First().AddCommander(new Commander(CommanderType.LandCommander));
-        _tr.Territories.First().AddCommander(new Commander(CommanderType.Diplomat));
-        _tr.Territories.First().AddCommander(new Commander(CommanderType.NuclearCommander));
-        _tr.Territories.First().AddSpaceStation();
+        // 2210: every player starts with a Diplomat, a Land Commander and a Space Station.
+        foreach (var player in Players)
+            Purchases.PlaceStartingUnits(player);
     }
 
 
@@ -527,6 +541,16 @@ public class GameManager : MonoBehaviour
         }
 
         // Command cards (2210): handled here, not by the phase, because they can happen in several phases.
+        if (action is HireCommanderAction hire)
+        {
+            Purchases.Hire(hire.Player, hire.Type, hire.Territory);
+            return true;
+        }
+        if (action is BuildSpaceStationAction build)
+        {
+            Purchases.Build(build.Player, build.Territory);
+            return true;
+        }
         if (action is BuyCommandCardAction buy)
         {
             CommandCards.Buy(buy.Player, buy.Deck);

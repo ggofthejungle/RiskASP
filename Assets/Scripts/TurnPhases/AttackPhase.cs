@@ -145,6 +145,7 @@ namespace TurnPhases
             
             if (attackResult.HasAttackerWonTerritory())
             {
+                Purchases.OnTerritoryConquered(attackResult.Target, attackAction.Player);
                 attackResult.Target.SetOwner(attackAction.Player, 0);
                 ConqueredTerritoriesCount++;
                 SetState(AttackState.Fortifying);

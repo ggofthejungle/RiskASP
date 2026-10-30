@@ -24,49 +24,18 @@ public class BattleSimulator : MonoBehaviour
 
     public AttackResult SimulateAttack(AttackAction attackAction)
     {
-        var attackingTroops = Math.Min(attackAction.Troops, 3);
-        var defendingTroops = Math.Min(attackAction.Target.Troops, 3);
+        var attackingTroops = Math.Min(attackAction.Troops, MaxAttackDice);
+        var defendingTroops = Math.Min(attackAction.Target.Troops, MaxDefenseDice); // rules: at most 2 (was 3)
 
         var battleWidth = Math.Min(attackingTroops, defendingTroops);
-        int[] attackerRolls = null;
-        
+        // 2210 dice: each attacking commander with an attack bonus replaces a d6 with a d8
+        // (Land Commander on land = always on our map; Nuclear always; Diplomat never).
+        // Defending: every unit rolls d8 in a territory with a space station; otherwise each commander there rolls a d8.
+        var (attackD8, attackD6) = AttackDice(attackAction.Origin, attackingTroops);
+        var (defenseD8, defenseD6) = DefenseDice(attackAction.Target, defendingTroops);
+        var attackerRolls = Roll8SidedDies(attackD8).Concat(Roll6SidedDies(attackD6)).ToArray();
+        var defenderRolls = Roll8SidedDies(defenseD8).Concat(Roll6SidedDies(defenseD6)).ToArray();
 
-        if (attackAction.Origin.CommandersList.Count == 0)
-        {
-            attackerRolls = Roll6SidedDies(attackingTroops);
-        }
-        else
-        {
-            Debug.Log("BattleSimulator- attacking with 8 sided die");
-            //To do
-            //Check to see if we are not attacking water to water and space to space
-            //Need logic for space and water commanders
-            Debug.Log("BattleSimulator test " + attackAction.Origin.CommandersList.Count);
-            for (int i = 0; i < attackAction.Origin.CommandersList.Count; i++)
-            {
-                if (attackAction.Origin.CommandersList[i].CommanderType == CommanderType.LandCommander)
-                {
-                    attackerRolls = Roll8SidedDies(attackingTroops);
-                }else if (attackAction.Origin.CommandersList[i].CommanderType == CommanderType.NuclearCommander) 
-                    attackerRolls = Roll8SidedDies(attackingTroops);
-                else //different commander other than Land and Nuclear: Space and Naval (only to/from space or to/from Water) 
-                {
-                    attackerRolls = Roll8SidedDies(attackingTroops);
-                }
-            }
-        }
-        
-        int[] defenderRolls = null;
-        if (attackAction.Target.CommandersList.Count > 0)
-        {
-            defenderRolls = Roll8SidedDies(defendingTroops);
-        }
-        else
-        {
-            defenderRolls = Roll6SidedDies(defendingTroops);
-        }
-        //also need to add logic if defender has a space station -> defends with 8 sided die
-        
         attackerRolls = attackerRolls.OrderByDescending(c => c).ToArray();
         defenderRolls = defenderRolls.OrderByDescending(c => c).ToArray();
 
@@ -94,6 +63,26 @@ public class BattleSimulator : MonoBehaviour
             attackerRolls,
             defenderRolls
         );
+    }
+
+    public const int MaxAttackDice = 3;
+    public const int MaxDefenseDice = 2;
+
+    public static bool AttacksWithD8(CommanderType type) =>
+        type == CommanderType.LandCommander || type == CommanderType.NuclearCommander;
+
+    public static (int d8, int d6) AttackDice(Territory origin, int dice)
+    {
+        var bonus = origin.CommandersList.Count(c => AttacksWithD8(c.CommanderType));
+        var d8 = Math.Min(dice, bonus);
+        return (d8, dice - d8);
+    }
+
+    public static (int d8, int d6) DefenseDice(Territory target, int dice)
+    {
+        if (target.containsSpaceStation) return (dice, 0);
+        var d8 = Math.Min(dice, target.CommandersList.Count);
+        return (d8, dice - d8);
     }
 
     //roll 6 sided die (1 thru 6)
