@@ -8,6 +8,7 @@ namespace Cards
         DecoyRevealed,
         EnergyCrisis,
         Evacuation,
+        ModReduction,
         Redeployment,
         TerritorialStation,
         //Land

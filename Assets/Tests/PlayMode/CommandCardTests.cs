@@ -268,6 +268,43 @@ public class CommandCardTests
         yield break;
     }
 
+    [UnityTest]
+    public IEnumerator Buy_FromAnEmptyDeck_IsRejected_AndDiscardsAreNeverReshuffled()
+    {
+        StartAlicesTurn();
+        GiveCommander(_alice, CommanderType.NuclearCommander);
+        foreach (var c in _cr.CardsInDeck.Where(c => c.Commander == CommanderType.NuclearCommander).ToList())
+            _cr.CardsInDeck.Remove(c);
+        Assert.AreEqual(0, _cc.CardsLeftInDeck(CommanderType.NuclearCommander));
+        Assert.IsFalse(Buy(_alice, CommanderType.NuclearCommander));
+        yield break;
+    }
+
+    [UnityTest]
+    public IEnumerator Conquering_DoesNotGiveAFreeCard_Anymore()
+    {
+        StartAlicesTurn();
+        PlaceAllAndEndReinforce();
+        var origin = _alice.Territories.Where(t => t.HasAnyNeighbourEnemy()).OrderByDescending(t => t.Troops).First();
+        var target = origin.GetEnemyNeighbours().First();
+        origin.SetTroops(60);
+        target.SetTroops(1);
+        for (int i = 0; i < 40 && target.Owner != _alice; i++)
+        {
+            if (_gm.AttackPhase.State != AttackState.Attacking) break;
+            _gm.HandlePlayerAction(new AttackAction(_alice, _gm.Turn, _gm.AttackPhase.AttackTurn, origin, target, 3));
+        }
+        Assert.AreEqual(_alice, target.Owner, "Should have conquered");
+        if (_gm.AttackPhase.State == AttackState.Fortifying)
+            _gm.HandlePlayerAction(new AttackReinforceAction(_alice, _gm.Turn, _gm.AttackPhase.AttackTurn,
+                _gm.AttackPhase.LastAttackResult.AttackAction, 3));
+        _gm.HandlePlayerAction(new EndPhaseAction(_alice, _gm.Turn)); // end Attack
+        _gm.HandlePlayerAction(new EndPhaseAction(_alice, _gm.Turn)); // end Fortify -> Bob
+        Assert.AreEqual(_bob, _gm.CurrentPlayer);
+        Assert.AreEqual(0, _alice.Cards.Count, "2210: cards are bought, never drawn for free");
+        yield break;
+    }
+
     // ---------- Nuclear deck today ----------
 
     [UnityTest]
@@ -297,7 +334,7 @@ public class CommandCardTests
     // Puts a specific card in a player's hand (takes it out of the deck), for deterministic tests.
     private Card Give(Player p, CardType type)
     {
-        var card = _cr.AllCards.Single(c => c.CardType == type);
+        var card = _cr.AllCards.First(c => c.CardType == type && _cr.CardsInDeck.Contains(c));
         _cr.CardsInDeck.Remove(card);
         p.AddCard(card);
         return card;

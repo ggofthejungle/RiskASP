@@ -23,7 +23,6 @@ namespace TurnPhases
 
         public Action OnTroopsToPlaceChanged;
         public Action<ReinforceAction> OnTroopsPlaced;
-        public Action<ExchangeCardsAction> OnCardsExchanged;
 
 
         public ReinforcePhase(GameManager gm, CardRepository cardRepository)
@@ -31,7 +30,6 @@ namespace TurnPhases
             _gm = gm;
             _cardRepository = cardRepository;
 
-            OnCardsExchanged += LogCardExchange;
         }
 
         public void Start(Player player)
@@ -49,24 +47,14 @@ namespace TurnPhases
                 }
             }
 
-            if (_remainingTroopsToPlace == 0 && !player.HasPossibleExchange()) _gm.NextTurnPhase();
+            if (_remainingTroopsToPlace == 0) _gm.NextTurnPhase();
 
 
         }
 
         public void OnAction(Player player, PlayerAction action)
         {
-            if (action is ExchangeCardsAction exchangeCardsAction)
-            {
-                // var cardExchange = exchangeCardsAction.Exchange;
-                // exchangeCardsAction.Player.RemoveCards(cardExchange.Cards);
-                // _cardRepository.ReturnCardsToDeck(cardExchange.Cards);
-                // _remainingTroopsToPlace += cardExchange.ExchangeValue;
-                //
-                // OnCardsExchanged?.Invoke(exchangeCardsAction);
-                // OnTroopsToPlaceChanged?.Invoke();
-            }
-            else if (action is ReinforceAction placeTroopsAction)
+            if (action is ReinforceAction placeTroopsAction)
             {
                 placeTroopsAction.Territory.AddTroops(placeTroopsAction.Troops);
                 _remainingTroopsToPlace -= placeTroopsAction.Troops;
@@ -101,24 +89,6 @@ namespace TurnPhases
         {
         }
         
-        private void LogCardExchange(ExchangeCardsAction action)
-        { 
-            // var msg = new StringBuilder($"Player {action.Player.Name} exchanged cards for {action.Exchange.ExchangeValue} troops.\nusing: ");
-            //
-            // var exchangeType = action.Exchange.ExchangeType;
-            // foreach (var (cardType, amount) in exchangeType.RequiredCards)
-            //     msg.Append($"{amount} {cardType}, ");
-            //
-            // msg.AppendLine($" with {exchangeType.Troops} troops as base exchange value.");
-            // msg.Append("Cards exchanged: ");
-            //
-            // foreach (var card in action.Exchange.Cards)
-            //     msg.Append($"{card.Name}: {card.Type}, ");
-            //
-            // msg.Remove(msg.Length - 2, 2);
-            // msg.Append(".");
-            // Debug.Log(msg.ToString());
-        }
 
         private int CalculateEnergyOnTerritories(Player player)
         {

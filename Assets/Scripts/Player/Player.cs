@@ -38,7 +38,6 @@ namespace player
         public bool canPlayCommandCards = true;
 
 
-        public List<CardExchange> BestCardExchangeCombinations { get; private set; } = new();
 
 
         public Action<(Player eliminatedBy, Player eliminated)> OnEliminated;
@@ -214,10 +213,6 @@ namespace player
             OnCardsChanged?.Invoke();
         }
 
-        public bool HasPossibleExchange()
-        {
-            return BestCardExchangeCombinations.Count > 0;
-        }
 
         #endregion
     }

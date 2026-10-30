@@ -75,8 +75,6 @@ public class GameManager : MonoBehaviour
     public EmptyPhase EmptyPhase { get; private set; }
 
 
-    [SerializeField] private int _startingCardsPerPlayer = 4;
-    [SerializeField] private int _maxCardsPerPlayer = 5;
     
 
     public Action<IPhase> OnPhaseStarted;
@@ -114,7 +112,6 @@ public class GameManager : MonoBehaviour
 
     private void SubscribeToEvents()
     {
-        OnPlayerTurnEnded += TryDrawCardOnTurnEnd;
         foreach (var player in Players)
         {
             player.OnEliminated += tuple => OnPlayerEliminated(tuple.eliminatedBy, tuple.eliminated);
@@ -424,7 +421,6 @@ public class GameManager : MonoBehaviour
         EnqueuePlayers();
         //this order can be random to start bidding. after bidding, the order will be set on a turn-by-turn basis
         //call it once so that HandlePlayerBidEnergy can continue
-        //DrawStartingCards();
         // Test setup from main (commanders + space station on first territory)
         _tr.Territories.First().AddCommander(new Commander(CommanderType.LandCommander));
         _tr.Territories.First().AddCommander(new Commander(CommanderType.Diplomat));
@@ -432,16 +428,6 @@ public class GameManager : MonoBehaviour
         _tr.Territories.First().AddSpaceStation();
     }
 
-    private void DrawStartingCards()
-    {
-        foreach (var player in Players)
-        {
-            for (int i = 0; i < _startingCardsPerPlayer; i++)
-            {
-                player.AddCard(_cr.DrawRandomCard());
-            }
-        }
-    }
 
     private void AssignEnergy()
     {
@@ -518,16 +504,6 @@ public class GameManager : MonoBehaviour
             NextTurn();
     }
 
-    private void TryDrawCardOnTurnEnd(Player player)
-    {
-        if (AttackPhase.ConqueredTerritoriesCount == 0
-            || (_maxCardsPerPlayer >= 0 && player.Cards.Count >= _maxCardsPerPlayer))
-            return;
-
-        var card = _cr.DrawRandomCard();
-        if (card != null) // deck can run out
-            player.AddCard(card);
-    }
 
     // Single entry point for every player action (UI, bots, tests, later the network).
     // Returns false if the action was rejected (nothing changes in that case).

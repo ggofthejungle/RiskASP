@@ -71,11 +71,23 @@ public class MergeRegressionTests
     // ---------- Cards: deck and ability wiring ----------
 
     [UnityTest]
-    public IEnumerator Cards_OneCardPerCardType_EachRunsTheAbilityWithItsName()
+    public IEnumerator Decks_HaveTheRightCopies_AndEachCardRunsTheAbilityWithItsName()
     {
-        var types = (CardType[])Enum.GetValues(typeof(CardType));
-        Assert.AreEqual(types.Length, _cr.AllCards.Length, "One card per CardType");
-        CollectionAssert.AreEquivalent(types, _cr.AllCards.Select(c => c.CardType));
+        // Land-only map: Diplomat 20, Land 20, Nuclear 10 (land variants only), no Naval/Space deck.
+        Assert.AreEqual(50, _cr.AllCards.Length);
+        Assert.AreEqual(20, _cr.DiplomatCommander.Cards.Count, "Diplomat");
+        Assert.AreEqual(20, _cr.LandCommander.Cards.Count, "Land");
+        Assert.AreEqual(10, _cr.NuclearCommander.Cards.Count, "Nuclear");
+        Assert.AreEqual(0, _cr.NavalCommander.Cards.Count, "Naval");
+        Assert.AreEqual(0, _cr.SpaceCommander.Cards.Count, "Space");
+        Assert.AreEqual(_cr.AllCards.Length, _cr.AllCards.Select(c => c.Id).Distinct().Count(), "Unique ids");
+
+        foreach (var deck in DeckLists.DecksInPlay)
+            foreach (var (type, copies) in DeckLists.For(deck))
+            {
+                Assert.AreEqual(copies, _cr.AllCards.Count(c => c.CardType == type), $"{type} copies");
+                Assert.AreEqual(deck, CardRepository.CommanderFor(type), $"{type} is in the {deck} deck");
+            }
 
         foreach (var card in _cr.AllCards)
         {
@@ -88,26 +100,20 @@ public class MergeRegressionTests
     }
 
     [UnityTest]
-    public IEnumerator Cards_AreInTheRightCommandersDeck()
+    public IEnumerator CardTypes_BelongToTheRightCommander()
     {
-        // Spot checks at every group boundary in CardType.cs (these were wrong before).
-        Assert.AreEqual(CommanderType.Diplomat, Commander(CardType.TerritorialStation));
-        Assert.AreEqual(CommanderType.LandCommander, Commander(CardType.AssembleModsL));
-        Assert.AreEqual(CommanderType.LandCommander, Commander(CardType.StealthStation));
-        Assert.AreEqual(CommanderType.NavalCommander, Commander(CardType.AssembleModsNa));
-        Assert.AreEqual(CommanderType.NavalCommander, Commander(CardType.WaterDeathTrap));
-        Assert.AreEqual(CommanderType.NuclearCommander, Commander(CardType.AquaBrother));
-        Assert.AreEqual(CommanderType.NuclearCommander, Commander(CardType.TheMother));
-        Assert.AreEqual(CommanderType.SpaceCommander, Commander(CardType.AssembleModsS));
-        Assert.AreEqual(CommanderType.SpaceCommander, Commander(CardType.StealthModsS));
-
-        Assert.AreEqual(7, _cr.DiplomatCommander.Cards.Count, "Diplomat");
-        Assert.AreEqual(8, _cr.LandCommander.Cards.Count, "Land");
-        Assert.AreEqual(7, _cr.NavalCommander.Cards.Count, "Naval");
-        Assert.AreEqual(11, _cr.NuclearCommander.Cards.Count, "Nuclear");
-        Assert.AreEqual(8, _cr.SpaceCommander.Cards.Count, "Space");
-        Assert.IsTrue(_cr.LandCommander.Cards.Contains(Card(CardType.LandDeathTrap)));
-        Assert.IsTrue(_cr.NavalCommander.Cards.Contains(Card(CardType.WaterDeathTrap)));
+        // Every group boundary in CardType.cs.
+        Assert.AreEqual(CommanderType.Diplomat, CardRepository.CommanderFor(CardType.CeaseFire));
+        Assert.AreEqual(CommanderType.Diplomat, CardRepository.CommanderFor(CardType.ModReduction));
+        Assert.AreEqual(CommanderType.Diplomat, CardRepository.CommanderFor(CardType.TerritorialStation));
+        Assert.AreEqual(CommanderType.LandCommander, CardRepository.CommanderFor(CardType.AssembleModsL));
+        Assert.AreEqual(CommanderType.LandCommander, CardRepository.CommanderFor(CardType.StealthStation));
+        Assert.AreEqual(CommanderType.NavalCommander, CardRepository.CommanderFor(CardType.AssembleModsNa));
+        Assert.AreEqual(CommanderType.NavalCommander, CardRepository.CommanderFor(CardType.WaterDeathTrap));
+        Assert.AreEqual(CommanderType.NuclearCommander, CardRepository.CommanderFor(CardType.AquaBrother));
+        Assert.AreEqual(CommanderType.NuclearCommander, CardRepository.CommanderFor(CardType.TheMother));
+        Assert.AreEqual(CommanderType.SpaceCommander, CardRepository.CommanderFor(CardType.AssembleModsS));
+        Assert.AreEqual(CommanderType.SpaceCommander, CardRepository.CommanderFor(CardType.StealthModsS));
         yield break;
     }
 
@@ -142,7 +148,7 @@ public class MergeRegressionTests
         var changes = 0;
         t.OnTroopsChanged += (_, _) => changes++;
 
-        foreach (var type in new[] { CardType.LandDeathTrap, CardType.WaterDeathTrap, CardType.OrbitalMines })
+        foreach (var type in new[] { CardType.LandDeathTrap }) // water/Moon variants are not in the land-only decks
         {
             t.SetTroops(5);
             Card(type).UseAbility(t);
@@ -277,8 +283,7 @@ public class MergeRegressionTests
 
     // ---------- Helpers ----------
 
-    private Card Card(CardType type) => _cr.AllCards.Single(c => c.CardType == type);
-    private CommanderType Commander(CardType type) => Card(type).Commander;
+    private Card Card(CardType type) => _cr.AllCards.First(c => c.CardType == type);
 
     // Default targets for an ability, by its parameter types.
     private object[] Args(Card card)

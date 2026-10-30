@@ -82,8 +82,7 @@ namespace Cards
         public void OnTurnStarted() => BuysThisTurn = 0;
 
         // Our map has only land territories, so the Naval and Space decks (water / Moon cards) are out of play.
-        public static bool IsDeckInPlay(CommanderType deck) =>
-            deck is CommanderType.Diplomat or CommanderType.LandCommander or CommanderType.NuclearCommander;
+        public static bool IsDeckInPlay(CommanderType deck) => DeckLists.DecksInPlay.Contains(deck);
 
         public int CardsLeftInDeck(CommanderType deck) => _cr.CardsInDeck.Count(c => c.Commander == deck);
 

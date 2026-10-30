@@ -20,11 +20,9 @@ namespace Cards
 
         public Card[] AllCards { get; private set; }
 
-        private readonly Dictionary<string, Card> _cardNameToCardMap = new();
 
         public HashSet<Card> CardsInDeck { get; private set; }
 
-        public CardExchangeType[] ExchangeTypes;
 
         public Commander DiplomatCommander = new Commander(CommanderType.Diplomat);
         public Commander LandCommander = new Commander(CommanderType.LandCommander);
@@ -48,24 +46,21 @@ namespace Cards
 
             AllCards = GenerateCards();
             CardsInDeck = new HashSet<Card>(AllCards);
-            foreach (var card in AllCards)
-            {
-                CardsInDeck.Add(card);
-                _cardNameToCardMap.Add(card.Name, card);
-            }
+
 
             // ExchangeTypes = GenerateExchangeTypes().ToArray();
         }
 
         private Card[] GenerateCards()
         {
-           //6 commanders each with their own card deck 
-           var cardTypes = (CardType[])Enum.GetValues(typeof(CardType));
-           Card[] cards = new Card[cardTypes.Length];
-           for (int i = 0; i < cardTypes.Length; i++)
-               cards[i] = new Card(abilities.FindFor(cardTypes[i]), cardTypes[i]);
-           AssignCardsToCommanders(cards);
-           return cards;
+            // 2210: one deck per commander, with copies (DeckLists). Each physical card is its own Card.
+            var cards = new List<Card>();
+            foreach (var deck in DeckLists.DecksInPlay)
+                foreach (var (type, copies) in DeckLists.For(deck))
+                    for (int i = 0; i < copies; i++)
+                        cards.Add(new Card(abilities.FindFor(type), type) { Id = cards.Count });
+            AssignCardsToCommanders(cards.ToArray());
+            return cards.ToArray();
         }
 
         private void AssignCardsToCommanders(Card[] cards)
@@ -110,97 +105,5 @@ namespace Cards
         //     };
         // }
 
-        public Card DrawRandomCard()
-        {
-            if (CardsInDeck.Count == 0)
-                return null;
-
-            var card = CardsInDeck.ElementAt(UnityEngine.Random.Range(0, CardsInDeck.Count));
-            CardsInDeck.Remove(card);
-            return card;
-        }
-
-        public void ReturnCardsToDeck(IEnumerable<Card> cards)
-        {
-            foreach (var card in cards)
-                CardsInDeck.Add(card);
-        }
-
-
-        // public List<CardExchange> GetBestExchanges(player.Player player)
-        // {
-        //     // var bestExchanges = new List<CardExchange>();
-        //     // var cards = player.Cards;
-        //     //
-        //     // foreach (var cardExchangeType in ExchangeTypes)
-        //     // {
-        //     //     var cardExchange = cardExchangeType.GetBestExchange(cards, player);
-        //     //     if (cardExchange != null)
-        //     //         bestExchanges.Add(cardExchange);
-        //     // }
-        //     //
-        //      return new List<CardExchange>();
-        // }
-
-        [CanBeNull]
-        public CardExchangeType GetExchangeType(Card[] cards)
-        {
-            if (cards.Length != 3)
-                return null;
-
-            return ExchangeTypes.FirstOrDefault(exchangeType => exchangeType.CanExchange(cards));
-        }
-        
-        
-        public bool CanExchange(Card[] cards)
-        {
-            if (cards.Length != 3)
-                return false;
-
-            return ExchangeTypes.Any(exchangeType => exchangeType.CanExchange(cards));
-        }
-
-        public int GetExchangeTypeIndex(Card[] cards)
-        {
-            if (cards.Length != 3)
-                return -1;
-
-            for (var index = 0; index < ExchangeTypes.Length; index++)
-            {
-                var exchangeType = ExchangeTypes[index];
-                if (exchangeType.CanExchange(cards)) return index;
-            }
-
-            return -1;
-        }
-
-        public int GetExchangeTypeIndex(CardExchangeType exchangeType)
-        {
-            for (var index = 0; index < ExchangeTypes.Length; index++)
-            {
-                if (ExchangeTypes[index] == exchangeType)
-                    return index;
-            }
-
-            return -1;
-        }
-
-
-        public Card GetCardByName(string name)
-        {
-            return _cardNameToCardMap[name];
-        }
-
-        
-        
-        [CanBeNull]
-        public CardExchange GetExchangeFor(Card[] selectedCards, Player currentPlayer)
-        {
-            var exchangeType = GetExchangeType(selectedCards);
-            if (exchangeType == null)
-                return null;
-
-            return new CardExchange(selectedCards, exchangeType, currentPlayer);
-        }
     }
 }

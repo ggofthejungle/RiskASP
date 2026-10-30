@@ -40,28 +40,8 @@ namespace TurnPhases.AI
             var troopsToPlace = _reinforcePhase.RemainingTroopsToPlace;
             inputProgram.AddObjectInput(new TroopsToPlacePredicate(_gm.Turn, player.Name, troopsToPlace));
 
-            for (var exchangeId = 0; exchangeId < player.BestCardExchangeCombinations.Count; exchangeId++)
-            {
-                AddPossibleCardExchange(player, inputProgram, exchangeId);
-            }
         }
 
-        private void AddPossibleCardExchange(Player player, InputProgram inputProgram, int exchangeId)
-        {
-            var exchange = player.BestCardExchangeCombinations[exchangeId];
-            var exchangeTypeIndex = _cr.GetExchangeTypeIndex(exchange.ExchangeType);
-            if (exchangeTypeIndex == -1)
-                throw new Exception("Invalid card combination");
-
-            var cardName1 = exchange.Cards[0].Name;
-            var cardName2 = exchange.Cards[1].Name;
-            var cardName3 = exchange.Cards[2].Name;
-
-            var exchangePredicate = new PossibleCardExchangePredicate(_gm.Turn, player.Name,
-                exchangeId, exchangeTypeIndex, 
-                cardName1, cardName2, cardName3, exchange.ExchangeValue);
-            inputProgram.AddObjectInput(exchangePredicate);
-        }
 
         public void OnResponse(Player player, AnswerSet answerSet)
         {
@@ -69,7 +49,6 @@ namespace TurnPhases.AI
             int troopsDrafted = 0;
 
             var reinforceActions = new List<ReinforceAction>();
-            ExchangeCardsAction exchangeCardsAction = null;
 
             foreach (var atom in answerSet.Atoms)
             {
@@ -79,16 +58,8 @@ namespace TurnPhases.AI
                     reinforceActions.Add(new ReinforceAction(player, draft.Turn, territory, draft.Troops));
                     troopsDrafted += draft.Troops;
                 }
-                else if (atom is ExchangeCardsPredicate exchangeCardsPredicate)
-                {
-                    var exchange = player.BestCardExchangeCombinations[exchangeCardsPredicate.ExchangeId];
-                    remainingTroopsToPlace += exchange.ExchangeValue;
-                    exchangeCardsAction = new ExchangeCardsAction(player, _gm.Turn, exchange);
-                }
             }
 
-            if (exchangeCardsAction != null)
-                _ar.AddAction(exchangeCardsAction);
             foreach (var reinforceAction in reinforceActions)
             {
                 _ar.AddAction(reinforceAction);

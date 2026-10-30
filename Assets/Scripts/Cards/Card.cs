@@ -12,6 +12,7 @@ namespace Cards
         public CardType CardType;
         private CommanderType CommanderType;
         public string Name;
+        public int Id; // unique per physical card (decks have copies)
         private Delegate _method;
 
         public Card(Delegate method, CardType cardType)
@@ -29,7 +30,7 @@ namespace Cards
 
         public CommanderType Commander => CommanderType;
         public CardSpec Spec => CardSpec.For(CardType);
-        public int PowerUpCost => Spec.PowerUpCost;
+        public int PowerUpCost => DeckLists.CostOf(CardType);
         public CardTiming Timing => Spec.Timing;
         public string AbilityName => _method?.Method.Name;
         public int AbilityParameterCount => _method?.Method.GetParameters().Length ?? 0;
