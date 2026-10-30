@@ -54,13 +54,39 @@ Read this first. Last updated: Oct 29, 2026. Owner: George (ggofthejungle).
 - **Legal:** before any sale, rewrite all card names and text and use an ORIGINAL map (it's currently Hasbro's Risk/2210). Don't ship DLV2.
 
 ## Next steps (in order)
-1. George play-tests hot-seat from the Menu scene: bid validation message, both players get a turn, year 2 bidding. Fix any UI issues he reports.
-2. **Reaction window, step 1:** separate turn owner from input owner. Add `PendingDecision { PlayerId, Kind, Options }` and serializable actions, starting with AttackPhase.
-3. Step 2: open the window in AttackPhase before each roll. Step 3: defender prompt UI plus the hot-seat cover screen. Step 4: AI defender. Then the 5 defense cards and Frequency Jam.
-4. Add tests for each card to the same test setup.
-5. Main menu modes (hot-seat / AI / online) and seat types, plus a C# AI for mobile (the ASP solver is desktop-only).
-6. Online: copy the login, lobby and PUN sync from Battle Planes.
-7. Push `dev` and open a PR into `main` once George approves.
+Every task has a unique ID. When George says "do RW-1", that is the task. **CURRENT TASK: RW-1**, unless George says otherwise.
+
+- **PT-1: Hot-seat play-test (George does it).** Play from the Menu scene with 2 humans. Check the bid rejection message, that both players get a turn, and that year 2 bidding opens. Fix any UI issues he reports. Not a blocker for RW-1.
+
+### Reaction window (defender interrupts): do these in order, each one depends on the one before
+- **RW-1: Separate turn owner from input owner (refactor). Do this first.**
+  - Problem: `GameManager` assumes the only player who ever gives input is `CurrentPlayer`, so a defender can't answer during the attacker's turn. That's why the old interrupt attempt broke everything.
+  - Add `PendingDecision { Player Player; DecisionKind Kind; ... }` to `GameManager`, separate from `CurrentPlayer`. Kinds: `TurnAction` (normal) and `Reaction` (defender).
+  - Inputs go through `HandlePlayerAction(action)`, which validates `action.Player == PendingDecision.Player` (not just the current player).
+  - Start with **AttackPhase only**. Add `DeclareAttack` / `PassReaction` / `PlayReactionCard` actions, but the window doesn't open yet. With no defense cards it behaves exactly as now.
+  - Done when: HotSeatGameTests still 7/7, and a new EditMode or PlayMode test proves that an action from a non-pending player is rejected.
+- **RW-2: Open the window in AttackPhase before EVERY dice roll.**
+  - After `DeclareAttack`: if the defender has a playable defense card (commander alive, enough energy) and isn't jammed or passed for the turn, set `PendingDecision` to the defender (Reaction). Otherwise roll immediately.
+  - The defender plays 0+ cards, then Done / Pass / PassRestOfTurn. Recheck that the attack is still valid, then roll.
+  - Tests: no card → no window; window opens every roll; PassRestOfTurn is honored.
+- **RW-3: Defender prompt UI.**
+  - A hot-seat "Pass the device to <Defender>" cover screen.
+  - A card list with energy costs and the Play / Pass / Pass-rest-of-turn buttons.
+  - A log line for the attacker.
+- **RW-4: AI defender.** A simple C# heuristic that answers Reaction decisions instantly.
+- **RW-5: Defense cards plus Frequency Jam, each with tests.**
+  - Cease Fire (blocks further attacks on that player this turn)
+  - Stealth MODs (+3 defenders, can be played several times)
+  - Evacuation
+  - Death Trap
+  - Stealth Station
+  - Frequency Jam (the attacker plays it; the target gets no window for the rest of the turn)
+
+### After the reaction window
+- **MM-1: Main menu modes and seat types.** Hot-seat / vs AI / online; each seat is Local / AI / Remote.
+- **MM-2: C# AI for mobile and WebGL.** The ASP solver is desktop-only.
+- **ON-1: Online.** Copy the login, lobby and PUN sync from Battle Planes (see above). The reaction window goes over RPC with a 15–20s timer.
+- **GIT-1: Push `dev` and open a PR into `main`,** only when George says so.
 
 ## Known gaps
 - Energy income each year isn't implemented (only 3 at the start), so later bids are mostly 0.
