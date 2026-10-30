@@ -195,6 +195,7 @@ public class GameManager : MonoBehaviour
     [SerializeField] private bool _passTheDeviceScreens = false;
     public bool PassTheDeviceScreens { get => _passTheDeviceScreens; set => _passTheDeviceScreens = value; }
     public Map.SelectionArrow SelectionArrow { get; private set; }
+    public Map.MapBadges MapBadges { get; private set; }
 
     private void CreateHud()
     {
@@ -206,6 +207,7 @@ public class GameManager : MonoBehaviour
             CommandHud = UI.CommandHud.Create(this, canvas);
         }
         SelectionArrow = Map.SelectionArrow.Create(this);
+        MapBadges = Map.MapBadges.Create(this);
     }
 
     private void StartYear()

@@ -209,8 +209,15 @@ namespace UI
                         return "Click one of your territories (2+ troops) to attack <b>from</b>. " +
                                "Press <b>Skip phase</b> when you're done attacking.";
                     if (to == null)
+                    {
+                        var (d8, _) = BattleSimulator.AttackDice(from, Mathf.Min(3, from.GetAvailableTroops()));
+                        var aim = _gm.SelectionArrow != null ? _gm.SelectionArrow.ShownTo : null;
+                        var defD8 = aim != null ? BattleSimulator.DefenseDice(aim, Mathf.Min(BattleSimulator.MaxDefenseDice, aim.Troops)).d8 : 0;
+                        var dice = (d8 > 0 ? $" Your commander{(d8 > 1 ? "s" : "")} here: <b>{d8} × d8</b>." : "")
+                                   + (defD8 > 0 ? $" {Nice(aim.Name)} defends with <b>{defD8} × d8</b>." : "");
                         return $"Attacking from <b>{Nice(from.Name)}</b>: click a highlighted enemy territory to roll. " +
-                               $"Click {Nice(from.Name)} again to cancel.";
+                               $"Click {Nice(from.Name)} again to cancel.{dice}";
+                    }
                     return $"Rolling: <b>{Nice(from.Name)}</b> -> <b>{Nice(to.Name)}</b>…";
                 }
 

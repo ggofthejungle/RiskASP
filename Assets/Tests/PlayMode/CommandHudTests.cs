@@ -88,9 +88,12 @@ public class CommandHudTests
         yield return StartAlicesTurn();
         var energy = _alice.GetEnergy();
         _hud.ClickBuy(CommanderType.LandCommander);
+        Assert.IsTrue(_hud.IsConfirming, "Asks first");
+        Assert.AreEqual(0, _alice.Cards.Count, "Nothing bought before confirming");
+        _hud.Confirm();
         Assert.AreEqual(1, _alice.Cards.Count);
         Assert.AreEqual(energy - 1, _alice.GetEnergy());
-        StringAssert.Contains("Bought", _hud.Status);
+        StringAssert.Contains("You got", _hud.Status);
     }
 
     [UnityTest]
@@ -98,6 +101,7 @@ public class CommandHudTests
     {
         yield return StartAlicesTurn();
         _hud.ClickHire(CommanderType.NuclearCommander);
+        _hud.Confirm();
         Assert.IsTrue(_sm.IsTargeting, "Waiting for a territory");
         var where = _alice.Territories.First();
         Click(where);
@@ -111,6 +115,7 @@ public class CommandHudTests
         yield return StartAlicesTurn();
         _alice.SetEnergy(10);
         _hud.ClickBuild();
+        _hud.Confirm();
         var where = _alice.Territories.First(t => !t.containsSpaceStation);
         Click(where);
         Assert.IsTrue(where.containsSpaceStation);
@@ -151,6 +156,7 @@ public class CommandHudTests
     {
         yield return StartAlicesTurn();
         _hud.ClickBuild();
+        _hud.Confirm();
         Assert.IsTrue(_sm.IsTargeting);
         _hud.CancelTargeting();
         Assert.IsFalse(_sm.IsTargeting);

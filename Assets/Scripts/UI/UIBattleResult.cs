@@ -55,6 +55,8 @@ namespace UI
                 
                 attackDiceRenderer.sprite = null;
                 defenderDiceRenderer.sprite = null;
+                SetD8Tag(attackDiceRenderer, false);
+                SetD8Tag(defenderDiceRenderer, false);
             }
             
             Debug.Log("Attacking troops " + attackResult.AttackingTroops);
@@ -69,6 +71,7 @@ namespace UI
                     
                 _attackDiceRenderers[index].sprite = _diceSprites[attackerRoll - 1];
                 _attackDiceRenderers[index].enabled = true;
+                SetD8Tag(_attackDiceRenderers[index], index < attackResult.AttackerDieSides.Length && attackResult.AttackerDieSides[index] == 8);
             }
             
             Debug.Log("Defending troops " + attackResult.DefendingTroops);
@@ -80,6 +83,7 @@ namespace UI
                 var defenderRoll = attackResult.DefenderRolls[index];
                 _defenderDiceRenderers[index].sprite = _diceSprites[defenderRoll - 1];
                 _defenderDiceRenderers[index].enabled = true;
+                SetD8Tag(_defenderDiceRenderers[index], index < attackResult.DefenderDieSides.Length && attackResult.DefenderDieSides[index] == 8);
             }
 
             var battleWidth = Math.Min(attackResult.AttackerRolls.Length, attackResult.DefenderRolls.Length);
@@ -102,6 +106,37 @@ namespace UI
                     _battleResultRenderers[index].sprite = _defenderWonSprite;
                 }
             }
+        }
+
+        // A small "d8" tag on a die that was 8-sided (commander or space station), so it's clear which dice were d8.
+        private static void SetD8Tag(Image die, bool isD8)
+        {
+            var tag = die.transform.Find("d8");
+            if (tag == null)
+            {
+                if (!isD8) return;
+                var go = new GameObject("d8", typeof(RectTransform));
+                go.transform.SetParent(die.transform, false);
+                var rt = (RectTransform)go.transform;
+                rt.anchorMin = new Vector2(0.45f, -0.05f);
+                rt.anchorMax = new Vector2(1.15f, 0.40f);
+                rt.offsetMin = rt.offsetMax = Vector2.zero;
+                var bg = go.AddComponent<Image>();
+                bg.color = new Color(0.92f, 0.45f, 0.05f);
+                bg.raycastTarget = false;
+                var text = new GameObject("t", typeof(RectTransform)).AddComponent<TMPro.TextMeshProUGUI>();
+                text.transform.SetParent(go.transform, false);
+                var trt = text.rectTransform;
+                trt.anchorMin = Vector2.zero; trt.anchorMax = Vector2.one; trt.offsetMin = trt.offsetMax = Vector2.zero;
+                text.text = "d8";
+                text.fontSize = 14;
+                text.fontStyle = TMPro.FontStyles.Bold;
+                text.alignment = TMPro.TextAlignmentOptions.Center;
+                text.color = Color.white;
+                text.raycastTarget = false;
+                tag = go.transform;
+            }
+            tag.gameObject.SetActive(isD8 && die.enabled);
         }
     }
 }

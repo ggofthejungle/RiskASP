@@ -24,6 +24,11 @@ public class AttackResult
     
     public int[] AttackerRolls { get; }
     public int[] DefenderRolls { get; }
+    // Sides of each die, in the same order as the rolls (8 = commander / space station die, 6 = normal).
+    public int[] AttackerDieSides { get; set; } = Array.Empty<int>();
+    public int[] DefenderDieSides { get; set; } = Array.Empty<int>();
+    public int AttackerD8Count => Array.FindAll(AttackerDieSides, s => s == 8).Length;
+    public int DefenderD8Count => Array.FindAll(DefenderDieSides, s => s == 8).Length;
 
 
 public AttackResult(

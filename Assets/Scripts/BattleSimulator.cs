@@ -33,11 +33,17 @@ public class BattleSimulator : MonoBehaviour
         // Defending: every unit rolls d8 in a territory with a space station; otherwise each commander there rolls a d8.
         var (attackD8, attackD6) = AttackDice(attackAction.Origin, attackingTroops);
         var (defenseD8, defenseD6) = DefenseDice(attackAction.Target, defendingTroops);
-        var attackerRolls = Roll8SidedDies(attackD8).Concat(Roll6SidedDies(attackD6)).ToArray();
-        var defenderRolls = Roll8SidedDies(defenseD8).Concat(Roll6SidedDies(defenseD6)).ToArray();
-
-        attackerRolls = attackerRolls.OrderByDescending(c => c).ToArray();
-        defenderRolls = defenderRolls.OrderByDescending(c => c).ToArray();
+        // Keep each roll with its die (8 or 6 sides), sorted highest first, so the UI can show which were d8.
+        var attackerDice = Roll8SidedDies(attackD8).Select(v => (v, sides: 8))
+            .Concat(Roll6SidedDies(attackD6).Select(v => (v, sides: 6)))
+            .OrderByDescending(d => d.v).ThenByDescending(d => d.sides).ToArray();
+        var defenderDice = Roll8SidedDies(defenseD8).Select(v => (v, sides: 8))
+            .Concat(Roll6SidedDies(defenseD6).Select(v => (v, sides: 6)))
+            .OrderByDescending(d => d.v).ThenByDescending(d => d.sides).ToArray();
+        var attackerRolls = attackerDice.Select(d => d.v).ToArray();
+        var defenderRolls = defenderDice.Select(d => d.v).ToArray();
+        if (attackD8 + defenseD8 > 0)
+            Debug.Log($"Dice: attacker {attackD8} x d8 + {attackD6} x d6, defender {defenseD8} x d8 + {defenseD6} x d6");
 
         var attackerLosses = 0;
         var defenderLosses = 0;
@@ -62,7 +68,11 @@ public class BattleSimulator : MonoBehaviour
             defendingTroops,
             attackerRolls,
             defenderRolls
-        );
+        )
+        {
+            AttackerDieSides = attackerDice.Select(d => d.sides).ToArray(),
+            DefenderDieSides = defenderDice.Select(d => d.sides).ToArray(),
+        };
     }
 
     public const int MaxAttackDice = 3;

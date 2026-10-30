@@ -85,6 +85,7 @@ namespace UI
             _bar.gameObject.SetActive(show);
             if (!show)
             {
+                CancelConfirm();
                 if (_sm != null && _sm.IsTargeting && !_removalTargeting) CancelTargeting();
                 return;
             }
@@ -102,6 +103,7 @@ namespace UI
                 _actionsKey = key;
                 Clear(_actions);
                 _actionButtons.Clear();
+                Header(_actions, "SHOP\n<size=75%>before attacking</size>", 120);
                 foreach (var (deck, ok) in buys)
                     if (Me.HasCommanderInPlay(deck))
                         AddAction($"Buy {Short(deck)} card · {CommandCards.BuyCost} energy", DeckColor(deck), ok, () => ClickBuy(deck), "buy" + deck);
@@ -118,6 +120,7 @@ namespace UI
             {
                 _handKey = handKey;
                 Clear(_hand);
+                Header(_hand, "YOUR\nCARDS", 70);
                 foreach (var card in Me.Cards)
                     AddCard(card);
                 if (Me.Cards.Count == 0)
@@ -142,23 +145,80 @@ namespace UI
 
         public void ClickBuy(CommanderType deck)
         {
-            Act(new BuyCommandCardAction(Me, _gm.Turn, deck), _gm.CommandCards.WhyCantBuy(Me, deck), $"Bought a {Short(deck)} card.");
+            var me = Me;
+            var why = _gm.CommandCards.WhyCantBuy(me, deck);
+            if (why != null) { SetStatus(why, 4f); return; }
+            Ask($"Buy a <b>{Short(deck)}</b> command card for {CommandCards.BuyCost} energy?\n" +
+                $"<size=80%>You get a random card from the {Short(deck)} deck ({_gm.CommandCards.CardsLeftInDeck(deck)} left). " +
+                $"You have {me.GetEnergy()} energy; {CommandCards.MaxBuysPerTurn - _gm.CommandCards.BuysThisTurn} buys left this turn.</size>",
+                "Buy", () =>
+                {
+                    var before = me.Cards.ToList();
+                    Act(new BuyCommandCardAction(me, _gm.Turn, deck), _gm.CommandCards.WhyCantBuy(me, deck), "");
+                    var got = me.Cards.Except(before).FirstOrDefault();
+                    if (got != null)
+                        SetStatus($"You got <b>{Nice(got.Name)}</b> ({TimingLabel(got.Timing)}). It's in your cards below.", 6f);
+                });
+        }
+
+        // ---------- Confirmation ----------
+        private RectTransform _confirm;
+        private TMP_Text _confirmText;
+        private RectTransform _confirmButtons;
+        private Action _onConfirm;
+        public bool IsConfirming => _confirm != null && _confirm.gameObject.activeSelf;
+        public string ConfirmText => IsConfirming ? _confirmText.text : "";
+
+        private void Ask(string question, string yes, Action onYes)
+        {
+            _onConfirm = onYes;
+            _confirmText.text = question;
+            Clear(_confirmButtons);
+            MakeButton(_confirmButtons, yes, new Color(0.12f, 0.55f, 0.25f), true, Confirm, 160, 48);
+            MakeButton(_confirmButtons, "Cancel", new Color(0.45f, 0.15f, 0.15f), true, CancelConfirm, 140, 48);
+            _confirm.gameObject.SetActive(true);
+        }
+
+        public void Confirm()
+        {
+            var action = _onConfirm;
+            CancelConfirm();
+            action?.Invoke();
+        }
+
+        public void CancelConfirm()
+        {
+            _onConfirm = null;
+            if (_confirm != null) _confirm.gameObject.SetActive(false);
         }
 
         public void ClickHire(CommanderType type)
         {
             var me = Me;
-            Target($"Hire {Short(type)}: click one of your territories.",
+            Ask($"Hire a <b>{Map.MapBadges.FullName(type)}</b> for {Purchases.CommanderCost} energy?\n" +
+                $"<size=80%>{CommanderInfo(type)} Then click one of your territories to place it.</size>",
+                "Hire", () => Target($"Hire {Short(type)}: click one of your territories.",
                 t => t.Owner == me,
-                t => { Act(new HireCommanderAction(me, _gm.Turn, type, t), _gm.Purchases.WhyCantHire(me, type, t), $"{Short(type)} hired in {Nice(t.Name)}."); return true; });
+                t => { Act(new HireCommanderAction(me, _gm.Turn, type, t), _gm.Purchases.WhyCantHire(me, type, t), $"{Short(type)} hired in {Nice(t.Name)}."); return true; }));
         }
+
+        private static string CommanderInfo(CommanderType type) => type switch
+        {
+            CommanderType.Diplomat => "Opens the Diplomat deck. Defends with an 8-sided die; attacks with a normal one.",
+            CommanderType.LandCommander => "Opens the Land deck. Attacks and defends with an 8-sided die.",
+            CommanderType.NuclearCommander => "Opens the Nuclear deck. Attacks and defends with an 8-sided die.",
+            _ => "",
+        };
 
         public void ClickBuild()
         {
             var me = Me;
-            Target("Build a space station: click one of your territories without a station.",
+            Ask($"Build a <b>space station</b> for {Purchases.StationCost} energy?\n" +
+                "<size=80%>+1 unit there every turn, and all its defenders roll 8-sided dice. Max 4. " +
+                "Then click one of your territories without a station.</size>",
+                "Build", () => Target("Build a space station: click one of your territories without a station.",
                 t => t.Owner == me && !t.containsSpaceStation,
-                t => { Act(new BuildSpaceStationAction(me, _gm.Turn, t), _gm.Purchases.WhyCantBuild(me, t), $"Space station built in {Nice(t.Name)}."); return true; });
+                t => { Act(new BuildSpaceStationAction(me, _gm.Turn, t), _gm.Purchases.WhyCantBuild(me, t), $"Space station built in {Nice(t.Name)}."); return true; }));
         }
 
         public void ClickCard(Card card)
@@ -222,7 +282,9 @@ namespace UI
         private void Act(PlayerAction action, string why, string ok)
         {
             if (why != null) { SetStatus(why, 4f); return; }
-            SetStatus(_gm.HandlePlayerAction(action) ? ok : "Not allowed right now.", 3f);
+            var accepted = _gm.HandlePlayerAction(action);
+            if (!accepted) SetStatus("Not allowed right now.", 3f);
+            else if (!string.IsNullOrEmpty(ok)) SetStatus(ok, 3f);
             _handKey = _actionsKey = "";
         }
 
@@ -432,6 +494,18 @@ namespace UI
             _status.textWrappingMode = TextWrappingModes.Normal;
             _hand = Row("Hand", _bar, new Vector2(0, 0), new Vector2(1, 1), new Vector2(8, 6), new Vector2(-8, -50), 6);
 
+            // Confirmation box (buy / hire / build), just above the bar.
+            var confirmImg = NewImage("Confirm", transform, new Color(0.12f, 0.13f, 0.18f, 0.97f));
+            _confirm = confirmImg.rectTransform;
+            Place(_confirm, new Vector2(0.30f, 0.18f), new Vector2(0.72f, 0.36f), Vector2.zero, Vector2.zero);
+            confirmImg.raycastTarget = true;
+            _confirmText = NewText("Question", _confirm, 22, FontStyles.Normal, TextAlignmentOptions.Center);
+            Place(_confirmText.rectTransform, new Vector2(0, 0.40f), new Vector2(1, 1), new Vector2(16, 0), new Vector2(-16, -8));
+            _confirmText.textWrappingMode = TextWrappingModes.Normal;
+            _confirmButtons = Row("Buttons", _confirm, new Vector2(0, 0), new Vector2(1, 0.38f), new Vector2(16, 10), new Vector2(-16, 0), 12);
+            _confirmButtons.GetComponent<HorizontalLayoutGroup>().childAlignment = TextAnchor.MiddleCenter;
+            _confirm.gameObject.SetActive(false);
+
             // Defender prompt: full screen, blocks clicks.
             var promptImg = NewImage("DefenderPrompt", transform, new Color(0, 0, 0, 0.55f));
             _prompt = promptImg.rectTransform;
@@ -465,6 +539,14 @@ namespace UI
         private void AddAction(string label, Color color, bool interactable, Action onClick, string id)
         {
             _actionButtons[id] = MakeButton(_actions, label, color, interactable, onClick, 0);
+        }
+
+        private static void Header(Transform row, string text, float width)
+        {
+            var t = NewText("Header", row, 15, FontStyles.Bold, TextAlignmentOptions.Center);
+            t.text = text;
+            t.color = new Color(1f, 0.85f, 0.4f);
+            t.gameObject.AddComponent<LayoutElement>().preferredWidth = width;
         }
 
         public bool IsActionEnabled(string id) => _actionButtons.TryGetValue(id, out var b) && b.interactable;

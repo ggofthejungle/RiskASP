@@ -51,6 +51,9 @@ namespace Map
         private void Start()
         {
             _playerColor = _territory.Owner.Color;
+            // Commanders and stations are shown by Map/MapBadges now (clear icons); hide the old debug texts.
+            if (_commandersText != null) _commandersText.gameObject.SetActive(false);
+            if (_spaceStationText != null) _spaceStationText.gameObject.SetActive(false);
         }
 
 
