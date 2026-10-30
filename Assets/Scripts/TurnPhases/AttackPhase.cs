@@ -196,7 +196,7 @@ namespace TurnPhases
                 var dead = attackResult.Origin.CommandersList.FirstOrDefault(c => c.CommanderType == type);
                 if (dead == null) continue;
                 attackResult.Origin.RemoveCommander(dead);
-                Debug.Log($"{attackAction.Player.Name}'s {type} was killed attacking {attackResult.Target.Name}.");
+                _gm.ReportCommanderKilled(attackAction.Player, type, attackResult.Origin, $"attacking {attackResult.Target.Name}");
             }
             _attackResults.Add(attackResult);
             _attackTurn++;

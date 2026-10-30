@@ -14,7 +14,7 @@ namespace Actions
         public Territory Target { get; }
         public int Troops { get; } // attacking units (MODs), 0..3
         // Commanders joining the attack (each is a unit with its own die: d8 for Land/Nuclear, d6 for Diplomat).
-        // Not given = the commanders in the origin that attack with d8 join (what bots/older code expect).
+        // Not given = no commanders join (the player is asked in the UI; bots name theirs explicitly).
         public IReadOnlyList<CommanderType> Commanders { get; }
         public int Dice => Math.Min(BattleSimulator.MaxAttackDice, Troops + Commanders.Count);
 
@@ -25,11 +25,12 @@ namespace Actions
             Origin = origin;
             Target = target;
             Troops = troops;
-            Commanders = (commanders ?? origin.CommandersList
-                    .Where(c => BattleSimulator.AttacksWithD8(c.CommanderType))
-                    .Select(c => c.CommanderType))
-                .ToList();
+            Commanders = (commanders ?? Enumerable.Empty<CommanderType>()).ToList();
         }
+
+        // The commanders in a territory that attack with an 8-sided die (what the AI brings along).
+        public static List<CommanderType> D8Commanders(Territory origin) =>
+            origin.CommandersList.Where(c => BattleSimulator.AttacksWithD8(c.CommanderType)).Select(c => c.CommanderType).ToList();
 
         public override bool IsValid()
         {

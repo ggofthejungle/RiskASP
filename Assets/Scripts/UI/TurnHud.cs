@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Globalization;
 using Map;
 using player;
@@ -56,6 +57,8 @@ namespace UI
             hud._gm = gm;
             hud.Build();
             gm.OnPlayerTurnChanged += hud.OnPlayerTurnChanged; // now, so the first year's splash isn't missed
+            gm.OnCommanderKilled += hud.OnCommanderKilled;
+            gm.OnTurnPhaseChanged += (_, _) => hud._flash = null;
             return hud;
         }
 
@@ -67,13 +70,57 @@ namespace UI
 
         private void OnDestroy()
         {
-            if (_gm != null) _gm.OnPlayerTurnChanged -= OnPlayerTurnChanged;
+            if (_gm != null)
+            {
+                _gm.OnPlayerTurnChanged -= OnPlayerTurnChanged;
+                _gm.OnCommanderKilled -= OnCommanderKilled;
+            }
+        }
+
+        // ---------------- Commander killed: red toast ----------------
+        private Image _toast;
+        private TMP_Text _toastText;
+        private float _toastUntil = -1f;
+        private readonly List<string> _toastLines = new();
+        public string LastToast { get; private set; } = "";
+
+        private void OnCommanderKilled(Player owner, Expansions.CommanderType type, Map.Territory where, string how)
+        {
+            var name = Map.MapBadges.FullName(type);
+            var deck = type switch
+            {
+                Expansions.CommanderType.Diplomat => "Diplomat",
+                Expansions.CommanderType.LandCommander => "Land",
+                Expansions.CommanderType.NuclearCommander => "Nuclear",
+                _ => null
+            };
+            string line;
+            if (_gm.IsLocal(owner))
+                line = $"<b>{owner.Name.ToUpperInvariant()}: YOUR {name.ToUpperInvariant()} WAS KILLED</b> in {Nice(where?.Name)} ({how})." +
+                       (deck != null ? $"\n<size=80%>No {deck} cards can be bought or played until you hire a new one.</size>" : "");
+            else
+                line = $"{owner?.Name}'s {name} was killed in {Nice(where?.Name)} ({how}).";
+            LastToast = line;
+            _toastLines.Add(line);
+            if (_toastLines.Count > 3) _toastLines.RemoveAt(0);
+            _toastText.text = string.Join("\n", _toastLines);
+            _toast.gameObject.SetActive(true);
+            _toastUntil = Time.unscaledTime + 6f;
+        }
+
+        private void AnimateToast()
+        {
+            if (_toastUntil < 0 || Time.unscaledTime < _toastUntil) return;
+            _toastUntil = -1f;
+            _toastLines.Clear();
+            _toast.gameObject.SetActive(false);
         }
 
         private void Update()
         {
             Refresh();
             AnimateSplash();
+            AnimateToast();
         }
 
         // ---------------- Banner ----------------
@@ -251,6 +298,7 @@ namespace UI
 
         private void OnPlayerTurnChanged(Player oldPlayer, Player newPlayer)
         {
+            _flash = null; // a message is about the previous player's moment; the banner explains the new one
             if (newPlayer == null || _gm.GameState == GameState.Over) return;
 
             if (_gm.IsBidding && _gm.Year != _lastSplashYear)
@@ -338,6 +386,14 @@ namespace UI
             Place(_instruction.rectTransform, new Vector2(0, 0), new Vector2(1, 1), new Vector2(28, 8), new Vector2(-12, -106));
             _instruction.textWrappingMode = TextWrappingModes.Normal;
             _instruction.overflowMode = TextOverflowModes.Ellipsis;
+
+            // Commander-killed toast (upper middle, doesn't block clicks).
+            _toast = NewImage("CommanderKilled", transform, new Color(0.62f, 0.08f, 0.08f, 0.95f));
+            Place(_toast.rectTransform, new Vector2(0.24f, 0.64f), new Vector2(0.76f, 0.79f), Vector2.zero, Vector2.zero);
+            _toastText = NewText("Text", _toast.rectTransform, 22, FontStyles.Normal, TextAlignmentOptions.Center);
+            Place(_toastText.rectTransform, Vector2.zero, Vector2.one, new Vector2(14, 6), new Vector2(-14, -6));
+            _toastText.textWrappingMode = TextWrappingModes.Normal;
+            _toast.gameObject.SetActive(false);
 
             // Turn-position picker (top-centre).
             _orderPicker = new GameObject("TurnOrderPicker", typeof(RectTransform)).GetComponent<RectTransform>();

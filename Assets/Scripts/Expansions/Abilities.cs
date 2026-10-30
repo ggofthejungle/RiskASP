@@ -333,7 +333,10 @@ namespace Expansions
             var roll = UnityEngine.Random.Range(1, 9);
             LastRoll = roll;
             if (roll >= 3)
+            {
                 territory.RemoveCommander(commander);
+                GameManager.Instance?.ReportCommanderKilled(territory.Owner, commanderType, territory, "Assassin Bomb");
+            }
         }
 
         public int LastRoll { get; private set; } // last die rolled by a card (for the log / UI / tests)

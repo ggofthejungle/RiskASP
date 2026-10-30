@@ -185,6 +185,14 @@ public class GameManager : MonoBehaviour
     public UI.TurnHud TurnHud { get; private set; }
     public UI.CommandHud CommandHud { get; private set; }
 
+    // A commander died (killed attacking, destroyed on conquest, Assassin Bomb...). Owner, type, where, how.
+    public Action<Player, CommanderType, Territory, string> OnCommanderKilled;
+    public void ReportCommanderKilled(Player owner, CommanderType type, Territory where, string how)
+    {
+        Debug.Log($"{owner?.Name}'s {type} was killed in {where?.Name} ({how}).");
+        OnCommanderKilled?.Invoke(owner, type, where, how);
+    }
+
     // Who is sitting at THIS device. Online, set it to this client's player: the UI then only shows that
     // player's hand and prompts. null = every human plays on this device (local testing / hot-seat).
     public Player LocalPlayer { get; set; }

@@ -102,7 +102,8 @@ namespace Expansions
             foreach (var commander in territory.CommandersList.ToList())
             {
                 territory.RemoveCommander(commander);
-                Debug.Log($"{territory.Owner?.Name}'s {commander.CommanderType} was destroyed in {territory.Name}.");
+                GameManager.Instance?.ReportCommanderKilled(territory.Owner, commander.CommanderType, territory,
+                    $"{conqueror.Name} conquered it");
             }
 
             if (territory.containsSpaceStation && StationsOf(conqueror) >= MaxStations)

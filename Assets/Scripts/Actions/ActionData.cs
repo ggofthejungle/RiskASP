@@ -18,6 +18,7 @@ namespace Actions
         public int Troops;          // Attack: attacking troops. AttackReinforce: attacking troops of the original attack.
         public int ReinforceTroops; // AttackReinforce only
         public string Option;       // DecisionResponse only
+        public string Commanders;   // Attack: joining commanders; AttackReinforce: commanders moving in (comma-separated)
 
         public const string TypeAttack = "Attack";
         public const string TypeAttackReinforce = "AttackReinforce";
@@ -38,6 +39,7 @@ namespace Actions
                     data.Origin = a.Origin.Name;
                     data.Target = a.Target.Name;
                     data.Troops = a.Troops;
+                    data.Commanders = string.Join(",", a.Commanders);
                     break;
                 case AttackReinforceAction r:
                     data.Type = ActionData.TypeAttackReinforce;
@@ -46,6 +48,7 @@ namespace Actions
                     data.Target = r.To.Name;
                     data.Troops = r.AttackingTroops;
                     data.ReinforceTroops = r.ReinforcingTroops;
+                    data.Commanders = string.Join(",", r.MovingCommanders);
                     break;
                 case EndPhaseAction:
                     data.Type = ActionData.TypeEndPhase;
@@ -60,6 +63,12 @@ namespace Actions
             return data;
         }
 
+        private static System.Collections.Generic.List<Expansions.CommanderType> ParseCommanders(string s) =>
+            string.IsNullOrEmpty(s)
+                ? new System.Collections.Generic.List<Expansions.CommanderType>()
+                : System.Linq.Enumerable.ToList(System.Linq.Enumerable.Select(s.Split(','),
+                    x => (Expansions.CommanderType)Enum.Parse(typeof(Expansions.CommanderType), x)));
+
         public static PlayerAction FromData(ActionData data, GameManager gm)
         {
             var player = gm.GetPlayerById(data.PlayerId);
@@ -71,11 +80,12 @@ namespace Actions
             {
                 case ActionData.TypeAttack:
                     return new AttackAction(player, data.Turn, data.AttackTurn,
-                        tr.FromName(data.Origin), tr.FromName(data.Target), data.Troops);
+                        tr.FromName(data.Origin), tr.FromName(data.Target), data.Troops, ParseCommanders(data.Commanders));
                 case ActionData.TypeAttackReinforce:
                     var attack = new AttackAction(player, data.Turn, data.AttackTurn,
                         tr.FromName(data.Origin), tr.FromName(data.Target), data.Troops);
-                    return new AttackReinforceAction(player, data.Turn, data.AttackTurn, attack, data.ReinforceTroops);
+                    return new AttackReinforceAction(player, data.Turn, data.AttackTurn, attack, data.ReinforceTroops,
+                        ParseCommanders(data.Commanders));
                 case ActionData.TypeEndPhase:
                     return new EndPhaseAction(player, data.Turn);
                 case ActionData.TypeDecisionResponse:

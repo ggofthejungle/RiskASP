@@ -71,7 +71,7 @@ namespace TurnPhases.AI
                 if (atom is AttackPredicate attack)
                 {
                     var action = new AttackAction(player, attack.Turn, attack.AttackTurn,
-                        _tr.FromName(attack.From.StripQuotes()), _tr.FromName(attack.To.StripQuotes()), attack.Troops);
+                        _tr.FromName(attack.From.StripQuotes()), _tr.FromName(attack.To.StripQuotes()), attack.Troops, AttackAction.D8Commanders(_tr.FromName(attack.From.StripQuotes())));
                     attackPhaseActions.Add(action);
                 }
                 else if (atom is AttackReinforcePredicate afterAttackMove)

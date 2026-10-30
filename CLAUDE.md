@@ -93,7 +93,7 @@ Read this first. Last updated: Oct 30, 2026 (afternoon). Owner: George (ggofthej
   - Defense cards: Cease Fire, Stealth MODs, Evacuation, Death Trap, Stealth Station.
 - **Online** means **PlayFab + UGS** (not hot-seat). **No Photon** (decided Oct 30): the server is the authority (UGS Cloud Code / PlayFab CloudScript running the C# rules). See `docs/online-plan.md`.
 - **Players pick, not automation:** MOD Reduction asks each player to click their territories (done). Starting commanders/station placement will be picked by the player too (todo).
-- **Automated tests are ON HOLD** (George, Oct 30). Keep code compiling; don't run or extend the suite unless asked.
+- **Automated tests:** were on hold, then George asked to redo them with commanders (Oct 30): the suite runs again, **118/118**. Run it after rules changes.
 - **Legal:** before any sale, rewrite all card names and text and use an ORIGINAL map (it's currently Hasbro's Risk/2210). Don't ship DLV2.
 
 ## Next steps (in order)
