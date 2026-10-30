@@ -27,7 +27,7 @@ namespace Expansions
                 new Action(ModReduction),
                 new Action(Redeployment),
                 new Action<Territory>(TerritorialStation),
-                new Action(AssembleMods),
+                new Action<Territory>(AssembleMods),
                 new Action(ColonyInfluence),
                 new Action<Player>(FrequencyJam),
                 new Action<Territory>(LandDeathTrap),
@@ -35,7 +35,7 @@ namespace Expansions
                 new Action(ScoutForces),
                 new Action(StealthMods),
                 new Action<Territory>(StealthStation),
-                new Action(AssembleMods),
+                new Action<Territory>(AssembleMods),
                 new Action(ColonyInfluence),
                 new Action<Player>(FrequencyJam),
                 new Action(HiddenEnergy),
@@ -53,7 +53,7 @@ namespace Expansions
                 new Action(ScatterBombMoon),
                 new Action(ScatterBombWater),
                 new Action(TheMother),
-                new Action(AssembleMods),
+                new Action<Territory>(AssembleMods),
                 new Action(ColonyInfluence),
                 new Action(EnergyExtraction),
                 new Action<Player>(FrequencyJam),
@@ -179,10 +179,11 @@ namespace Expansions
         }
         
         //LandCommanders
-        public void AssembleMods()
+        public void AssembleMods(Territory territory)
         {
             // Before First Invasion
             // Place 3 MODS on any one land territory you occupy
+            territory.AddTroops(3);
         }
 
         // private void ColonyInfluence()

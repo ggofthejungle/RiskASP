@@ -60,6 +60,9 @@ Read this first. Last updated: Oct 30, 2026. Owner: George (ggofthejungle).
   - Arrow no longer disappears between close neighbours.
   - Open questions for Nikolas/George: Evacuation leaves the attacked territory with 0 units (intended?). Card exchange for troops is commented out in `ReinforcePhase`.
 
+- Card system: analysis in **`docs/card-system-overhaul.md`** (classic vs 2210, turn-phase comparison incl. George's Trello table, the Java reference, Land-only map). Pilot 2210 command cards: `Cards/CommandCards.cs`, `Actions/CommandCardActions.cs`. Buy 1 energy, max 4 per turn, commander in play, Naval/Space decks off. Playable: Energy Crisis, Assemble MODs (Land). `CommandCardTests.cs` (14). **47/47 passing.**
+- Reference: Java 2210 `avioane/InvadeEarth` has NO license. Read it for rules only, never copy code.
+
 ## Decisions (locked)
 - **Approach:** keep RiskASP and pull the rules out gradually into pure C#. No full rewrite.
 - **Reaction window (defender interrupts):**

@@ -68,6 +68,7 @@ public class GameManager : MonoBehaviour
     private IPhase _currentPhase;
 
     public AnnualBidding AnnualBidding { get; private set; }
+    public CommandCards CommandCards { get; private set; }
     public ReinforcePhase ReinforcePhase { get; private set; }
     public AttackPhase AttackPhase { get; private set; }
     public FortifyPhase FortifyPhase { get; private set; }
@@ -104,6 +105,7 @@ public class GameManager : MonoBehaviour
         _cr = CardRepository.Instance;
         _bs = BattleSimulator.Instance;
         SetupPhases();
+        CommandCards = new CommandCards(this, _cr);
         AnnualBidding = new AnnualBidding(this);
         CreatePlayers();
 
@@ -300,6 +302,7 @@ public class GameManager : MonoBehaviour
         // Frequency Jam only lasts for the jamming player's turn.
         foreach (var player in Players)
             player.canPlayCommandCards = true;
+        CommandCards.OnTurnStarted();
         Debug.Log($"Year {_year}, turn {_turnsTakenThisYear + 1}: {_currentPlayer.Name}");
         OnPlayerTurnChanged?.Invoke(oldPlayer, _currentPlayer);
         SetTurnPhase(ReinforcePhase);
@@ -473,6 +476,18 @@ public class GameManager : MonoBehaviour
         {
             Debug.LogWarning("Invalid action " + action);
             return false;
+        }
+
+        // Command cards (2210): handled here, not by the phase, because they can happen in several phases.
+        if (action is BuyCommandCardAction buy)
+        {
+            CommandCards.Buy(buy.Player, buy.Deck);
+            return true;
+        }
+        if (action is PlayCommandCardAction play)
+        {
+            CommandCards.Play(play.Player, play.Card, play.Targets);
+            return true;
         }
 
         if (action is DecisionResponseAction response)

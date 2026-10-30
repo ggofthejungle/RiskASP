@@ -136,6 +136,10 @@ namespace player
             return territoriesBonus + continentBonus;
         }
 
+        // A commander is "in play" when it's on the map in a territory this player controls (2210 rules).
+        public bool HasCommanderInPlay(CommanderType type) =>
+            _territories.Any(t => t.CommandersList != null && t.CommandersList.Any(c => c.CommanderType == type));
+
         public void PurchaseCommanders(Commander commander)
         {
             _energy -= 3;

@@ -28,6 +28,9 @@ namespace Cards
         }
 
         public CommanderType Commander => CommanderType;
+        public CardSpec Spec => CardSpec.For(CardType);
+        public int PowerUpCost => Spec.PowerUpCost;
+        public CardTiming Timing => Spec.Timing;
         public string AbilityName => _method?.Method.Name;
         public int AbilityParameterCount => _method?.Method.GetParameters().Length ?? 0;
 
