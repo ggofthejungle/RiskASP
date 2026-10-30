@@ -167,6 +167,9 @@ namespace TurnPhases.Selection
         {
             _sm.DisableAllTerritories();
             _sm.EnableEnemyNeighbourTerritories(_from.Territory);
+            foreach (var n in _from.Territory.NeighbourTerritories)
+                if (n.Owner != player && _gm.AttackPhase.IsCeaseFireAgainst(n.Owner))
+                    _sm.TerritoryToSelectionMap[n].Disable();
             _sm.EnableTerritory(_from);
         }
 

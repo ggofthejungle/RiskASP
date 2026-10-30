@@ -33,14 +33,14 @@ namespace Expansions
                 new Action<Territory>(LandDeathTrap),
                 new Action(Reinforcements),
                 new Action(ScoutForces),
-                new Action(StealthMods),
+                new Action<Territory>(StealthMods),
                 new Action<Territory>(StealthStation),
                 new Action<Territory>(AssembleMods),
                 new Action(ColonyInfluence),
                 new Action<Player>(FrequencyJam),
                 new Action(HiddenEnergy),
                 new Action(Reinforcements),
-                new Action(StealthMods),
+                new Action<Territory>(StealthMods),
                 new Action<Territory>(WaterDeathTrap),
                 new Action(AquaBrother),
                 new Action(Armageddon),
@@ -60,7 +60,7 @@ namespace Expansions
                 new Action(InvadeSurface),
                 new Action<Territory>(OrbitalMines),
                 new Action(Reinforcements),
-                new Action(StealthMods)
+                new Action<Territory>(StealthMods)
             };
         }
 
@@ -153,9 +153,15 @@ namespace Expansions
         {
             // Opponent Invades.
             // Move all units from the attacked territory to any territory you occupy.
+            // Units AND commanders leave (stations stay); the attacker then takes the empty territory.
             int troopCount = attackedTerritory.Troops;
             attackedTerritory.RemoveTroops(troopCount);
             destinationTerritory.AddTroops(troopCount);
+            foreach (var commander in attackedTerritory.CommandersList.ToList())
+            {
+                attackedTerritory.RemoveCommander(commander);
+                destinationTerritory.AddCommander(commander);
+            }
         }
 
         public void ModReduction()
@@ -174,7 +180,7 @@ namespace Expansions
         {
             //Before First Invasion
             //Place a space station on any land territory you occupy.
-            destinationTerritory.containsSpaceStation = true;
+            destinationTerritory.AddSpaceStation();
 
         }
         
@@ -219,18 +225,17 @@ namespace Expansions
             // territory immediately place the MODS. Discard the territory card
         }
 
-        public void StealthMods()
+        public void StealthMods(Territory defendingTerritory)
         {
-            // Before First Invasion
-            // Draw a land territory card and secretly place it facedown in front of you. Place 5 MODS on this card. When you occupy this
-            // territory immediately place the MODS. Discard the territory card
+            // Opponent invades a land territory: place 3 additional defending MODs there.
+            defendingTerritory.AddTroops(3);
         }
 
         public void StealthStation(Territory defendingTerritory)
         {
             //Opponent Invades.
             //Place a space station in the defending land territory.
-            defendingTerritory.containsSpaceStation = true;
+            defendingTerritory.AddSpaceStation();
 
         }
         

@@ -62,7 +62,7 @@ namespace UI
             
             Debug.Log( "_diceSprites.Length " + _diceSprites.Length );
     
-            for (var index = 0; index < attackResult.AttackingTroops; index++)
+            for (var index = 0; index < Math.Min(attackResult.AttackingTroops, attackResult.AttackerRolls.Length); index++)
             {
                 Debug.Log("i " + index + " " + attackResult.AttackerRolls[index]);
                 var attackerRoll = attackResult.AttackerRolls[index];
@@ -74,7 +74,7 @@ namespace UI
             Debug.Log("Defending troops " + attackResult.DefendingTroops);
             Debug.Log( "_defenderDiceRenderers.Length " + _defenderDiceRenderers.Length );
 
-            for (var index = 0; index < attackResult.DefendingTroops; index++)
+            for (var index = 0; index < Math.Min(attackResult.DefendingTroops, attackResult.DefenderRolls.Length); index++)
             {
                 Debug.Log("i " + index + " " + attackResult.DefenderRolls[index]);
                 var defenderRoll = attackResult.DefenderRolls[index];
@@ -82,7 +82,7 @@ namespace UI
                 _defenderDiceRenderers[index].enabled = true;
             }
 
-            var battleWidth = Math.Min(attackResult.AttackingTroops, attackResult.DefendingTroops);
+            var battleWidth = Math.Min(attackResult.AttackerRolls.Length, attackResult.DefenderRolls.Length);
             for (var index = 0; index < battleWidth; index++)
             {
                 var attackerRoll = attackResult.AttackerRolls[index];

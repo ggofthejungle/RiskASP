@@ -46,8 +46,13 @@ namespace Cards
             // Power-up costs match the 2210 decks as modelled in the reference Java version (avioane/InvadeEarth).
             // Diplomat
             CardType.EnergyCrisis => new CardSpec(0, CardTiming.BeforeFirstInvasion, ownerIsFirstArgument: true),
+            CardType.CeaseFire => new CardSpec(2, CardTiming.OpponentInvades),
+            CardType.Evacuation => new CardSpec(0, CardTiming.OpponentInvades),
             // Land
             CardType.AssembleModsL => new CardSpec(1, CardTiming.BeforeFirstInvasion, checkTargets: OwnTerritory),
+            CardType.StealthModsL => new CardSpec(0, CardTiming.OpponentInvades),
+            CardType.LandDeathTrap => new CardSpec(3, CardTiming.OpponentInvades),
+            CardType.StealthStation => new CardSpec(0, CardTiming.OpponentInvades),
             _ => new CardSpec(0, CardTiming.NotImplemented),
         };
     }
@@ -115,6 +120,78 @@ namespace Cards
 
         public string WhyCantPlay(Player p, Card card, object[] targets) =>
             WhyCantPlay(p, card) ?? card.Spec.CheckTargets?.Invoke(p, targets ?? Array.Empty<object>());
+
+        // ---------------- Reaction cards ("play after an opponent declares an invasion into a territory you occupy") ----------------
+
+        public const string CardOptionPrefix = "Card:";
+        public static string OptionFor(Card card) => CardOptionPrefix + card.Id;
+
+        public Card CardFromOption(Player p, string option)
+        {
+            if (p == null || option == null || !option.StartsWith(CardOptionPrefix)) return null;
+            return int.TryParse(option.Substring(CardOptionPrefix.Length), out var id) ? p.Cards.FirstOrDefault(c => c.Id == id) : null;
+        }
+
+        public IEnumerable<Card> PlayableReactions(Player defender, Actions.AttackAction attack) =>
+            defender == null ? Enumerable.Empty<Card>() : defender.Cards.Where(c => WhyCantReact(defender, c, attack) == null).ToList();
+
+        public string WhyCantReact(Player p, Card card, Actions.AttackAction attack)
+        {
+            if (attack == null) return "There is no invasion to react to.";
+            if (card == null || !p.Cards.Contains(card)) return $"{p.Name} doesn't hold that card.";
+            if (card.Timing != CardTiming.OpponentInvades) return $"{card.Name} isn't played in response to an invasion.";
+            if (attack.Target.Owner != p) return "Only the defender can react.";
+            if (!p.canPlayCommandCards) return "You are jammed (Frequency Jam) and can't play command cards this turn.";
+            if (!p.HasCommanderInPlay(card.Commander)) return $"You need your {card.Commander} in play to play {card.Name}.";
+            if (p.GetEnergy() < card.PowerUpCost) return $"{card.Name} costs {card.PowerUpCost} energy to play.";
+            switch (card.CardType)
+            {
+                case CardType.StealthStation:
+                    if (attack.Target.containsSpaceStation) return $"{attack.Target.Name} already has a space station.";
+                    if (Purchases.StationsOf(p) >= Purchases.MaxStations) return $"You already have {Purchases.MaxStations} space stations.";
+                    break;
+                case CardType.Evacuation:
+                    if (p.GetTerritoryCount() <= 1) return "You have nowhere to evacuate to.";
+                    break;
+            }
+            return null;
+        }
+
+        // Where Evacuation sends the units: the defender's strongest other territory (no path needed).
+        public static Map.Territory EvacuationDestination(Player p, Map.Territory attacked) =>
+            p.Territories.Where(t => t != attacked).OrderByDescending(t => t.Troops).FirstOrDefault();
+
+        // Plays a reaction card. Returns true if the invasion is cancelled (Cease Fire).
+        public bool PlayReaction(Player p, Card card, Actions.AttackAction attack)
+        {
+            var why = WhyCantReact(p, card, attack);
+            if (why != null) throw new InvalidOperationException(why);
+
+            p.SetEnergy(p.GetEnergy() - card.PowerUpCost);
+            p.RemoveCard(card);
+            _discard.Add(card);
+            Debug.Log($"{p.Name} plays {card.Name} against {attack.Player.Name}'s invasion of {attack.Target.Name}.");
+
+            var cancelled = false;
+            switch (card.CardType)
+            {
+                case CardType.StealthModsL:
+                case CardType.StealthStation:
+                    card.UseAbility(attack.Target);
+                    break;
+                case CardType.LandDeathTrap:
+                    card.UseAbility(attack.Origin);
+                    break;
+                case CardType.Evacuation:
+                    card.UseAbility(attack.Target, EvacuationDestination(p, attack.Target));
+                    break;
+                case CardType.CeaseFire:
+                    cancelled = true; // AttackPhase stops the invasion and blocks further attacks on p this turn
+                    break;
+            }
+            OnCardPlayed?.Invoke(p, card);
+            return cancelled;
+        }
 
         public Card Buy(Player p, CommanderType deck)
         {

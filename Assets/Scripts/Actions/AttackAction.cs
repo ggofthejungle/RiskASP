@@ -28,6 +28,12 @@ namespace Actions
                 return false;
             }
             
+            if (gm.AttackPhase.IsCeaseFireAgainst(Target.Owner))
+            {
+                UnityEngine.Debug.LogWarning($"AttackAction REJECTED: Cease Fire - {Player.Name} can't attack {Target.Owner.Name} this turn");
+                return false;
+            }
+
             if (Troops > 3)
             {
                 LogError($"Troops ({Troops}) is greater than 3");

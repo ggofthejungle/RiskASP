@@ -32,10 +32,13 @@ namespace TurnPhases
         public AttackResult LastAttackResult => _attackResults.Last();
         public IEnumerable<AttackResult> AttackResults => _attackResults;
 
-        // Reaction window (defender interrupt) before each dice roll.
-        // Step 1: the hook exists but nothing opens it yet (no defense cards). Step 2 will make it
-        // "defender holds a playable defense card". Tests can set it to force the window open.
-        public Func<AttackAction, bool> ShouldOpenReactionWindow = _ => false;
+        // Reaction window (defender interrupt) before each dice roll: opens only when the DEFENDER holds a
+        // defense card they can play right now (decision: we don't ask other players). Tests may override it.
+        public Func<AttackAction, bool> ShouldOpenReactionWindow;
+
+        // Defenders protected by Cease Fire for the rest of this turn.
+        private readonly HashSet<Player> _ceaseFire = new();
+        public bool IsCeaseFireAgainst(Player defender) => defender != null && _ceaseFire.Contains(defender);
 
         // Attack declared, waiting for the defender's answer before rolling.
         public AttackAction PendingAttack => _pendingAttack;
@@ -54,13 +57,18 @@ namespace TurnPhases
         {
             _gm = gm;
             _bs = bs;
+            ShouldOpenReactionWindow = DefenderCanReact;
         }
+
+        private bool DefenderCanReact(AttackAction attack) =>
+            _gm.CommandCards != null && _gm.CommandCards.PlayableReactions(attack.Target.Owner, attack).Any();
 
 
         public void Start(Player player)
         {
             _attackResults.Clear();
             _passedForTurn.Clear();
+            _ceaseFire.Clear();
             _pendingAttack = null;
             ConqueredTerritoriesCount = 0;
             _attackTurn = 1;
@@ -108,14 +116,22 @@ namespace TurnPhases
             {
                 _pendingAttack = attackAction;
                 SetState(AttackState.AwaitingDefender);
-                _gm.OpenDecision(
-                    new PendingDecision(_gm.GetPlayerId(defender), DecisionKind.DefenseReaction,
-                        new[] { DecisionOptions.Pass, DecisionOptions.PassForRestOfTurn }),
-                    OnDefenderAnswered);
+                AskDefender(attackAction);
                 return;
             }
 
             ResolveAttack(attackAction);
+        }
+
+        private void AskDefender(AttackAction attack)
+        {
+            var defender = attack.Target.Owner;
+            var options = new List<string>();
+            options.AddRange(_gm.CommandCards.PlayableReactions(defender, attack).Select(Cards.CommandCards.OptionFor));
+            options.Add(DecisionOptions.Pass);
+            options.Add(DecisionOptions.PassForRestOfTurn);
+            _gm.OpenDecision(new PendingDecision(_gm.GetPlayerId(defender), DecisionKind.DefenseReaction, options),
+                OnDefenderAnswered);
         }
 
         private void OnDefenderAnswered(DecisionResponseAction response)
@@ -124,18 +140,53 @@ namespace TurnPhases
             _pendingAttack = null;
             if (attack == null) return;
 
-            if (response.Option == DecisionOptions.PassForRestOfTurn)
-                _passedForTurn.Add(response.Player);
-            // (Defense cards will be handled here in later steps.)
+            var defender = response.Player;
+            var card = _gm.CommandCards.CardFromOption(defender, response.Option);
+            if (card != null)
+            {
+                var cancelled = _gm.CommandCards.PlayReaction(defender, card, attack);
+                if (cancelled)
+                {
+                    _ceaseFire.Add(defender);
+                    Debug.Log($"Cease Fire: {attack.Player.Name} can't attack {defender.Name} for the rest of this turn.");
+                    SetState(AttackState.Attacking);
+                    OnAttackTurn?.Invoke();
+                    return;
+                }
+                // More than one card per invasion is allowed: ask again while the defender can still react.
+                if (attack.Target.Owner == defender && attack.Target.Troops > 0
+                    && _gm.CommandCards.PlayableReactions(defender, attack).Any())
+                {
+                    _pendingAttack = attack;
+                    AskDefender(attack);
+                    return;
+                }
+            }
+            else if (response.Option == DecisionOptions.PassForRestOfTurn)
+                _passedForTurn.Add(defender);
 
             SetState(AttackState.Attacking);
+
+            // Cards may have changed things (Death Trap): re-check the attack before rolling.
+            var troops = Math.Min(attack.Troops, attack.Origin.GetAvailableTroops());
+            if (troops < 1 || attack.Origin.Owner != attack.Player)
+            {
+                Debug.Log($"AttackPhase: {attack.Player.Name}'s invasion of {attack.Target.Name} can't go ahead any more.");
+                OnAttackTurn?.Invoke();
+                return;
+            }
+            if (troops != attack.Troops)
+                attack = new AttackAction(attack.Player, attack.Turn, attack.AttackTurn, attack.Origin, attack.Target, troops);
             ResolveAttack(attack);
         }
 
         // Rolls the dice for a declared attack and applies the result.
         private void ResolveAttack(AttackAction attackAction)
         {
-            var attackResult = _bs.SimulateAttack(attackAction);
+            // Evacuated (empty) territory: no battle, the attacker simply takes it.
+            var attackResult = attackAction.Target.Troops == 0
+                ? new AttackResult(attackAction, 0, 0, attackAction.Origin.Troops, 0, 0, new int[0], new int[0])
+                : _bs.SimulateAttack(attackAction);
 
             attackResult.Origin.RemoveTroops(attackResult.AttackerLosses);
             attackResult.Target.RemoveTroops(attackResult.DefenderLosses);

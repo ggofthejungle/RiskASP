@@ -588,6 +588,11 @@ public class GameManager : MonoBehaviour
         _onDecisionAnswered = onAnswered;
         Debug.Log($"Decision opened: {decision} ({InputPlayer.Name})");
         OnPendingDecisionChanged?.Invoke(decision);
+
+        // AI defenders decide instantly.
+        var asked = InputPlayer;
+        if (asked != null && asked.IsBot())
+            HandlePlayerAction(new DecisionResponseAction(asked, _turn, DefenderAI.Choose(this, decision)));
     }
 
     private void CloseDecision()
