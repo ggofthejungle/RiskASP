@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Actions;
 using Cards;
+using Decisions;
 using Expansions;
 using Extensions;
 using Map;
@@ -37,8 +38,23 @@ public class GameManager : MonoBehaviour
     private Queue<Player> _playerQueue = new();
     public List<Player> GetPlayersInTurnOrder() => _playerQueue.ToList();
 
+    // Turn owner: whose turn it is.
     public Player CurrentPlayer => _currentPlayer;
     private Player _currentPlayer;
+
+    // Input owner: who the game is waiting on right now. Same as the turn owner unless a
+    // PendingDecision is open (e.g. a defender's reaction window), then it's that player.
+    public Player InputPlayer => _pendingDecision != null ? GetPlayerById(_pendingDecision.PlayerId) : _currentPlayer;
+    public bool IsInputPlayer(Player player) => player != null && InputPlayer == player;
+
+    public PendingDecision PendingDecision => _pendingDecision;
+    private PendingDecision _pendingDecision;
+    private Action<DecisionResponseAction> _onDecisionAnswered;
+    public Action<PendingDecision> OnPendingDecisionChanged; // null = decision closed
+
+    // Stable player ids (index in Players) so actions/decisions can be serialized.
+    public int GetPlayerId(Player player) => Players.IndexOf(player);
+    public Player GetPlayerById(int id) => id >= 0 && id < Players.Count ? Players[id] : null;
 
     public GameState GameState => _gameState;
     private GameState _gameState = GameState.Setup;
@@ -420,14 +436,61 @@ public class GameManager : MonoBehaviour
         player.AddCard(card);
     }
 
-    public void HandlePlayerAction(PlayerAction action)
+    // Single entry point for every player action (UI, bots, tests, later the network).
+    // Returns false if the action was rejected (nothing changes in that case).
+    public bool HandlePlayerAction(PlayerAction action)
     {
+        if (action == null)
+            return false;
+
+        // While a decision is open, the only thing allowed is an answer to it.
+        if (_pendingDecision != null && action is not DecisionResponseAction)
+        {
+            Debug.LogWarning($"Action {action.GetType().Name} from {action.Player?.Name} rejected: " +
+                             $"waiting for {InputPlayer?.Name} to answer {_pendingDecision.Kind}");
+            return false;
+        }
+
         if (!action.IsValid())
         {
-            Debug.LogWarning("Invalid action" + action);
-            return;
+            Debug.LogWarning("Invalid action " + action);
+            return false;
         }
+
+        if (action is DecisionResponseAction response)
+        {
+            var callback = _onDecisionAnswered;
+            CloseDecision();
+            callback?.Invoke(response);
+            return true;
+        }
+
         _currentPhase.OnAction(_currentPlayer, action);
+        return true;
+    }
+
+    // Opens a decision for a (possibly non-turn-owner) player. `onAnswered` runs once,
+    // after the decision is closed, with the validated answer.
+    public void OpenDecision(PendingDecision decision, Action<DecisionResponseAction> onAnswered)
+    {
+        if (decision == null) throw new ArgumentNullException(nameof(decision));
+        if (_pendingDecision != null)
+            throw new InvalidOperationException($"A decision is already pending: {_pendingDecision}");
+        if (GetPlayerById(decision.PlayerId) == null)
+            throw new ArgumentException($"Unknown player id {decision.PlayerId}");
+
+        _pendingDecision = decision;
+        _onDecisionAnswered = onAnswered;
+        Debug.Log($"Decision opened: {decision} ({InputPlayer.Name})");
+        OnPendingDecisionChanged?.Invoke(decision);
+    }
+
+    private void CloseDecision()
+    {
+        if (_pendingDecision == null) return;
+        _pendingDecision = null;
+        _onDecisionAnswered = null;
+        OnPendingDecisionChanged?.Invoke(null);
     }
     
 
@@ -447,6 +510,7 @@ public class GameManager : MonoBehaviour
 
     private void SetTurnPhase(IPhase phase)
     {
+        CloseDecision();
         var oldPhase = _currentPhase;
         _currentPhase = phase;
         StartTurnPhase();

@@ -63,7 +63,12 @@ public class SelectionManager : MonoBehaviour
     {
         foreach (var territorySelection in TerritoryToSelectionMap.Values)
         {
-            territorySelection.OnClicked += selection => _currentSelectionPhase.OnClicked(_gm.CurrentPlayer, selection);
+            territorySelection.OnClicked += selection =>
+            {
+                // Map clicks belong to the turn owner; ignore them while someone else is deciding.
+                if (_gm.PendingDecision != null) return;
+                _currentSelectionPhase.OnClicked(_gm.CurrentPlayer, selection);
+            };
         }
 
         _gm.OnTurnPhaseChanged += OnTurnPhaseChanged;

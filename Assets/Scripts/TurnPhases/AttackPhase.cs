@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Actions;
+using Decisions;
 using JetBrains.Annotations;
 using Map;
 using player;
@@ -29,6 +30,19 @@ namespace TurnPhases
         public AttackResult LastAttackResult => _attackResults.Last();
         public IEnumerable<AttackResult> AttackResults => _attackResults;
 
+        // Reaction window (defender interrupt) before each dice roll.
+        // Step 1: the hook exists but nothing opens it yet (no defense cards). Step 2 will make it
+        // "defender holds a playable defense card". Tests can set it to force the window open.
+        public Func<AttackAction, bool> ShouldOpenReactionWindow = _ => false;
+
+        // Attack declared, waiting for the defender's answer before rolling.
+        public AttackAction PendingAttack => _pendingAttack;
+        private AttackAction _pendingAttack;
+
+        // Defenders who chose "Pass for rest of turn" this turn.
+        private readonly HashSet<Player> _passedForTurn = new();
+        public bool HasPassedForTurn(Player defender) => _passedForTurn.Contains(defender);
+
         public Action<AttackResult> OnAttacked;
         public Action<AttackReinforceAction> OnReinforced;
         public Action OnAttackStateChanged;
@@ -44,6 +58,8 @@ namespace TurnPhases
         public void Start(Player player)
         {
             _attackResults.Clear();
+            _passedForTurn.Clear();
+            _pendingAttack = null;
             ConqueredTerritoriesCount = 0;
             _attackTurn = 1;
             SetState(AttackState.Attacking);
@@ -53,6 +69,12 @@ namespace TurnPhases
         // ReSharper disable Unity.PerformanceAnalysis
         public void OnAction(Player player, PlayerAction action)
         {
+            if (_state == AttackState.AwaitingDefender)
+            {
+                Debug.LogWarning($"AttackPhase: waiting for the defender, ignoring {action.GetType().Name}");
+                return;
+            }
+
             if (action is AttackAction attackAction)
                 HandleAttackAction(attackAction);
             else if (action is AttackReinforceAction attackReinforceAction)
@@ -77,6 +99,39 @@ namespace TurnPhases
                 return;
             }
 
+            // 1) Declare. 2) Reaction window for the defender (if it applies). 3) Roll.
+            var defender = attackAction.Target.Owner;
+            if (defender != null && !_passedForTurn.Contains(defender) && ShouldOpenReactionWindow(attackAction))
+            {
+                _pendingAttack = attackAction;
+                SetState(AttackState.AwaitingDefender);
+                _gm.OpenDecision(
+                    new PendingDecision(_gm.GetPlayerId(defender), DecisionKind.DefenseReaction,
+                        new[] { DecisionOptions.Pass, DecisionOptions.PassForRestOfTurn }),
+                    OnDefenderAnswered);
+                return;
+            }
+
+            ResolveAttack(attackAction);
+        }
+
+        private void OnDefenderAnswered(DecisionResponseAction response)
+        {
+            var attack = _pendingAttack;
+            _pendingAttack = null;
+            if (attack == null) return;
+
+            if (response.Option == DecisionOptions.PassForRestOfTurn)
+                _passedForTurn.Add(response.Player);
+            // (Defense cards will be handled here in later steps.)
+
+            SetState(AttackState.Attacking);
+            ResolveAttack(attack);
+        }
+
+        // Rolls the dice for a declared attack and applies the result.
+        private void ResolveAttack(AttackAction attackAction)
+        {
             var attackResult = _bs.SimulateAttack(attackAction);
 
             attackResult.Origin.RemoveTroops(attackResult.AttackerLosses);
@@ -125,6 +180,7 @@ namespace TurnPhases
 
         public void End(Player player)
         {
+            _pendingAttack = null;
         }
         
         private void SetState(AttackState state)
@@ -139,5 +195,6 @@ namespace TurnPhases
     {
         Attacking,
         Fortifying,
+        AwaitingDefender, // attack declared; defender's reaction window is open
     }
 }

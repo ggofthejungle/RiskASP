@@ -1,6 +1,6 @@
 # Invade Earth (RiskASP fork): handoff for Claude
 
-Read this first. Last updated: Oct 29, 2026. Owner: George (ggofthejungle).
+Read this first. Last updated: Oct 30, 2026. Owner: George (ggofthejungle).
 
 ## Where things are
 - Unity project: `C:\Users\georg\source\RiskASP`, Unity **6000.4.0f1**. Work on branch **`dev`**. It is local only and NOT pushed yet.
@@ -40,6 +40,13 @@ Read this first. Last updated: Oct 29, 2026. Owner: George (ggofthejungle).
   - Game scripts are now the `InvadeEarth.Game` asmdef.
   - Tests: `Assets/Tests/PlayMode/HotSeatGameTests.cs`, **7/7 passing**. Helper: `Assets/Tests/Editor/TestRunHelper.cs`.
 
+- RW-1 (turn owner vs input owner):
+  - `GameManager.InputPlayer` is `CurrentPlayer` unless a `PendingDecision` (`Scripts/Decisions/PendingDecision.cs`: PlayerId, Kind, Options) is open. `PlayerAction.IsValid` checks `InputPlayer`. No open decision (null) means a normal turn action.
+  - `HandlePlayerAction` now returns bool. While a decision is open, only a `DecisionResponseAction` from the player being asked is accepted. Use `OpenDecision(decision, onAnswered)`. Phase changes close any open decision, and map clicks are ignored while one is open.
+  - `AttackPhase`: `AttackAction` = declare, then the reaction window, then the roll. Hook `AttackPhase.ShouldOpenReactionWindow` defaults to false, so nothing changes yet. Options are `Pass` / `PassForRestOfTurn`. New state `AttackState.AwaitingDefender`.
+  - Serializable actions: `Actions/ActionData.cs` (`ActionData` + `ActionCodec`, JsonUtility round trip) for Attack, AttackReinforce, EndPhase, DecisionResponse. Players are identified by index in `Players`, territories by name.
+  - Tests: `Assets/Tests/PlayMode/InputOwnerTests.cs` (10 tests). Full suite **17/17 passing**.
+
 ## Decisions (locked)
 - **Approach:** keep RiskASP and pull the rules out gradually into pure C#. No full rewrite.
 - **Reaction window (defender interrupts):**
@@ -54,18 +61,19 @@ Read this first. Last updated: Oct 29, 2026. Owner: George (ggofthejungle).
 - **Legal:** before any sale, rewrite all card names and text and use an ORIGINAL map (it's currently Hasbro's Risk/2210). Don't ship DLV2.
 
 ## Next steps (in order)
-Every task has a unique ID. When George says "do RW-1", that is the task. **CURRENT TASK: RW-1**, unless George says otherwise.
+Every task has a unique ID. When George says "do RW-1", that is the task. **CURRENT TASK: RW-2** (RW-1 done), unless George says otherwise.
 
 - **PT-1: Hot-seat play-test (George does it).** Play from the Menu scene with 2 humans. Check the bid rejection message, that both players get a turn, and that year 2 bidding opens. Fix any UI issues he reports. Not a blocker for RW-1.
 
 ### Reaction window (defender interrupts): do these in order, each one depends on the one before
-- **RW-1: Separate turn owner from input owner (refactor). Do this first.**
+- **RW-1: Separate turn owner from input owner (refactor).** ✅ DONE (see "Done so far"; the names differ slightly from this plan).
   - Problem: `GameManager` assumes the only player who ever gives input is `CurrentPlayer`, so a defender can't answer during the attacker's turn. That's why the old interrupt attempt broke everything.
   - Add `PendingDecision { Player Player; DecisionKind Kind; ... }` to `GameManager`, separate from `CurrentPlayer`. Kinds: `TurnAction` (normal) and `Reaction` (defender).
   - Inputs go through `HandlePlayerAction(action)`, which validates `action.Player == PendingDecision.Player` (not just the current player).
   - Start with **AttackPhase only**. Add `DeclareAttack` / `PassReaction` / `PlayReactionCard` actions, but the window doesn't open yet. With no defense cards it behaves exactly as now.
   - Done when: HotSeatGameTests still 7/7, and a new EditMode or PlayMode test proves that an action from a non-pending player is rejected.
 - **RW-2: Open the window in AttackPhase before EVERY dice roll.**
+  - Implement by setting `AttackPhase.ShouldOpenReactionWindow` and adding `Card:<id>` options to the decision.
   - After `DeclareAttack`: if the defender has a playable defense card (commander alive, enough energy) and isn't jammed or passed for the turn, set `PendingDecision` to the defender (Reaction). Otherwise roll immediately.
   - The defender plays 0+ cards, then Done / Pass / PassRestOfTurn. Recheck that the attack is still valid, then roll.
   - Tests: no card → no window; window opens every roll; PassRestOfTurn is honored.

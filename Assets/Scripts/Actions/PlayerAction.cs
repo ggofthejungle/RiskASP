@@ -17,9 +17,11 @@ namespace Actions
         public virtual bool IsValid()
         {
             var gm  = GameManager.Instance;
-            if(Player != gm.CurrentPlayer)
+            // The input owner is the turn owner, unless a PendingDecision is asking someone else.
+            var inputPlayer = gm.InputPlayer;
+            if(Player != inputPlayer)
             {
-                LogError($"Player ({Player.Name}) is not the current player ({gm.CurrentPlayer.Name})");
+                LogError($"Player ({Player?.Name}) is not the input player ({inputPlayer?.Name})");
                 return false;
             }
             
@@ -32,6 +34,11 @@ namespace Actions
             return true;
         }
         
+        protected void LogWarning(string message)
+        {
+            UnityEngine.Debug.LogWarning(GetType().Name + " REJECTED: " + message);
+        }
+
         protected void LogError(string message)
         {
             string name = GetType().Name;
