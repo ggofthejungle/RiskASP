@@ -84,7 +84,7 @@ namespace Map
 
         private void LateUpdate()
         {
-            if (_gm == null || _gm.GameState == GameState.Over || _gm.IsBidding)
+            if (_gm == null || _gm.GameState == GameState.Over || _gm.IsBidding || _gm.IsChoosingOrder)
             {
                 Hide();
                 return;

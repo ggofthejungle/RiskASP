@@ -266,20 +266,90 @@ public class GameManager : MonoBehaviour
         var tieBreak = bidders.ToDictionary(p => p, _ => _rng.Next());
         var ordered = bidders.OrderByDescending(p => p._energyBid).ThenBy(p => tieBreak[p]).ToList();
 
-        _playerQueue.Clear();
         foreach (var player in ordered)
-        {
             player.SetEnergy(player.GetEnergy() - player._energyBid);
-            _playerQueue.Enqueue(player);
-        }
-        foreach (var player in dead)
-            _playerQueue.Enqueue(player);
 
-        Debug.Log($"Bidding done (year {_year}). Turn order: " +
+        Debug.Log($"Bidding done (year {_year}). Bid order: " +
                   string.Join(", ", ordered.Select(p => $"{p.Name} ({p._energyBid})")));
 
         _isBidding = false;
         SetBidUIActive(false);
+        if (UIGameInfo != null)
+            UIGameInfo.CloseInstructionWindow();
+
+        // 2210: in bid order (highest first), each player CHOOSES their turn position for this year.
+        _isChoosingOrder = true;
+        _choosers = new Queue<Player>(ordered);
+        _chosenPositions = new Player[ordered.Count];
+        _deadAfterChoosing = dead;
+        PromptNextChooser();
+    }
+
+    // ---------------- Choosing turn order (after bidding) ----------------
+    public bool IsChoosingOrder => _isChoosingOrder;
+    private bool _isChoosingOrder;
+    private Queue<Player> _choosers = new();
+    private Player[] _chosenPositions = Array.Empty<Player>();
+    private List<Player> _deadAfterChoosing = new();
+
+    // 1-based positions still free this year.
+    public List<int> AvailableTurnPositions =>
+        Enumerable.Range(0, _chosenPositions.Length).Where(i => _chosenPositions[i] == null).Select(i => i + 1).ToList();
+
+    private void PromptNextChooser()
+    {
+        if (_choosers.Count == 0)
+        {
+            FinishChoosingOrder();
+            return;
+        }
+
+        var chooser = _choosers.Peek();
+        var free = AvailableTurnPositions;
+        var oldPlayer = _currentPlayer;
+        _currentPlayer = chooser;
+        OnPlayerTurnChanged?.Invoke(oldPlayer, _currentPlayer);
+
+        // The last player gets whatever is left; bots take the earliest free position.
+        if (free.Count == 1 || chooser.IsBot())
+        {
+            ChooseTurnPosition(free[0]);
+            return;
+        }
+        ShowMessage($"Year {_year}: {chooser.Name}, choose when you play this year ({string.Join(", ", free.Select(Ordinal))}).");
+    }
+
+    // The current chooser takes a 1-based turn position. Returns false (nothing changes) if it isn't free.
+    public bool ChooseTurnPosition(int position)
+    {
+        if (!_isChoosingOrder || _choosers.Count == 0)
+        {
+            Debug.Log("ChooseTurnPosition ignored: not choosing turn order.");
+            return false;
+        }
+        if (position < 1 || position > _chosenPositions.Length || _chosenPositions[position - 1] != null)
+        {
+            ShowMessage($"Position {position} isn't free. Free: {string.Join(", ", AvailableTurnPositions.Select(Ordinal))}.");
+            return false;
+        }
+
+        var chooser = _choosers.Dequeue();
+        _chosenPositions[position - 1] = chooser;
+        Debug.Log($"Year {_year}: {chooser.Name} plays {Ordinal(position)}");
+        PromptNextChooser();
+        return true;
+    }
+
+    private void FinishChoosingOrder()
+    {
+        _playerQueue.Clear();
+        foreach (var player in _chosenPositions)
+            _playerQueue.Enqueue(player);
+        foreach (var player in _deadAfterChoosing)
+            _playerQueue.Enqueue(player);
+        Debug.Log($"Turn order (year {_year}): " + string.Join(", ", _chosenPositions.Select(p => p.Name)));
+
+        _isChoosingOrder = false;
         if (UIGameInfo != null)
             UIGameInfo.CloseInstructionWindow();
         if (_gameState == GameState.Setup)
@@ -288,6 +358,8 @@ public class GameManager : MonoBehaviour
         _turnsTakenThisYear = 0;
         StartNextPlayerTurn();
     }
+
+    public static string Ordinal(int n) => n switch { 1 => "1st", 2 => "2nd", 3 => "3rd", _ => $"{n}th" };
 
     private void StartNextPlayerTurn()
     {
@@ -311,7 +383,7 @@ public class GameManager : MonoBehaviour
     // Called when the current player's turn is over (Fortify ended).
     private void NextTurn()
     {
-        if (_isBidding || _gameState == GameState.Over)
+        if (_isBidding || _isChoosingOrder || _gameState == GameState.Over)
             return;
 
         if (_currentPlayer != null)

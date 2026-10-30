@@ -115,7 +115,11 @@ public class HotSeatGameTests
         Assert.IsTrue(_gm.SubmitBid(0));
 
         Assert.IsFalse(_gm.IsBidding, "Bidding is over after both bid");
-        Assert.AreEqual(first, _gm.CurrentPlayer, "Highest bidder plays first");
+        Assert.IsTrue(_gm.IsChoosingOrder, "Then the highest bidder chooses a turn position");
+        Assert.AreEqual(first, _gm.CurrentPlayer, "Highest bidder chooses first");
+        Assert.IsTrue(_gm.ChooseTurnPosition(1));
+        Assert.IsFalse(_gm.IsChoosingOrder, "The last player gets the remaining position automatically");
+        Assert.AreEqual(first, _gm.CurrentPlayer, "Highest bidder plays first (chose 1st)");
         Assert.IsInstanceOf<ReinforcePhase>(_gm.CurrentPhase);
         // The bid is paid when bidding ends; then the first player's turn starts and adds that turn's income.
         Assert.AreEqual(3 - 2 + TurnIncome(first), first.GetEnergy(), "3 - 2 + income");
@@ -131,8 +135,55 @@ public class HotSeatGameTests
         Assert.IsTrue(_gm.SubmitBid(0));
         var second = _gm.CurrentPlayer;
         Assert.IsTrue(_gm.SubmitBid(3));
+        TestGame.ChooseEarliest(_gm);
         Assert.AreEqual(second, _gm.CurrentPlayer, "The player who bid 3 plays first");
         Assert.AreEqual(0 + TurnIncome(second), second.GetEnergy(), "3 - 3 + income");
+        yield break;
+    }
+
+    // ---------- Choosing turn order (2210: highest bidder picks their position) ----------
+
+    [UnityTest]
+    public IEnumerator HighestBidder_CanChooseToPlaySecond()
+    {
+        var first = _gm.CurrentPlayer;
+        Assert.IsTrue(_gm.SubmitBid(2));
+        var second = _gm.CurrentPlayer;
+        Assert.IsTrue(_gm.SubmitBid(0));
+
+        Assert.AreEqual(first, _gm.CurrentPlayer, "Highest bidder chooses");
+        Assert.IsTrue(_gm.ChooseTurnPosition(2));
+        Assert.IsFalse(_gm.IsChoosingOrder);
+        Assert.AreEqual(second, _gm.CurrentPlayer, "The other player plays 1st");
+        Assert.IsInstanceOf<ReinforcePhase>(_gm.CurrentPhase);
+
+        PlaySimpleTurn();
+        Assert.AreEqual(first, _gm.CurrentPlayer, "Highest bidder plays 2nd, as chosen");
+        Assert.AreEqual(1, _gm.Year);
+        yield break;
+    }
+
+    [UnityTest]
+    public IEnumerator ChoosingAPositionThatDoesNotExist_IsRejected()
+    {
+        Assert.IsTrue(_gm.SubmitBid(1));
+        Assert.IsTrue(_gm.SubmitBid(0));
+        var chooser = _gm.CurrentPlayer;
+        Assert.IsFalse(_gm.ChooseTurnPosition(0));
+        Assert.IsFalse(_gm.ChooseTurnPosition(3));
+        Assert.IsTrue(_gm.IsChoosingOrder, "Still choosing");
+        Assert.AreEqual(chooser, _gm.CurrentPlayer);
+        CollectionAssert.AreEqual(new[] { 1, 2 }, _gm.AvailableTurnPositions);
+        yield break;
+    }
+
+    [UnityTest]
+    public IEnumerator ChoosingOutsideTheChoosingStep_IsIgnored()
+    {
+        Assert.IsTrue(_gm.IsBidding);
+        Assert.IsFalse(_gm.ChooseTurnPosition(1), "Not during bidding");
+        BidAll(0);
+        Assert.IsFalse(_gm.ChooseTurnPosition(1), "Not during a turn");
         yield break;
     }
 
@@ -187,6 +238,7 @@ public class HotSeatGameTests
         for (int i = 0; i < 10 && _gm.IsBidding; i++)
             Assert.IsTrue(_gm.SubmitBid(Mathf.Min(bid, _gm.CurrentPlayer.GetEnergy())));
         Assert.IsFalse(_gm.IsBidding);
+        TestGame.ChooseEarliest(_gm);
     }
 
     // Plays turns until bidding opens again (or the game ends). Returns who played, in order.

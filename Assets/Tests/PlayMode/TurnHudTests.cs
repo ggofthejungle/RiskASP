@@ -71,6 +71,20 @@ public class TurnHudTests
     }
 
     [UnityTest]
+    public IEnumerator Banner_WhileChoosingTurnOrder_AsksTheHighestBidderToChoose()
+    {
+        Assert.IsTrue(_gm.SubmitBid(1));
+        Assert.IsTrue(_gm.SubmitBid(0));
+        yield return null;
+        Assert.IsTrue(_gm.IsChoosingOrder);
+        var chooser = _gm.CurrentPlayer;
+        StringAssert.Contains($"{chooser.Name.ToUpperInvariant()} CHOOSES", _gm.TurnHud.TitleText);
+        StringAssert.Contains("choose when you play", _gm.TurnHud.InstructionText);
+        StringAssert.Contains("1st", _gm.TurnHud.InstructionText);
+        Assert.IsFalse(_gm.SelectionArrow.IsVisible);
+    }
+
+    [UnityTest]
     public IEnumerator Banner_FollowsTurnAndPhase_AndSplashShowsForHumanTurn()
     {
         BidAll();
@@ -153,6 +167,7 @@ public class TurnHudTests
     {
         for (int i = 0; i < 10 && _gm.IsBidding; i++)
             Assert.IsTrue(_gm.SubmitBid(0));
+        TestGame.ChooseEarliest(_gm);
     }
 
     private void PlaceAllAndEndReinforce()

@@ -307,6 +307,7 @@ public class CommandCardTests
     {
         for (int i = 0; i < 10 && _gm.IsBidding; i++)
             Assert.IsTrue(_gm.SubmitBid(_gm.CurrentPlayer == _alice ? 1 : 0));
+        TestGame.ChooseEarliest(_gm);
         Assert.AreEqual(_alice, _gm.CurrentPlayer);
         Assert.IsInstanceOf<ReinforcePhase>(_gm.CurrentPhase);
         _alice.SetEnergy(10);

@@ -260,6 +260,7 @@ public class InputOwnerTests
     {
         for (int i = 0; i < 10 && _gm.IsBidding; i++)
             Assert.IsTrue(_gm.SubmitBid(0));
+        TestGame.ChooseEarliest(_gm);
         var p = _gm.CurrentPlayer;
         Assert.IsInstanceOf<ReinforcePhase>(_gm.CurrentPhase);
         var rp = (ReinforcePhase)_gm.CurrentPhase;

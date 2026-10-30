@@ -31,6 +31,7 @@ namespace UI
         private TMP_Text _instruction;
         private readonly Image[] _chips = new Image[3];
         private readonly TMP_Text[] _chipTexts = new TMP_Text[3];
+        private RectTransform _orderPicker;
 
         private CanvasGroup _splash;
         private Image _splashBand;
@@ -84,13 +85,15 @@ namespace UI
             var color = PlayerColor(p);
 
             _colorBar.color = color;
-            SetText(_title, _gm.GameState == GameState.Over ? "GAME OVER" : TurnTitle(p));
+            SetText(_title, _gm.GameState == GameState.Over ? "GAME OVER"
+                : _gm.IsChoosingOrder && p != null ? $"{p.Name.ToUpperInvariant()} CHOOSES"
+                : TurnTitle(p));
             SetText(_sub, $"Year {_gm.Year}/{GameManager.MaxYears}  ·  Turn {Mathf.Max(_gm.Turn, 1)}");
 
             // Phase stepper
-            if (_gm.IsBidding || _gm.GameState != GameState.Playing)
+            if (_gm.IsBidding || _gm.IsChoosingOrder || _gm.GameState != GameState.Playing)
             {
-                SetChip(0, _gm.IsBidding ? "Bidding for turn order" : "—", true, color);
+                SetChip(0, _gm.IsBidding ? "Bidding for turn order" : _gm.IsChoosingOrder ? "Choosing turn order" : "—", true, color);
                 _chips[1].gameObject.SetActive(false);
                 _chips[2].gameObject.SetActive(false);
             }
@@ -113,6 +116,37 @@ namespace UI
             }
 
             SetText(_instruction, Instruction());
+            RefreshOrderPicker(color);
+        }
+
+        // Buttons "1st / 2nd / ..." while a human chooses their turn position.
+        private string _orderPickerKey = "";
+        private void RefreshOrderPicker(Color color)
+        {
+            var p = _gm.CurrentPlayer;
+            var show = _gm.IsChoosingOrder && p != null && !p.IsBot();
+            _orderPicker.gameObject.SetActive(show);
+            if (!show) { _orderPickerKey = ""; return; }
+
+            var free = _gm.AvailableTurnPositions;
+            var key = p.Name + ":" + string.Join(",", free);
+            if (key == _orderPickerKey) return;
+            _orderPickerKey = key;
+
+            foreach (Transform child in _orderPicker) Destroy(child.gameObject);
+            foreach (var position in free)
+            {
+                var pos = position;
+                var img = NewImage($"Pos{pos}", _orderPicker, color);
+                img.raycastTarget = true;
+                var button = img.gameObject.AddComponent<Button>();
+                button.targetGraphic = img;
+                button.onClick.AddListener(() => _gm.ChooseTurnPosition(pos));
+                var label = NewText("Label", img.rectTransform, 24, FontStyles.Bold, TextAlignmentOptions.Center);
+                label.color = ReadableOn(color);
+                label.text = $"Play {GameManager.Ordinal(pos)}";
+                Stretch(label.rectTransform);
+            }
         }
 
         private void SetChip(int i, string text, bool active, Color playerColor, bool done = false)
@@ -134,6 +168,10 @@ namespace UI
             if (_gm.IsBidding)
                 return $"<b>{p.Name}</b>: type a bid from 0 to {p.GetEnergy()} energy and press <b>Submit</b>. " +
                        "Highest bid plays first this year.";
+
+            if (_gm.IsChoosingOrder)
+                return $"<b>{p.Name}</b>, you bid highest: choose when you play this year " +
+                       $"({string.Join(", ", _gm.AvailableTurnPositions.ConvertAll(GameManager.Ordinal))}).";
 
             if (_gm.PendingDecision != null)
                 return $"Waiting for <b>{_gm.InputPlayer?.Name}</b> to respond to the attack…";
@@ -196,7 +234,7 @@ namespace UI
                 return;
             }
 
-            if (newPlayer.IsBot()) return;
+            if (newPlayer.IsBot() || _gm.IsChoosingOrder) return;
 
             var handOff = oldPlayer != null && !oldPlayer.IsBot() && oldPlayer != newPlayer
                 ? $"Pass the device to {newPlayer.Name}"
@@ -274,6 +312,16 @@ namespace UI
             Place(_instruction.rectTransform, new Vector2(0, 0), new Vector2(1, 1), new Vector2(28, 8), new Vector2(-12, -106));
             _instruction.textWrappingMode = TextWrappingModes.Normal;
             _instruction.overflowMode = TextOverflowModes.Ellipsis;
+
+            // Turn-position picker (top-centre).
+            _orderPicker = new GameObject("TurnOrderPicker", typeof(RectTransform)).GetComponent<RectTransform>();
+            _orderPicker.SetParent(transform, false);
+            Place(_orderPicker, new Vector2(0.36f, 0.72f), new Vector2(0.64f, 0.80f), Vector2.zero, Vector2.zero); // top-centre, below the dice panel
+            var pickerLayout = _orderPicker.gameObject.AddComponent<HorizontalLayoutGroup>();
+            pickerLayout.spacing = 8;
+            pickerLayout.childControlWidth = pickerLayout.childControlHeight = true;
+            pickerLayout.childForceExpandWidth = pickerLayout.childForceExpandHeight = true;
+            _orderPicker.gameObject.SetActive(false);
 
             // Splash (full-width band in the middle of the screen; never blocks clicks).
             var splashGo = new GameObject("TurnSplash", typeof(RectTransform), typeof(CanvasGroup));

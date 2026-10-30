@@ -295,6 +295,7 @@ public class MergeRegressionTests
     {
         for (int i = 0; i < 10 && _gm.IsBidding; i++)
             Assert.IsTrue(_gm.SubmitBid(_gm.CurrentPlayer == first ? 1 : 0));
+        TestGame.ChooseEarliest(_gm);
         Assert.AreEqual(first, _gm.CurrentPlayer);
     }
 
