@@ -167,6 +167,11 @@ public class GameManager : MonoBehaviour
         //this order can be random to start bidding. after bidding, the order will be set on a turn-by-turn basis
         //call it once so that HandlePlayerBidEnergy can continue
         //DrawStartingCards();
+        // Test setup from main (commanders + space station on first territory)
+        _tr.Territories.First().AddCommander(new Commander(CommanderType.LandCommander));
+        _tr.Territories.First().AddCommander(new Commander(CommanderType.Diplomat));
+        _tr.Territories.First().AddCommander(new Commander(CommanderType.NuclearCommander));
+        _tr.Territories.First().AddSpaceStation();
     }
 
     private void DrawStartingCards()

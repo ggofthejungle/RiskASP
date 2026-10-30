@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Antlr4.Runtime.Misc;
 using Cards;
+using Expansions;
 using Extensions;
 using Map;
 using UnityEngine;
@@ -27,6 +29,10 @@ namespace player
 
         public int _energy;
         public int _energyBid;
+
+        public ArrayList<Commander> _CommandersArray = new();
+        
+        public int _spaceStationCount;
 
         public PlayerColor Color;
 
@@ -128,6 +134,23 @@ namespace player
             var territoriesBonus = GetTerritoryCountBonus();
             return territoriesBonus + continentBonus;
         }
+
+        public void PurchaseCommanders(Commander commander)
+        {
+            _energy -= 3;
+            SetCommandersArray(commander);
+        }
+
+        public void SetCommandersArray(Commander commander)
+        {
+            _CommandersArray.Add(commander);
+        }
+
+        public ArrayList<Commander> GetCommandersArray()
+        {
+            return _CommandersArray;
+        }
+
 
         public void ClearTroops()
         {

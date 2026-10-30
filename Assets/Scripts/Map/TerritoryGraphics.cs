@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using Actions;
+using Expansions;
 using player;
 using TMPro;
 using Unity.VisualScripting;
@@ -16,6 +18,8 @@ namespace Map
         [SerializeField] private SpriteRenderer _territorySpriteRenderer;
         [SerializeField] private SpriteRenderer _troopsCountBackgroundSpriteRenderer;
         [SerializeField] private TMP_Text _troopsCountText;
+        [SerializeField] private TMP_Text _commandersText;
+        [SerializeField] private TMP_Text _spaceStationText;
         [SerializeField] private TroopCountChangedEffect _troopsChangedEffectPrefab;
         [SerializeField] private Transform _troopsChangedEffectParent;
         [SerializeField] public TMP_Text _territoryNameText;
@@ -38,7 +42,11 @@ namespace Map
 
 
             _territory.OnTroopsChanged += OnTroopsChanged;
+            _territory.OnCommandersChanged += OnCommandersChanged;
+            _territory.OnSpaceStationChanged += OnSpaceStationChanged;
         }
+
+
 
         private void Start()
         {
@@ -54,6 +62,39 @@ namespace Map
             var difference = newTroops - oldTroops;
             var troopCountChangedEffect = InstantiateTroopCountChangedEffect();
             troopCountChangedEffect.SetTroopText(difference);
+        }
+        private void OnCommandersChanged(List<Commander> oldCommandersList, List<Commander> newCommandersList)
+        {
+            //TODO: implement: check old vs new 
+            
+            //I guess re-enable this once we are done testing?
+            /*if(GameManager.Instance.GamePhase == GamePhase.Setup)
+                return;*/
+
+            _commandersText.text = "";
+            // loop thru commanders list and add to _commandersText
+            foreach (var commander in newCommandersList)
+            {
+                if (commander.Type == CommanderType.LandCommander)
+                    _commandersText.text += " " + "L";
+                else if (commander.Type == CommanderType.Diplomat)
+                    _commandersText.text += " " + "D";
+                else if (commander.Type == CommanderType.SpaceCommander)
+                    _commandersText.text += " " + "S";
+                else if (commander.Type == CommanderType.NuclearCommander)
+                    _commandersText.text += " " + "N";
+                else if (commander.Type == CommanderType.NavalCommander)
+                    _commandersText.text += " " + "W";
+            }
+
+        }
+
+        private void OnSpaceStationChanged(bool s)
+        {
+            if (s)
+                _spaceStationText.text = "YESSSSSS *";
+            else
+                _spaceStationText.text = "NO SPACE STATION";
         }
 
 
@@ -78,6 +119,7 @@ namespace Map
             _playerColor = _territory.Owner.Color;
             UpdateColor();
             SetTroopsCount(_territory.Troops);
+            //SetCommanderAndSpaceStationLabels() //if I knew what string to put in parentheses
         }
 
         private void UpdateColor()
@@ -97,7 +139,7 @@ namespace Map
         {
             _troopsCountText.text = territoryTroops.ToString();
         }
-
+        
         private void SetColor(Color color)
         {
             _territorySpriteRenderer.color = color;
