@@ -24,7 +24,7 @@ namespace player
             if (_botBrain == null)
             {
                 Debug.Log("BotPlayer Awake: BotBrain is null, finding a BotBrain in the scene");
-                _botBrain = FindObjectOfType<BotBrain>();
+                _botBrain = FindFirstObjectByType<BotBrain>();
             }
         }
 
