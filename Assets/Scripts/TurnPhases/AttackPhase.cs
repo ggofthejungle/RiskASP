@@ -169,14 +169,14 @@ namespace TurnPhases
 
             // Cards may have changed things (Death Trap): re-check the attack before rolling.
             var troops = Math.Min(attack.Troops, attack.Origin.GetAvailableTroops());
-            if (troops < 1 || attack.Origin.Owner != attack.Player)
+            if (troops + attack.Commanders.Count < 1 || attack.Origin.GetAvailableTroops() < 1 || attack.Origin.Owner != attack.Player)
             {
                 Debug.Log($"AttackPhase: {attack.Player.Name}'s invasion of {attack.Target.Name} can't go ahead any more.");
                 OnAttackTurn?.Invoke();
                 return;
             }
             if (troops != attack.Troops)
-                attack = new AttackAction(attack.Player, attack.Turn, attack.AttackTurn, attack.Origin, attack.Target, troops);
+                attack = new AttackAction(attack.Player, attack.Turn, attack.AttackTurn, attack.Origin, attack.Target, troops, attack.Commanders);
             ResolveAttack(attack);
         }
 
@@ -188,8 +188,16 @@ namespace TurnPhases
                 ? new AttackResult(attackAction, 0, 0, attackAction.Origin.Troops, 0, 0, new int[0], new int[0])
                 : _bs.SimulateAttack(attackAction);
 
-            attackResult.Origin.RemoveTroops(attackResult.AttackerLosses);
+            attackResult.Origin.RemoveTroops(attackResult.AttackerLosses - attackResult.AttackerCommanderLosses);
             attackResult.Target.RemoveTroops(attackResult.DefenderLosses);
+            // Attacking commanders die only if no attacking MOD was left to take the hit (e.g. a commander alone).
+            foreach (var type in attackAction.Commanders.Reverse().Take(attackResult.AttackerCommanderLosses))
+            {
+                var dead = attackResult.Origin.CommandersList.FirstOrDefault(c => c.CommanderType == type);
+                if (dead == null) continue;
+                attackResult.Origin.RemoveCommander(dead);
+                Debug.Log($"{attackAction.Player.Name}'s {type} was killed attacking {attackResult.Target.Name}.");
+            }
             _attackResults.Add(attackResult);
             _attackTurn++;
 
@@ -198,6 +206,8 @@ namespace TurnPhases
             {
                 Purchases.OnTerritoryConquered(attackResult.Target, attackAction.Player);
                 attackResult.Target.SetOwner(attackAction.Player, 0);
+                // Commanders that attacked move in with the army (2210 FAQ).
+                FortifyAction.MoveCommanders(attackResult.Origin, attackResult.Target, attackAction.Commanders);
                 ConqueredTerritoriesCount++;
                 SetState(AttackState.Fortifying);
             }
@@ -220,6 +230,7 @@ namespace TurnPhases
             var troops = attackReinforceAction.ReinforcingTroops;
             attackReinforceAction.From.RemoveTroops(troops);
             attackReinforceAction.To.AddTroops(troops);
+            FortifyAction.MoveCommanders(attackReinforceAction.From, attackReinforceAction.To, attackReinforceAction.MovingCommanders);
             _attackTurn++;
             
             

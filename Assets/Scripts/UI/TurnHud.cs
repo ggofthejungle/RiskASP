@@ -158,9 +158,20 @@ namespace UI
             SetText(_chipTexts[i], text);
         }
 
+        // A message from the game (e.g. "Invalid bid...") shown in the instruction line for a few seconds.
+        private string _flash;
+        private float _flashUntil;
+        public void Flash(string message, float seconds = 5f)
+        {
+            _flash = message;
+            _flashUntil = Time.unscaledTime + seconds;
+        }
+
         // What the player can do right now, in one or two short sentences.
         public string Instruction()
         {
+            if (!string.IsNullOrEmpty(_flash) && Time.unscaledTime < _flashUntil)
+                return $"<color=#FFD24D>{_flash}</color>";
             if (_gm.GameState == GameState.Over) return "The game is over.";
             var p = _gm.CurrentPlayer;
             if (p == null) return "";

@@ -85,6 +85,10 @@ Read this first. Last updated: Oct 30, 2026 (afternoon). Owner: George (ggofthej
 - **Space station** gives +1 unit (MOD) per turn, per the rules (not energy).
 - **Turn order:** after bidding, the highest bidder chooses their position (2210 rule).
 - **Map is land-only:** Naval/Space commanders and decks are out; the Nuclear deck has land variants only.
+- **Commanders in battle** (George, Oct 30):
+  - The attacker chooses which commanders join an attack (picker). Each joining commander is a unit with its own die (Land/Nuclear d8, Diplomat d6), and there are at most 3 dice in total.
+  - Losses hit the attacking MODs first, so a commander only dies if no attacking MOD is left (e.g. a commander attacking alone that loses). Attacking commanders that win move in with the army.
+  - When moving units (after a conquest or in Fortify), the player picks how many, and which commanders go along.
 - **Card effects never empty a territory** (we have no neutral territories). Evacuation is the exception: the attacker takes the emptied territory.
   - Defense cards: Cease Fire, Stealth MODs, Evacuation, Death Trap, Stealth Station.
 - **Online** means **PlayFab + UGS** (not hot-seat). **No Photon** (decided Oct 30): the server is the authority (UGS Cloud Code / PlayFab CloudScript running the C# rules). See `docs/online-plan.md`.

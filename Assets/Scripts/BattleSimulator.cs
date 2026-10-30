@@ -24,14 +24,14 @@ public class BattleSimulator : MonoBehaviour
 
     public AttackResult SimulateAttack(AttackAction attackAction)
     {
-        var attackingTroops = Math.Min(attackAction.Troops, MaxAttackDice);
+        var attackingTroops = attackAction.Dice; // units (MODs + commanders), max 3
         var defendingTroops = Math.Min(attackAction.Target.Troops, MaxDefenseDice); // rules: at most 2 (was 3)
 
         var battleWidth = Math.Min(attackingTroops, defendingTroops);
         // 2210 dice: each attacking commander with an attack bonus replaces a d6 with a d8
         // (Land Commander on land = always on our map; Nuclear always; Diplomat never).
         // Defending: every unit rolls d8 in a territory with a space station; otherwise each commander there rolls a d8.
-        var (attackD8, attackD6) = AttackDice(attackAction.Origin, attackingTroops);
+        var (attackD8, attackD6) = AttackDice(attackAction.Commanders, attackingTroops);
         var (defenseD8, defenseD6) = DefenseDice(attackAction.Target, defendingTroops);
         // Keep each roll with its die (8 or 6 sides), sorted highest first, so the UI can show which were d8.
         var attackerDice = Roll8SidedDies(attackD8).Select(v => (v, sides: 8))
@@ -56,7 +56,10 @@ public class BattleSimulator : MonoBehaviour
                 attackerLosses++;
         }
 
-        var remainingAttackingTroops = attackAction.Origin.Troops - attackerLosses;
+        // Losses come off the attacking MODs first; a commander only dies when no attacking MOD is left to take the hit.
+        var modLosses = Math.Min(attackerLosses, attackAction.Troops);
+        var commanderLosses = attackerLosses - modLosses;
+        var remainingAttackingTroops = attackAction.Origin.Troops - modLosses;
         var remainingDefendingTroops = attackAction.Target.Troops - defenderLosses;
         
         return new AttackResult(
@@ -71,6 +74,7 @@ public class BattleSimulator : MonoBehaviour
         )
         {
             AttackerDieSides = attackerDice.Select(d => d.sides).ToArray(),
+            AttackerCommanderLosses = commanderLosses,
             DefenderDieSides = defenderDice.Select(d => d.sides).ToArray(),
         };
     }
@@ -81,12 +85,17 @@ public class BattleSimulator : MonoBehaviour
     public static bool AttacksWithD8(CommanderType type) =>
         type == CommanderType.LandCommander || type == CommanderType.NuclearCommander;
 
-    public static (int d8, int d6) AttackDice(Territory origin, int dice)
+    // Dice for the attacking commanders that join (Land/Nuclear roll d8) plus MODs (d6).
+    public static (int d8, int d6) AttackDice(IEnumerable<CommanderType> attackingCommanders, int dice)
     {
-        var bonus = origin.CommandersList.Count(c => AttacksWithD8(c.CommanderType));
+        var bonus = attackingCommanders.Count(AttacksWithD8);
         var d8 = Math.Min(dice, bonus);
         return (d8, dice - d8);
     }
+
+    // As if every d8 commander in the territory joined.
+    public static (int d8, int d6) AttackDice(Territory origin, int dice) =>
+        AttackDice(origin.CommandersList.Select(c => c.CommanderType), dice);
 
     public static (int d8, int d6) DefenseDice(Territory target, int dice)
     {

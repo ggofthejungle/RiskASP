@@ -87,6 +87,13 @@ namespace TurnPhases.Selection
             }
         }
 
+        // Cancel the current move (from the move picker).
+        public void CancelSelection()
+        {
+            UnselectAll();
+            EnableTerritoriesToFortifyFrom(_gm.CurrentPlayer);
+        }
+
         private void EnableTerritoriesToFortifyFrom(Player player)
         {
             _sm.DisableAllTerritories();

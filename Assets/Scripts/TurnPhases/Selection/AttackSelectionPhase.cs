@@ -97,10 +97,26 @@ namespace TurnPhases.Selection
 
         private void CreateAttackAction(Player player)
         {
-            var troops = Math.Min(_from.Territory.GetAvailableTroops(), 3);
-            var attackTurn = _attackPhase.AttackTurn;
-            var action = new AttackAction(player, _gm.Turn, attackTurn, _from.Territory, _to.Territory, troops);
-            _ar.AddAction(action);
+            var from = _from.Territory;
+            var to = _to.Territory;
+            // Commanders here: ask who joins the attack (and how many units) before rolling.
+            if (from.CommandersList.Count > 0 && _gm.CommandHud != null && _gm.IsLocal(player))
+            {
+                _gm.CommandHud.AskAttack(player, from, to,
+                    (troops, commanders) => _ar.AddAction(new AttackAction(player, _gm.Turn, _attackPhase.AttackTurn, from, to, troops, commanders)),
+                    CancelTarget);
+                return;
+            }
+            var t = Math.Min(from.GetAvailableTroops(), 3);
+            _ar.AddAction(new AttackAction(player, _gm.Turn, _attackPhase.AttackTurn, from, to, t, Array.Empty<Expansions.CommanderType>()));
+        }
+
+        // Back to "choose a target" (keeps the attacking territory selected).
+        public void CancelTarget()
+        {
+            if (_to != null) _to.Unselect();
+            _to = null;
+            if (_from != null) EnableTerritoriesToAttack(_gm.CurrentPlayer);
         }
 
         public void OnUnselected(Player player, TerritorySelection selection)

@@ -64,7 +64,7 @@ namespace UI
             
             Debug.Log( "_diceSprites.Length " + _diceSprites.Length );
     
-            for (var index = 0; index < Math.Min(attackResult.AttackingTroops, attackResult.AttackerRolls.Length); index++)
+            for (var index = 0; index < Math.Min(_attackDiceRenderers.Length, attackResult.AttackerRolls.Length); index++)
             {
                 Debug.Log("i " + index + " " + attackResult.AttackerRolls[index]);
                 var attackerRoll = attackResult.AttackerRolls[index];
@@ -77,7 +77,7 @@ namespace UI
             Debug.Log("Defending troops " + attackResult.DefendingTroops);
             Debug.Log( "_defenderDiceRenderers.Length " + _defenderDiceRenderers.Length );
 
-            for (var index = 0; index < Math.Min(attackResult.DefendingTroops, attackResult.DefenderRolls.Length); index++)
+            for (var index = 0; index < Math.Min(_defenderDiceRenderers.Length, attackResult.DefenderRolls.Length); index++)
             {
                 Debug.Log("i " + index + " " + attackResult.DefenderRolls[index]);
                 var defenderRoll = attackResult.DefenderRolls[index];

@@ -61,6 +61,11 @@ namespace UI
             UpdatePlayerText(_gm.CurrentPlayer);
             UpdateTurnText(_gm.Turn);
             UpdateTurnPhaseText(_gm.CurrentPhase);
+
+            // The turn banner (TurnHud) and the command bar explain everything now: hide this panel and the
+            // black message box. Messages still arrive and are shown in the banner instead.
+            if (_playerInstructions != null) _playerInstructions.gameObject.SetActive(false);
+            gameObject.SetActive(false);
         }
 
 
@@ -120,9 +125,9 @@ namespace UI
 
         public void ChangeInstructionWindowMessage(string message)
         {
-            _playerInstructions.gameObject.SetActive(true);
-            _playerInstructions.OkButton.onClick.AddListener(CloseInstructionWindow);
-            _playerInstructions.MessageText.text = message;
+            // Shown in the turn banner now (the old black box is hidden).
+            var gm = _gm != null ? _gm : GameManager.Instance;
+            if (gm != null && gm.TurnHud != null) gm.TurnHud.Flash(message);
         }
 
         public void CloseInstructionWindow()

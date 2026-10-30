@@ -13,12 +13,20 @@ namespace Actions
         public Territory To => AttackAction.Target;
         public int AttackingTroops => AttackAction.Troops;
 
+        // Commanders that stayed in the attacking territory and now move in too (attacking commanders already moved).
+        public System.Collections.Generic.IReadOnlyList<Expansions.CommanderType> MovingCommanders { get; }
+
         public AttackReinforceAction(Player player, int turn, int attackTurn, AttackAction attackAction,
-            int reinforcingTroops) : base(player, turn, attackTurn)
+            int reinforcingTroops, System.Collections.Generic.IEnumerable<Expansions.CommanderType> movingCommanders = null)
+            : base(player, turn, attackTurn)
         {
             AttackAction = attackAction;
             ReinforcingTroops = reinforcingTroops;
+            MovingCommanders = System.Linq.Enumerable.ToList(movingCommanders ?? System.Array.Empty<Expansions.CommanderType>());
         }
+
+        public static int MinToMove(AttackAction attack) =>
+            Math.Min(Math.Max(1, Math.Min(attack.Troops, 3)), attack.Origin.GetAvailableTroops());
 
         public override bool IsValid()
         {
@@ -43,7 +51,13 @@ namespace Actions
                 return false;
             }
 
-            var minReinforcing = Math.Min(Math.Min(AttackingTroops, 3), From.GetAvailableTroops());
+            var minReinforcing = MinToMove(AttackAction);
+            foreach (var type in MovingCommanders)
+                if (!System.Linq.Enumerable.Any(From.CommandersList, c => c.CommanderType == type))
+                {
+                    LogWarning($"There is no {type} in {From.Name} to move");
+                    return false;
+                }
             if (ReinforcingTroops < minReinforcing)
             {
                 LogError($"Reinforcing troops ({ReinforcingTroops}) is less than the minimum ({minReinforcing})");

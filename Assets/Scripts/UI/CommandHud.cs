@@ -9,6 +9,7 @@ using Map;
 using player;
 using TMPro;
 using TurnPhases;
+using TurnPhases.Selection;
 using UnityEngine;
 using UnityEngine.UI;
 using static UI.TurnHud;
@@ -69,6 +70,178 @@ namespace UI
             if (_sm == null) _sm = SelectionManager.Instance;
             RefreshBar();
             RefreshPrompt();
+            RefreshMovePicker();
+        }
+
+        // ================= Unit / commander picker =================
+        // One panel for: attacking (how many units, which commanders join), moving in after a conquest,
+        // and fortify moves (how many units, which commanders go along).
+        public enum PickerMode { None, Attack, MoveIn, Fortify }
+        public PickerMode Picker { get; private set; } = PickerMode.None;
+        public int PickerAmount { get; private set; }
+        public int PickerMin { get; private set; }
+        public int PickerMax { get; private set; }
+        public IReadOnlyCollection<CommanderType> PickerCommanders => _pickedCommanders;
+        private readonly List<CommanderType> _pickedCommanders = new();
+        private List<CommanderType> _availableCommanders = new();
+        private Territory _pickFrom, _pickTo;
+        private Action<int, List<CommanderType>> _onPick;
+        private Action _onPickCancel;
+        private RectTransform _picker;
+        private TMP_Text _pickerTitle, _pickerAmount;
+        private RectTransform _pickerToggles, _pickerButtons;
+
+        // Called by the attack selection when the attacking territory has commanders.
+        public void AskAttack(Player p, Territory from, Territory to, Action<int, List<CommanderType>> onAttack, Action onCancel)
+        {
+            var available = from.GetAvailableTroops();
+            var commanders = from.CommandersList.Select(c => c.CommanderType).ToList();
+            OpenPicker(PickerMode.Attack, from, to,
+                min: 0, max: Mathf.Min(3, available), amount: Mathf.Min(3, available),
+                commanders, picked: commanders.Where(BattleSimulator.AttacksWithD8).ToList(),
+                onAttack, onCancel);
+        }
+
+        private void OpenPicker(PickerMode mode, Territory from, Territory to, int min, int max, int amount,
+            List<CommanderType> commanders, List<CommanderType> picked, Action<int, List<CommanderType>> onOk, Action onCancel)
+        {
+            Picker = mode;
+            _pickFrom = from;
+            _pickTo = to;
+            PickerMin = min;
+            PickerMax = max;
+            PickerAmount = Mathf.Clamp(amount, min, max);
+            _availableCommanders = commanders;
+            _pickedCommanders.Clear();
+            _pickedCommanders.AddRange(picked);
+            _onPick = onOk;
+            _onPickCancel = onCancel;
+            RebuildPicker();
+        }
+
+        public void SetPickerAmount(int n)
+        {
+            PickerAmount = Mathf.Clamp(n, PickerMin, PickerMax);
+            RebuildPicker();
+        }
+
+        public void TogglePickerCommander(CommanderType type)
+        {
+            if (_pickedCommanders.Contains(type)) _pickedCommanders.Remove(type);
+            else if (_availableCommanders.Contains(type)) _pickedCommanders.Add(type);
+            RebuildPicker();
+        }
+
+        public bool ConfirmPicker()
+        {
+            if (Picker == PickerMode.None) return false;
+            if (Picker == PickerMode.Attack && PickerAmount + _pickedCommanders.Count < 1) return false;
+            var ok = _onPick;
+            var amount = PickerAmount;
+            var cmds = _pickedCommanders.ToList();
+            ClosePicker();
+            ok?.Invoke(amount, cmds);
+            return true;
+        }
+
+        public void CancelPicker()
+        {
+            var cancel = _onPickCancel;
+            ClosePicker();
+            cancel?.Invoke();
+        }
+
+        private void ClosePicker()
+        {
+            Picker = PickerMode.None;
+            _onPick = null;
+            _onPickCancel = null;
+            if (_picker != null) _picker.gameObject.SetActive(false);
+        }
+
+        // Opens the picker by itself after a conquest and when a fortify move has both ends chosen.
+        private void RefreshMovePicker()
+        {
+            var me = Me;
+            var mine = _gm.GameState == GameState.Playing && _gm.IsLocal(me) && _gm.PendingDecision == null;
+
+            // After a conquest: how many units move in, and which other commanders follow.
+            var conquered = mine && _gm.CurrentPhase is AttackPhase ap && ap.State == AttackState.Fortifying;
+            if (conquered && Picker == PickerMode.None)
+            {
+                var last = _gm.AttackPhase.LastAttackResult;
+                var from = last.Origin;
+                var min = AttackReinforceAction.MinToMove(last.AttackAction);
+                var max = from.GetAvailableTroops();
+                var attack = last.AttackAction;
+                OpenPicker(PickerMode.MoveIn, from, last.Target, min, max, max,
+                    from.CommandersList.Select(c => c.CommanderType).ToList(), new List<CommanderType>(),
+                    (n, cmds) => _gm.HandlePlayerAction(new AttackReinforceAction(me, _gm.Turn, _gm.AttackPhase.AttackTurn, attack, n, cmds)),
+                    null);
+            }
+            else if (!conquered && Picker == PickerMode.MoveIn) ClosePicker();
+
+            // Fortify: both territories chosen.
+            var fortify = mine && _gm.CurrentPhase is FortifyPhase && _sm != null
+                          && _sm.CurrentSelectionPhase is FortifySelectionPhase fs && fs.From != null && fs.To != null;
+            if (fortify && Picker == PickerMode.None)
+            {
+                var fs2 = (FortifySelectionPhase)_sm.CurrentSelectionPhase;
+                var from = fs2.From;
+                var to = fs2.To;
+                var max = from.GetAvailableTroops();
+                OpenPicker(PickerMode.Fortify, from, to, Mathf.Min(1, max), max, max,
+                    from.CommandersList.Select(c => c.CommanderType).ToList(), new List<CommanderType>(),
+                    (n, cmds) => _gm.HandlePlayerAction(new FortifyAction(me, _gm.Turn, from, to, n, cmds)),
+                    () => fs2.CancelSelection());
+            }
+            else if (!fortify && Picker == PickerMode.Fortify) ClosePicker();
+
+            if (Picker == PickerMode.Attack && !(mine && _gm.CurrentPhase is AttackPhase)) ClosePicker();
+        }
+
+        private void RebuildPicker()
+        {
+            _picker.gameObject.SetActive(Picker != PickerMode.None);
+            if (Picker == PickerMode.None) return;
+            var from = Nice(_pickFrom.Name);
+            var to = Nice(_pickTo.Name);
+            _pickerTitle.text = Picker switch
+            {
+                PickerMode.Attack => $"Attack <b>{to}</b> from <b>{from}</b>\n<size=75%>Units attacking (max 3 dice incl. commanders). " +
+                                     "Commanders roll their own die; a commander dies only if no attacking unit is left to take the loss.</size>",
+                PickerMode.MoveIn => $"You conquered <b>{to}</b>! Move units in from <b>{from}</b>\n<size=75%>Your attacking commanders already moved in.</size>",
+                _ => $"Move units from <b>{from}</b> to <b>{to}</b>",
+            };
+            _pickerAmount.text = Picker == PickerMode.Attack
+                ? $"{PickerAmount} unit{(PickerAmount == 1 ? "" : "s")} + {_pickedCommanders.Count} commander{(_pickedCommanders.Count == 1 ? "" : "s")}" +
+                  $"  ({Mathf.Min(3, PickerAmount + _pickedCommanders.Count)} dice)"
+                : $"{PickerAmount} of {PickerMax} unit{(PickerMax == 1 ? "" : "s")}";
+
+            Clear(_pickerToggles);
+            if (_availableCommanders.Count > 0)
+            {
+                Header(_pickerToggles, Picker == PickerMode.Attack ? "ATTACK\nWITH" : "MOVE\nTOO", 70);
+                foreach (var type in _availableCommanders.Distinct())
+                {
+                    var t = type;
+                    var on = _pickedCommanders.Contains(t);
+                    var die = Picker == PickerMode.Attack ? (BattleSimulator.AttacksWithD8(t) ? " (d8)" : " (d6)") : "";
+                    MakeButton(_pickerToggles, $"{(on ? "[x]" : "[  ]")} {Map.MapBadges.FullName(t)}{die}",
+                        on ? Map.MapBadges.TypeColor(t) : new Color(0.25f, 0.27f, 0.33f), true, () => TogglePickerCommander(t), 0, 40);
+                }
+            }
+
+            Clear(_pickerButtons);
+            MakeButton(_pickerButtons, "Min", new Color(0.25f, 0.27f, 0.33f), PickerAmount > PickerMin, () => SetPickerAmount(PickerMin), 70, 44);
+            MakeButton(_pickerButtons, "-", new Color(0.25f, 0.27f, 0.33f), PickerAmount > PickerMin, () => SetPickerAmount(PickerAmount - 1), 50, 44);
+            MakeButton(_pickerButtons, "+", new Color(0.25f, 0.27f, 0.33f), PickerAmount < PickerMax, () => SetPickerAmount(PickerAmount + 1), 50, 44);
+            MakeButton(_pickerButtons, "Max", new Color(0.25f, 0.27f, 0.33f), PickerAmount < PickerMax, () => SetPickerAmount(PickerMax), 70, 44);
+            var okLabel = Picker switch { PickerMode.Attack => "Roll dice", PickerMode.MoveIn => "Move in", _ => "Move" };
+            var canOk = Picker != PickerMode.Attack || PickerAmount + _pickedCommanders.Count >= 1;
+            MakeButton(_pickerButtons, okLabel, new Color(0.12f, 0.55f, 0.25f), canOk, () => ConfirmPicker(), 150, 44);
+            if (_onPickCancel != null)
+                MakeButton(_pickerButtons, "Cancel", new Color(0.45f, 0.15f, 0.15f), true, CancelPicker, 110, 44);
         }
 
         // ================= Command bar =================
@@ -505,6 +678,22 @@ namespace UI
             _confirmButtons = Row("Buttons", _confirm, new Vector2(0, 0), new Vector2(1, 0.38f), new Vector2(16, 10), new Vector2(-16, 0), 12);
             _confirmButtons.GetComponent<HorizontalLayoutGroup>().childAlignment = TextAnchor.MiddleCenter;
             _confirm.gameObject.SetActive(false);
+
+            // Unit / commander picker (attack, move in, fortify), above the bar.
+            var pickerImg = NewImage("Picker", transform, new Color(0.12f, 0.13f, 0.18f, 0.97f));
+            _picker = pickerImg.rectTransform;
+            Place(_picker, new Vector2(0.26f, 0.175f), new Vector2(0.76f, 0.43f), Vector2.zero, Vector2.zero);
+            pickerImg.raycastTarget = true;
+            _pickerTitle = NewText("Title", _picker, 21, FontStyles.Normal, TextAlignmentOptions.Center);
+            Place(_pickerTitle.rectTransform, new Vector2(0, 0.66f), new Vector2(1, 1), new Vector2(14, 0), new Vector2(-14, -6));
+            _pickerTitle.textWrappingMode = TextWrappingModes.Normal;
+            _pickerAmount = NewText("Amount", _picker, 26, FontStyles.Bold, TextAlignmentOptions.Center);
+            Place(_pickerAmount.rectTransform, new Vector2(0, 0.50f), new Vector2(1, 0.66f), Vector2.zero, Vector2.zero);
+            _pickerToggles = Row("Commanders", _picker, new Vector2(0, 0.27f), new Vector2(1, 0.49f), new Vector2(14, 0), new Vector2(-14, 0), 8);
+            _pickerToggles.GetComponent<HorizontalLayoutGroup>().childAlignment = TextAnchor.MiddleCenter;
+            _pickerButtons = Row("Buttons", _picker, new Vector2(0, 0.03f), new Vector2(1, 0.25f), new Vector2(14, 0), new Vector2(-14, 0), 8);
+            _pickerButtons.GetComponent<HorizontalLayoutGroup>().childAlignment = TextAnchor.MiddleCenter;
+            _picker.gameObject.SetActive(false);
 
             // Defender prompt: full screen, blocks clicks.
             var promptImg = NewImage("DefenderPrompt", transform, new Color(0, 0, 0, 0.55f));

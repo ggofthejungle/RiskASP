@@ -11,12 +11,28 @@ namespace Actions
         public Territory To { get; }
         public int MovedTroops { get; }
 
-        public FortifyAction(Player player, int turn, Territory from, Territory to, int movedTroops) : base(player,
-            turn)
+        // Commanders moving along with the units (optional).
+        public System.Collections.Generic.IReadOnlyList<Expansions.CommanderType> MovingCommanders { get; }
+
+        public FortifyAction(Player player, int turn, Territory from, Territory to, int movedTroops,
+            System.Collections.Generic.IEnumerable<Expansions.CommanderType> movingCommanders = null) : base(player, turn)
         {
             From = from;
             To = to;
             MovedTroops = movedTroops;
+            MovingCommanders = System.Linq.Enumerable.ToList(movingCommanders ?? System.Array.Empty<Expansions.CommanderType>());
+        }
+
+        // Moves the listed commanders (one of each listed type) between two territories.
+        public static void MoveCommanders(Territory from, Territory to, System.Collections.Generic.IEnumerable<Expansions.CommanderType> types)
+        {
+            foreach (var type in types)
+            {
+                var commander = System.Linq.Enumerable.FirstOrDefault(from.CommandersList, c => c.CommanderType == type);
+                if (commander == null) continue;
+                from.RemoveCommander(commander);
+                to.AddCommander(commander);
+            }
         }
 
         public override bool IsValid()
@@ -54,6 +70,13 @@ namespace Actions
                 LogError($"From territory ({From.Name}) cannot reach to territory ({To.Name})");
                 return false;
             }
+
+            foreach (var type in MovingCommanders)
+                if (!System.Linq.Enumerable.Any(From.CommandersList, c => c.CommanderType == type))
+                {
+                    LogError($"There is no {type} in {From.Name} to move");
+                    return false;
+                }
 
             if (MovedTroops <= 0)
             {

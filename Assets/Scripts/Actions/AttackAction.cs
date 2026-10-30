@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using Expansions;
 using Map;
 using player;
 using TurnPhases;
@@ -9,14 +12,23 @@ namespace Actions
     {
         public Territory Origin { get; }
         public Territory Target { get; }
-        public int Troops { get; }
+        public int Troops { get; } // attacking units (MODs), 0..3
+        // Commanders joining the attack (each is a unit with its own die: d8 for Land/Nuclear, d6 for Diplomat).
+        // Not given = the commanders in the origin that attack with d8 join (what bots/older code expect).
+        public IReadOnlyList<CommanderType> Commanders { get; }
+        public int Dice => Math.Min(BattleSimulator.MaxAttackDice, Troops + Commanders.Count);
 
-        public AttackAction(Player player, int turn, int attackTurn, Territory origin, Territory target, int troops) :
+        public AttackAction(Player player, int turn, int attackTurn, Territory origin, Territory target, int troops,
+            IEnumerable<CommanderType> commanders = null) :
             base(player, turn, attackTurn)
         {
             Origin = origin;
             Target = target;
             Troops = troops;
+            Commanders = (commanders ?? origin.CommandersList
+                    .Where(c => BattleSimulator.AttacksWithD8(c.CommanderType))
+                    .Select(c => c.CommanderType))
+                .ToList();
         }
 
         public override bool IsValid()
@@ -40,15 +52,28 @@ namespace Actions
                 return false;
             }
 
+            foreach (var group in Commanders.GroupBy(c => c))
+                if (Origin.CommandersList.Count(c => c.CommanderType == group.Key) < group.Count())
+                {
+                    LogWarning($"There is no {group.Key} in {Origin.Name} to attack with");
+                    return false;
+                }
+
+            if (Origin.GetAvailableTroops() < 1)
+            {
+                LogWarning($"{Origin.Name} needs at least one unit that can move in if the attack wins");
+                return false;
+            }
+
             if (Troops > Origin.GetAvailableTroops())
             {
                 LogError($"Troops ({Troops}) is greater than available troops ({Origin.GetAvailableTroops()})");
                 return false;
             }
 
-            if (Troops < 1)
+            if (Troops < 0 || Troops + Commanders.Count < 1)
             {
-                LogError($"Troops ({Troops}) is less than 1");
+                LogError($"Nothing attacks (troops {Troops}, commanders {Commanders.Count})");
                 return false;
             }
 

@@ -34,6 +34,7 @@ namespace TurnPhases
             {
                 fortifyAction.From.RemoveTroops(fortifyAction.MovedTroops);
                 fortifyAction.To.AddTroops(fortifyAction.MovedTroops);
+                FortifyAction.MoveCommanders(fortifyAction.From, fortifyAction.To, fortifyAction.MovingCommanders);
                 OnFortifyAction?.Invoke(fortifyAction);
                 if (ExtraMoves > 0)
                 {
