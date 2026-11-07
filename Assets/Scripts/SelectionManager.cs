@@ -73,6 +73,8 @@ public class SelectionManager : MonoBehaviour
                 }
                 // Otherwise map clicks belong to the turn owner; ignore them while someone else is deciding.
                 if (_gm.PendingDecision != null) return;
+                // Not this device's turn (online, or a bot's turn): the map is look-only.
+                if (!_gm.IsLocal(_gm.CurrentPlayer)) return;
                 _currentSelectionPhase.OnClicked(_gm.CurrentPlayer, selection);
             };
         }

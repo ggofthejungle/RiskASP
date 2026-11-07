@@ -247,12 +247,16 @@ public class ReactionWindowTests
     {
         _target.SetTroops(4);
         _target.AddCommander(new Commander(CommanderType.NuclearCommander));
-        var destination = CommandCards.EvacuationDestination(_bob, _target);
+        // Bob picks, and not the automatic choice (his strongest territory).
+        var destination = _bob.Territories.Where(t => t != _target).OrderBy(t => t.Troops).First();
         var before = destination.Troops;
         var card = Give(_bob, CardType.Evacuation);
 
         Assert.IsTrue(Attack());
         Assert.IsTrue(Answer(CommandCards.OptionFor(card)));
+        Assert.AreEqual(DecisionKind.EvacuationDestination, _gm.PendingDecision?.Kind, "Bob is asked where to go");
+        CollectionAssert.DoesNotContain(_gm.PendingDecision.Options, _target.Name);
+        Assert.IsTrue(Answer(destination.Name));
 
         Assert.AreEqual(before + 4, destination.Troops, "All 4 units evacuated");
         Assert.IsTrue(destination.CommandersList.Any(c => c.CommanderType == CommanderType.NuclearCommander), "Commander evacuated too");

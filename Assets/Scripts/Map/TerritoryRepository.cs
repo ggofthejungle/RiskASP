@@ -126,6 +126,25 @@ namespace Map
             }
         }
 
+        // Devastated territories: still drawn on the map, but gone from the game. No owner, no units, no
+        // borders (its neighbours lose the connection, as if it was never there), no continent.
+        public readonly List<Territory> Devastated = new();
+
+        public void Devastate(Territory territory)
+        {
+            if (territory == null || territory.Devastated) return;
+            if (territory.Owner != null) territory.Owner.RemoveTerritory(territory);
+            foreach (var neighbour in territory.NeighbourTerritories)
+                neighbour.NeighbourTerritories.Remove(territory);
+            if (territory.Continent != null) territory.Continent.Territories.Remove(territory);
+            Territories.Remove(territory);
+            Devastated.Add(territory);
+            territory.MarkDevastated();
+            var collider = territory.GetComponent<Collider2D>();
+            if (collider != null) collider.enabled = false;
+            CalculateTerritoryReachability();
+        }
+
         public Territory FromName(string territoryName)
         {
             return TerritoriesMap[territoryName];

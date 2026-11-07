@@ -96,10 +96,12 @@ namespace UI
         {
             var available = from.GetAvailableTroops();
             var commanders = from.CommandersList.Select(c => c.CommanderType).ToList();
+            // Pre-pick d8 commanders, but MODs + commanders never exceed 3 dice.
+            var picked = commanders.Where(BattleSimulator.AttacksWithD8).Take(BattleSimulator.MaxAttackDice).ToList();
+            var mods = Mathf.Min(BattleSimulator.MaxAttackDice - picked.Count, available);
             OpenPicker(PickerMode.Attack, from, to,
-                min: 0, max: Mathf.Min(3, available), amount: Mathf.Min(3, available),
-                commanders, picked: commanders.Where(BattleSimulator.AttacksWithD8).ToList(),
-                onAttack, onCancel);
+                min: 0, max: Mathf.Min(BattleSimulator.MaxAttackDice, available), amount: mods,
+                commanders, picked, onAttack, onCancel);
         }
 
         private void OpenPicker(PickerMode mode, Territory from, Territory to, int min, int max, int amount,
@@ -116,19 +118,41 @@ namespace UI
             _pickedCommanders.AddRange(picked);
             _onPick = onOk;
             _onPickCancel = onCancel;
+            ClampAttackComposition();
             RebuildPicker();
+        }
+
+        // Attack: MODs + joining commanders share the 3-dice cap.
+        private int AttackModMax => Picker != PickerMode.Attack
+            ? PickerMax
+            : Mathf.Max(PickerMin, Mathf.Min(PickerMax, BattleSimulator.MaxAttackDice - _pickedCommanders.Count));
+
+        private void ClampAttackComposition()
+        {
+            if (Picker != PickerMode.Attack) return;
+            while (_pickedCommanders.Count > BattleSimulator.MaxAttackDice)
+                _pickedCommanders.RemoveAt(_pickedCommanders.Count - 1);
+            if (PickerAmount > AttackModMax)
+                PickerAmount = AttackModMax;
         }
 
         public void SetPickerAmount(int n)
         {
-            PickerAmount = Mathf.Clamp(n, PickerMin, PickerMax);
+            PickerAmount = Mathf.Clamp(n, PickerMin, AttackModMax);
             RebuildPicker();
         }
 
         public void TogglePickerCommander(CommanderType type)
         {
             if (_pickedCommanders.Contains(type)) _pickedCommanders.Remove(type);
-            else if (_availableCommanders.Contains(type)) _pickedCommanders.Add(type);
+            else if (_availableCommanders.Contains(type))
+            {
+                if (Picker == PickerMode.Attack && _pickedCommanders.Count >= BattleSimulator.MaxAttackDice) return;
+                if (Picker == PickerMode.Attack && PickerAmount + _pickedCommanders.Count >= BattleSimulator.MaxAttackDice)
+                    PickerAmount = Mathf.Max(PickerMin, BattleSimulator.MaxAttackDice - _pickedCommanders.Count - 1);
+                _pickedCommanders.Add(type);
+            }
+            ClampAttackComposition();
             RebuildPicker();
         }
 
@@ -178,8 +202,10 @@ namespace UI
                     from.CommandersList.Select(c => c.CommanderType).ToList(), new List<CommanderType>(),
                     (n, cmds) => _gm.HandlePlayerAction(new AttackReinforceAction(me, _gm.Turn, _gm.AttackPhase.AttackTurn, attack, n, cmds)),
                     null);
+                BeginMoveInClick(last.Target);
             }
             else if (!conquered && Picker == PickerMode.MoveIn) ClosePicker();
+            if (Picker != PickerMode.MoveIn) EndMoveInClick();
 
             // Fortify: both territories chosen.
             var fortify = mine && _gm.CurrentPhase is FortifyPhase && _sm != null
@@ -208,15 +234,23 @@ namespace UI
             var to = Nice(_pickTo.Name);
             _pickerTitle.text = Picker switch
             {
-                PickerMode.Attack => $"Attack <b>{to}</b> from <b>{from}</b>\n<size=75%>Units attacking (max 3 dice incl. commanders). " +
-                                     "Commanders roll their own die; a commander dies only if no attacking unit is left to take the loss.</size>",
+                PickerMode.Attack => $"Attack <b>{to}</b> from <b>{from}</b>\n<size=75%>Max 3 dice total — each commander takes one of those slots (d8/d6). " +
+                                     "Losses hit MODs first; a commander dies only if no attacking MOD is left.</size>",
                 PickerMode.MoveIn => $"You conquered <b>{to}</b>! Move units in from <b>{from}</b>\n<size=75%>Your attacking commanders already moved in.</size>",
                 _ => $"Move units from <b>{from}</b> to <b>{to}</b>",
             };
-            _pickerAmount.text = Picker == PickerMode.Attack
-                ? $"{PickerAmount} unit{(PickerAmount == 1 ? "" : "s")} + {_pickedCommanders.Count} commander{(_pickedCommanders.Count == 1 ? "" : "s")}" +
-                  $"  ({Mathf.Min(3, PickerAmount + _pickedCommanders.Count)} dice)"
-                : $"{PickerAmount} of {PickerMax} unit{(PickerMax == 1 ? "" : "s")}";
+            if (Picker == PickerMode.Attack)
+            {
+                var parts = new List<string>();
+                if (PickerAmount > 0) parts.Add($"{PickerAmount} MOD{(PickerAmount == 1 ? "" : "s")}");
+                parts.AddRange(_pickedCommanders.Select(Map.MapBadges.FullName));
+                var dice = PickerAmount + _pickedCommanders.Count;
+                _pickerAmount.text = parts.Count == 0
+                    ? "Pick units and/or commanders"
+                    : $"{string.Join(" + ", parts)}  ·  {dice} dice";
+            }
+            else
+                _pickerAmount.text = $"{PickerAmount} of {PickerMax} unit{(PickerMax == 1 ? "" : "s")}";
 
             Clear(_pickerToggles);
             if (_availableCommanders.Count > 0)
@@ -227,21 +261,55 @@ namespace UI
                     var t = type;
                     var on = _pickedCommanders.Contains(t);
                     var die = Picker == PickerMode.Attack ? (BattleSimulator.AttacksWithD8(t) ? " (d8)" : " (d6)") : "";
+                    var canToggle = on || Picker != PickerMode.Attack
+                        || PickerAmount + _pickedCommanders.Count < BattleSimulator.MaxAttackDice
+                        || PickerAmount > PickerMin; // can free a MOD slot by auto-reducing
                     MakeButton(_pickerToggles, $"{(on ? "[x]" : "[  ]")} {Map.MapBadges.FullName(t)}{die}",
-                        on ? Map.MapBadges.TypeColor(t) : new Color(0.25f, 0.27f, 0.33f), true, () => TogglePickerCommander(t), 0, 40);
+                        on ? Map.MapBadges.TypeColor(t) : new Color(0.25f, 0.27f, 0.33f), canToggle || on, () => TogglePickerCommander(t), 0, 40);
                 }
             }
 
             Clear(_pickerButtons);
+            var modMax = AttackModMax;
             MakeButton(_pickerButtons, "Min", new Color(0.25f, 0.27f, 0.33f), PickerAmount > PickerMin, () => SetPickerAmount(PickerMin), 70, 44);
             MakeButton(_pickerButtons, "-", new Color(0.25f, 0.27f, 0.33f), PickerAmount > PickerMin, () => SetPickerAmount(PickerAmount - 1), 50, 44);
-            MakeButton(_pickerButtons, "+", new Color(0.25f, 0.27f, 0.33f), PickerAmount < PickerMax, () => SetPickerAmount(PickerAmount + 1), 50, 44);
-            MakeButton(_pickerButtons, "Max", new Color(0.25f, 0.27f, 0.33f), PickerAmount < PickerMax, () => SetPickerAmount(PickerMax), 70, 44);
+            MakeButton(_pickerButtons, "+", new Color(0.25f, 0.27f, 0.33f), PickerAmount < modMax, () => SetPickerAmount(PickerAmount + 1), 50, 44);
+            MakeButton(_pickerButtons, "Max", new Color(0.25f, 0.27f, 0.33f), PickerAmount < modMax, () => SetPickerAmount(modMax), 70, 44);
             var okLabel = Picker switch { PickerMode.Attack => "Roll dice", PickerMode.MoveIn => "Move in", _ => "Move" };
             var canOk = Picker != PickerMode.Attack || PickerAmount + _pickedCommanders.Count >= 1;
             MakeButton(_pickerButtons, okLabel, new Color(0.12f, 0.55f, 0.25f), canOk, () => ConfirmPicker(), 150, 44);
             if (_onPickCancel != null)
                 MakeButton(_pickerButtons, "Cancel", new Color(0.45f, 0.15f, 0.15f), true, CancelPicker, 110, 44);
+            else
+            {
+                // Same width as Cancel, so "Move in" lands exactly where "Roll dice" was.
+                var spacer = new GameObject("Spacer", typeof(RectTransform));
+                spacer.transform.SetParent(_pickerButtons, false);
+                spacer.AddComponent<LayoutElement>().preferredWidth = 110;
+            }
+        }
+
+        // After a conquest, clicking the conquered territory again also confirms "Move in".
+        private bool _moveInTargeting;
+
+        private void BeginMoveInClick(Territory conquered)
+        {
+            if (_sm == null) _sm = SelectionManager.Instance;
+            if (_sm == null || _sm.IsTargeting) return;
+            _moveInTargeting = true;
+            _sm.BeginTargeting(t =>
+            {
+                if (Picker != PickerMode.MoveIn || t != _pickTo) return false;
+                ConfirmPicker();
+                return true;
+            }, t => t == conquered);
+        }
+
+        private void EndMoveInClick()
+        {
+            if (!_moveInTargeting) return;
+            _moveInTargeting = false;
+            if (_sm != null && _sm.IsTargeting) _sm.EndTargeting();
         }
 
         // ================= Command bar =================
@@ -281,8 +349,10 @@ namespace UI
                     if (Me.HasCommanderInPlay(deck))
                         AddAction($"Buy {Short(deck)} card · {CommandCards.BuyCost} energy", DeckColor(deck), ok, () => ClickBuy(deck), "buy" + deck);
                 foreach (var type in hireable)
-                    AddAction($"Hire {Short(type)} · {Purchases.CommanderCost} energy", DeckColor(type), canHire, () => ClickHire(type), "hire" + type);
-                AddAction($"Build station · {Purchases.StationCost} energy", new Color(0.2f, 0.2f, 0.25f), canBuild, ClickBuild, "build");
+                    AddAction($"Hire {Short(type)} · {Purchases.CommanderCost} energy", DeckColor(type), canHire, () => ClickHire(type), "hire" + type,
+                        Map.MapBadges.IconFor(type));
+                AddAction($"Build station · {Purchases.StationCost} energy", new Color(0.2f, 0.2f, 0.25f), canBuild, ClickBuild, "build",
+                    Map.MapBadges.StationIcon());
                 if (_sm != null && _sm.IsTargeting)
                     AddAction("Cancel", new Color(0.5f, 0.15f, 0.15f), true, CancelTargeting, "cancel");
             }
@@ -352,6 +422,15 @@ namespace UI
             _confirm.gameObject.SetActive(true);
         }
 
+        private void Show(string text)
+        {
+            _onConfirm = null;
+            _confirmText.text = text;
+            Clear(_confirmButtons);
+            MakeButton(_confirmButtons, "Close", new Color(0.25f, 0.27f, 0.33f), true, CancelConfirm, 140, 48);
+            _confirm.gameObject.SetActive(true);
+        }
+
         public void Confirm()
         {
             var action = _onConfirm;
@@ -394,7 +473,21 @@ namespace UI
                 t => { Act(new BuildSpaceStationAction(me, _gm.Turn, t), _gm.Purchases.WhyCantBuild(me, t), $"Space station built in {Nice(t.Name)}."); return true; }));
         }
 
+        // Clicking a card shows what it does first. Play is only offered when it can be played now.
         public void ClickCard(Card card)
+        {
+            var why = _gm.CommandCards.WhyCantPlay(Me, card);
+            var text = $"<b>{Nice(card.Name)}</b>  <size=75%>{Short(card.Commander)} · {card.PowerUpCost} energy · {TimingLabel(card.Timing)}</size>\n" +
+                       $"<size=85%>{Describe(card.CardType)}</size>";
+            if (why == null)
+                Ask(text, "Play", () => PlayCard(card));
+            else if (card.Timing == CardTiming.OpponentInvades)
+                Show(text + "\n<size=75%><i>You'll be asked to play it when someone invades you.</i></size>");
+            else
+                Show(text + $"\n<size=75%><i>{why}</i></size>");
+        }
+
+        public void PlayCard(Card card)
         {
             var me = Me;
             var why = _gm.CommandCards.WhyCantPlay(me, card);
@@ -437,6 +530,9 @@ namespace UI
                     break;
                 case CardType.FrequencyJamL:
                     ChoosePlayer($"{Nice(card.Name)}: choose the player to jam.", me, p => Play(p));
+                    break;
+                case CardType.DecoyRevealed:
+                    PickDecoyMoves(card, me, moves => Play(moves));
                     break;
                 default:
                     Play();
@@ -490,6 +586,73 @@ namespace UI
             MakeButton(_choice, "Cancel", new Color(0.5f, 0.15f, 0.15f), true, CancelTargeting, 100);
         }
 
+        // Decoys Revealed: click a territory with a commander, pick which one if there are several, click where
+        // it goes; repeat, then Done. Positions are tracked here so a commander can be moved twice.
+        private void PickDecoyMoves(Card card, Player me, Action<object[]> onDone)
+        {
+            var moves = new List<object>();
+            var at = new Dictionary<Territory, List<CommanderType>>();
+            List<CommanderType> In(Territory t)
+            {
+                if (!at.TryGetValue(t, out var list))
+                    at[t] = list = t.CommandersList.Select(c => c.CommanderType).ToList();
+                return list;
+            }
+            var title = Nice(card.Name);
+
+            void Buttons(IEnumerable<(string label, Action onClick)> extra)
+            {
+                ClearChoice();
+                _choice = new GameObject("Choice", typeof(RectTransform)).GetComponent<RectTransform>();
+                _choice.SetParent(_bar, false);
+                Place(_choice, new Vector2(0, 1), new Vector2(1, 1), new Vector2(8, 4), new Vector2(-8, 44));
+                var layout = _choice.gameObject.AddComponent<HorizontalLayoutGroup>();
+                layout.spacing = 6; layout.childControlWidth = layout.childControlHeight = true; layout.childForceExpandWidth = false;
+                foreach (var (label, onClick) in extra)
+                    MakeButton(_choice, label, new Color(0.18f, 0.32f, 0.55f), true, onClick, 150);
+                if (moves.Count > 0)
+                    MakeButton(_choice, $"Done ({moves.Count / 3})", new Color(0.15f, 0.45f, 0.2f), true, () =>
+                    {
+                        CancelTargeting();
+                        onDone(moves.ToArray());
+                    }, 110);
+                MakeButton(_choice, "Cancel", new Color(0.5f, 0.15f, 0.15f), true, CancelTargeting, 100);
+            }
+
+            void PickDestination(Territory from, CommanderType type)
+            {
+                Target($"{title}: click where your {MapBadges.FullName(type)} goes.", t => t.Owner == me && t != from, to =>
+                {
+                    In(from).Remove(type);
+                    In(to).Add(type);
+                    moves.Add(from); moves.Add(type); moves.Add(to);
+                    PickSource();
+                    return false;
+                });
+                Buttons(Array.Empty<(string, Action)>());
+            }
+
+            void PickSource()
+            {
+                var done = moves.Count == 0 ? "" : $" ({moves.Count / 3} planned; Done to play)";
+                Target($"{title}: click a territory with a commander to move{done}.", t => t.Owner == me && In(t).Count > 0, from =>
+                {
+                    var types = In(from).Distinct().ToList();
+                    if (types.Count == 1)
+                    {
+                        PickDestination(from, types[0]);
+                        return false;
+                    }
+                    SetStatus($"{title}: which commander in {Nice(from.Name)}?");
+                    Buttons(types.Select(type => (MapBadges.FullName(type), (Action)(() => PickDestination(from, type)))));
+                    return false;
+                });
+                Buttons(Array.Empty<(string, Action)>());
+            }
+
+            PickSource();
+        }
+
         private void ClearChoice()
         {
             if (_choice != null) Destroy(_choice.gameObject);
@@ -519,8 +682,14 @@ namespace UI
 
         private void OnDecisionChanged(PendingDecision decision)
         {
-            if (decision != null && (decision.Kind == DecisionKind.RemoveUnits || decision.Kind == DecisionKind.PlaceStartingUnit))
+            if (decision != null && IsTerritoryDecision(decision))
             {
+                if (decision.Kind is DecisionKind.EvacuationDestination or DecisionKind.ArmageddonTarget
+                    && (Stage == PromptStage.Choose || Stage == PromptStage.Cover))
+                {
+                    Stage = PromptStage.Hidden;
+                    _promptKey = "";
+                }
                 BeginRemoval(decision);
                 return;
             }
@@ -564,7 +733,8 @@ namespace UI
         }
 
         private static bool IsTerritoryDecision(PendingDecision d) =>
-            d.Kind == DecisionKind.RemoveUnits || d.Kind == DecisionKind.PlaceStartingUnit;
+            d.Kind is DecisionKind.RemoveUnits or DecisionKind.PlaceStartingUnit or DecisionKind.EvacuationDestination
+                or DecisionKind.ArmageddonTarget or DecisionKind.ClaimTerritory or DecisionKind.PlaceStartingTroops;
 
         public bool ClickRemoval(Territory t)
         {
@@ -610,8 +780,13 @@ namespace UI
 
             var d = _gm.PendingDecision;
             var key = Stage + ":" + (d == null ? "" : string.Join(",", d.Options));
-            if (key == _promptKey) return;
+            if (key == _promptKey)
+            {
+                ShowCountdown();
+                return;
+            }
             _promptKey = key;
+            _promptTitleBase = null;
             Clear(_promptButtons);
             PromptOptions = Array.Empty<string>();
 
@@ -620,17 +795,38 @@ namespace UI
             switch (Stage)
             {
                 case PromptStage.Cover:
-                    _promptBand.color = WithA(TurnHud.PlayerColor(defender), 0.97f);
+                    SetPromptBandColor(WithA(TurnHud.PlayerColor(defender), 0.97f));
                     _promptTitle.text = $"PASS THE DEVICE TO {defender?.Name.ToUpperInvariant()}";
-                    _promptText.text = $"{_gm.CurrentPlayer?.Name} is invading one of {defender?.Name}'s territories.";
+                    _promptText.text = d?.Kind == DecisionKind.ArmageddonCard
+                        ? $"Armageddon: {defender?.Name} may play nuclear cards for free."
+                        : $"{_gm.CurrentPlayer?.Name} is invading one of {defender?.Name}'s territories.";
                     MakeButton(_promptButtons, $"I'm {defender?.Name}", new Color(0.15f, 0.15f, 0.2f), true, ConfirmCover, 260);
                     break;
 
+                case PromptStage.Choose when d != null && d.Kind == DecisionKind.ArmageddonCard:
+                    SetPromptBandColor(WithA(TurnHud.PlayerColor(defender), 0.97f));
+                    _promptTitleBase = $"{defender.Name.ToUpperInvariant()}: ARMAGEDDON";
+                    _promptTitle.text = _promptTitleBase;
+                    _promptText.text = "Play any of your nuclear cards for free (no energy). Pass when you're done.";
+                    PromptOptions = d.Options.ToList();
+                    foreach (var option in d.Options)
+                    {
+                        var card = _gm.CommandCards.CardFromOption(defender, option);
+                        var opt = option;
+                        if (card != null)
+                            MakeButton(_promptButtons, $"{Nice(card.Name)} · free\n<size=70%>{Blurb(card.CardType)}</size>",
+                                DeckColor(card.Commander), true, () => Choose(opt), 230, 70);
+                        else
+                            MakeButton(_promptButtons, "Pass", new Color(0.25f, 0.27f, 0.33f), true, () => Choose(opt), 200, 70);
+                    }
+                    break;
+
                 case PromptStage.Choose when d != null && attack != null:
-                    _promptBand.color = WithA(TurnHud.PlayerColor(defender), 0.97f);
-                    _promptTitle.text = $"{defender.Name.ToUpperInvariant()}: YOU ARE BEING INVADED";
+                    SetPromptBandColor(WithA(TurnHud.PlayerColor(defender), 0.97f));
+                    _promptTitleBase = $"{defender.Name.ToUpperInvariant()}: YOU ARE BEING INVADED";
+                    _promptTitle.text = _promptTitleBase;
                     _promptText.text = $"{attack.Player.Name} attacks {Nice(attack.Target.Name)} ({attack.Target.Troops} units) " +
-                                       $"from {Nice(attack.Origin.Name)} ({attack.Origin.Troops} units, rolling {attack.Troops}). Play a defense card?";
+                                       $"from {Nice(attack.Origin.Name)} ({attack.Origin.Troops} units, rolling {attack.Dice}). Play a defense card?";
                     PromptOptions = d.Options.ToList();
                     foreach (var option in d.Options)
                     {
@@ -646,12 +842,33 @@ namespace UI
                     break;
 
                 case PromptStage.HandBack:
-                    _promptBand.color = WithA(TurnHud.PlayerColor(_handBackTo), 0.97f);
+                    SetPromptBandColor(WithA(TurnHud.PlayerColor(_handBackTo), 0.97f));
                     _promptTitle.text = $"PASS THE DEVICE BACK TO {_handBackTo?.Name.ToUpperInvariant()}";
                     _promptText.text = "The defender has answered.";
                     MakeButton(_promptButtons, $"I'm {_handBackTo?.Name}", new Color(0.15f, 0.15f, 0.2f), true, ConfirmCover, 260);
                     break;
             }
+            ShowCountdown();
+        }
+
+        private string _promptTitleBase;
+
+        // Online reaction window: "Auto-pass in 14s". Local games have no limit, so nothing is added.
+        private void ShowCountdown()
+        {
+            if (_promptTitleBase == null || Stage != PromptStage.Choose) return;
+            var left = _gm.DecisionSecondsLeft;
+            _promptTitle.text = double.IsInfinity(left)
+                ? _promptTitleBase
+                : $"{_promptTitleBase}  <size=75%>· auto-pass in {Mathf.CeilToInt((float)left)}s</size>";
+        }
+
+        private void SetPromptBandColor(Color fill)
+        {
+            _promptBand.color = PopupBorder;
+            var inner = _promptBand.transform.Find("Fill")?.GetComponent<Image>();
+            if (inner != null) inner.color = fill;
+            else _promptBand.color = fill;
         }
 
         // ================= Building =================
@@ -671,10 +888,11 @@ namespace UI
             _hand = Row("Hand", _bar, new Vector2(0, 0), new Vector2(1, 1), new Vector2(8, 6), new Vector2(-8, -50), 6);
 
             // Confirmation box (buy / hire / build), just above the bar.
-            var confirmImg = NewImage("Confirm", transform, new Color(0.12f, 0.13f, 0.18f, 0.97f));
+            var confirmImg = NewImage("Confirm", transform, PopupBorder);
             _confirm = confirmImg.rectTransform;
             Place(_confirm, new Vector2(0.30f, 0.18f), new Vector2(0.72f, 0.36f), Vector2.zero, Vector2.zero);
             confirmImg.raycastTarget = true;
+            FramePopup(confirmImg, PopupFill).raycastTarget = true;
             _confirmText = NewText("Question", _confirm, 22, FontStyles.Normal, TextAlignmentOptions.Center);
             Place(_confirmText.rectTransform, new Vector2(0, 0.40f), new Vector2(1, 1), new Vector2(16, 0), new Vector2(-16, -8));
             _confirmText.textWrappingMode = TextWrappingModes.Normal;
@@ -683,10 +901,11 @@ namespace UI
             _confirm.gameObject.SetActive(false);
 
             // Unit / commander picker (attack, move in, fortify), above the bar.
-            var pickerImg = NewImage("Picker", transform, new Color(0.12f, 0.13f, 0.18f, 0.97f));
+            var pickerImg = NewImage("Picker", transform, PopupBorder);
             _picker = pickerImg.rectTransform;
             Place(_picker, new Vector2(0.26f, 0.175f), new Vector2(0.76f, 0.43f), Vector2.zero, Vector2.zero);
             pickerImg.raycastTarget = true;
+            FramePopup(pickerImg, PopupFill).raycastTarget = true;
             _pickerTitle = NewText("Title", _picker, 21, FontStyles.Normal, TextAlignmentOptions.Center);
             Place(_pickerTitle.rectTransform, new Vector2(0, 0.66f), new Vector2(1, 1), new Vector2(14, 0), new Vector2(-14, -6));
             _pickerTitle.textWrappingMode = TextWrappingModes.Normal;
@@ -703,8 +922,9 @@ namespace UI
             _prompt = promptImg.rectTransform;
             Stretch(_prompt);
             promptImg.raycastTarget = true;
-            _promptBand = NewImage("Band", _prompt, Color.white);
+            _promptBand = NewImage("Band", _prompt, PopupBorder);
             Place(_promptBand.rectTransform, new Vector2(0, 0.30f), new Vector2(1, 0.70f), Vector2.zero, Vector2.zero);
+            FramePopup(_promptBand, Color.white);
             _promptTitle = NewText("Title", _promptBand.rectTransform, 46, FontStyles.Bold, TextAlignmentOptions.Center);
             Place(_promptTitle.rectTransform, new Vector2(0, 0.72f), new Vector2(1, 0.97f), Vector2.zero, Vector2.zero);
             _promptText = NewText("Text", _promptBand.rectTransform, 24, FontStyles.Normal, TextAlignmentOptions.Center);
@@ -728,9 +948,9 @@ namespace UI
             return rt;
         }
 
-        private void AddAction(string label, Color color, bool interactable, Action onClick, string id)
+        private void AddAction(string label, Color color, bool interactable, Action onClick, string id, Sprite icon = null)
         {
-            _actionButtons[id] = MakeButton(_actions, label, color, interactable, onClick, 0);
+            _actionButtons[id] = MakeButton(_actions, label, color, interactable, onClick, 0, icon: icon);
         }
 
         private static void Header(Transform row, string text, float width)
@@ -752,7 +972,7 @@ namespace UI
         }
 
         private static Button MakeButton(Transform parent, string label, Color color, bool interactable, Action onClick,
-            float width, float height = 0)
+            float width, float height = 0, Sprite icon = null)
         {
             var img = NewImage("Button", parent, color);
             img.raycastTarget = true;
@@ -763,14 +983,24 @@ namespace UI
             colors.disabledColor = new Color(1, 1, 1, 0.35f);
             button.colors = colors;
             button.onClick.AddListener(() => onClick());
+            float leftPad = 6f;
+            if (icon != null)
+            {
+                var iconImg = NewImage("Icon", img.rectTransform, Color.white);
+                iconImg.sprite = icon;
+                iconImg.preserveAspect = true;
+                iconImg.raycastTarget = false;
+                Place(iconImg.rectTransform, new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(8, -14), new Vector2(36, 14));
+                leftPad = 40f;
+            }
             var text = NewText("Label", img.rectTransform, 17, FontStyles.Normal, TextAlignmentOptions.Center);
             text.text = label;
             text.color = ReadableOn(color);
             text.textWrappingMode = TextWrappingModes.Normal;
-            Place(text.rectTransform, Vector2.zero, Vector2.one, new Vector2(6, 2), new Vector2(-6, -2));
+            Place(text.rectTransform, Vector2.zero, Vector2.one, new Vector2(leftPad, 2), new Vector2(-6, -2));
             var le = img.gameObject.AddComponent<LayoutElement>();
             if (width > 0) le.preferredWidth = width;
-            else le.preferredWidth = Mathf.Max(120, text.GetPreferredValues(label).x + 20);
+            else le.preferredWidth = Mathf.Max(120, text.GetPreferredValues(label).x + leftPad + 14);
             if (height > 0) le.preferredHeight = height;
             return button;
         }
@@ -819,6 +1049,32 @@ namespace UI
             CardType.Evacuation => "move everyone out; they take it",
             CardType.CeaseFire => "stop this attack; no more on you this turn",
             _ => "",
+        };
+
+        // Longer text for the card preview.
+        public static string Describe(CardType t) => t switch
+        {
+            CardType.CeaseFire => "When you are invaded: stop the attack. That player can't attack you again this turn.",
+            CardType.ColonyInfluenceD or CardType.ColonyInfluenceL => "End of game: +3 points if this card's commander is still alive.",
+            CardType.DecoyRevealed => "Before your first invasion: move any of your commanders to any territories you hold.",
+            CardType.EnergyCrisis => "Before your first invasion: take 1 energy from every opponent who has some.",
+            CardType.Evacuation => "When you are invaded: move every unit and commander out to another territory of yours. The attacker takes the empty territory.",
+            CardType.ModReduction => "Before your first invasion: each opponent removes 4 units, then you remove 2. Everyone picks their own territories.",
+            CardType.Redeployment => "In Fortify: make one extra free move after you finish attacking.",
+            CardType.TerritorialStation => "Before your first invasion: build a space station on one of your territories.",
+            CardType.AssembleModsL => "Before your first invasion: +3 units on one territory you hold.",
+            CardType.FrequencyJamL => "Before your first invasion: pick a player. They can't play command cards during your turn.",
+            CardType.LandDeathTrap => "When you are invaded: the attacking territory loses half its units (rounded up, 1 always stays).",
+            CardType.ReinforcementsL => "Before your first invasion: +1 unit on each of 3 different territories you hold.",
+            CardType.ScoutForces => "Before your first invasion: a secret enemy territory is drawn for you. When you take it, 5 extra units land there.",
+            CardType.StealthModsL => "When you are invaded: +3 defending units in that territory.",
+            CardType.StealthStation => "When you are invaded: build a space station in that territory (its defenders roll 8-sided dice).",
+            CardType.Armageddon => "Everyone, in turn order, may play any number of nuclear cards for free.",
+            CardType.AssassinBomb => "Before your first invasion: pick an opponent's commander and roll an 8-sided die. 3 or more kills it.",
+            CardType.RocketStrikeLand => "Before your first invasion: pick an opponent's territory and roll a die. That many units die (1 always stays).",
+            CardType.ScatterBombLand => "Before your first invasion: 3 random territories are hit. Opponents there lose half their units.",
+            CardType.TheMother => "Before your first invasion: roll a die for a continent. Every territory there loses 1 unit, yours too.",
+            _ => Blurb(t),
         };
     }
 }

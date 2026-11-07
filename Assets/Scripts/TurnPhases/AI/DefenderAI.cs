@@ -9,6 +9,26 @@ public static class DefenderAI
     {
         var defender = gm.GetPlayerById(decision.PlayerId);
 
+        // Take-turns setup: grow next to what it already holds, aiming at continents it is closest to finishing.
+        if (decision.Kind == DecisionKind.ClaimTerritory)
+        {
+            return decision.Options
+                .Select(name => Map.TerritoryRepository.Instance.FromName(name))
+                .OrderByDescending(t => t.NeighbourTerritories.Count(n => n.Owner == defender))
+                .ThenByDescending(t => ContinentShare(t.Continent, defender))
+                .ThenBy(t => t.NeighbourTerritories.Count(n => n.Owner != null && n.Owner != defender))
+                .First().Name;
+        }
+        // Then stack the border that faces the most enemies, weakest first.
+        if (decision.Kind == DecisionKind.PlaceStartingTroops)
+        {
+            return decision.Options
+                .Select(name => Map.TerritoryRepository.Instance.FromName(name))
+                .OrderByDescending(t => t.NeighbourTerritories.Count(n => n.Owner != null && n.Owner != defender))
+                .ThenBy(t => t.Troops)
+                .First().Name;
+        }
+
         // Starting units: commanders on the strongest border territory; the station on the next strongest.
         if (decision.Kind == DecisionKind.PlaceStartingUnit)
         {
@@ -22,11 +42,33 @@ public static class DefenderAI
             return ranked[0].Name;
         }
 
+        if (decision.Kind == DecisionKind.EvacuationDestination)
+        {
+            var attacked = Map.TerritoryRepository.Instance.FromName(decision.Subject);
+            var best = Cards.CommandCards.EvacuationDestination(defender, attacked);
+            return best != null && decision.HasOption(best.Name) ? best.Name : decision.Options[0];
+        }
+
         // MOD Reduction: lose the unit where it hurts least (the biggest stack).
         if (decision.Kind == DecisionKind.RemoveUnits)
             return decision.Options
                 .OrderByDescending(name => Map.TerritoryRepository.Instance.FromName(name).Troops)
                 .First();
+
+        // Armageddon: a bot plays every free nuclear card it can. A human who is away passes
+        // (playing their cards for them would spend cards they may have wanted to keep).
+        if (decision.Kind == DecisionKind.ArmageddonCard)
+        {
+            if (defender == null || !defender.IsBot()) return DecisionOptions.Pass;
+            return decision.Options.FirstOrDefault(o => o != DecisionOptions.Pass) ?? DecisionOptions.Pass;
+        }
+        // Its target: the opponent territory with the most commanders, then the most units.
+        if (decision.Kind == DecisionKind.ArmageddonTarget)
+            return decision.Options
+                .Select(name => Map.TerritoryRepository.Instance.FromName(name))
+                .OrderByDescending(t => t.CommandersList.Count)
+                .ThenByDescending(t => t.Troops)
+                .First().Name;
 
         var attack = gm.AttackPhase.PendingAttack;
         if (defender == null || attack == null) return DecisionOptions.Pass;
@@ -51,5 +93,11 @@ public static class DefenderAI
         if (Pick(CardType.StealthModsL) is { } mods) return mods;
 
         return DecisionOptions.Pass;
+    }
+
+    static float ContinentShare(Map.Continent continent, player.Player p)
+    {
+        if (continent == null || continent.Territories.Count == 0) return 0f;
+        return continent.Territories.Count(t => t.Owner == p) / (float)continent.Territories.Count;
     }
 }

@@ -22,6 +22,9 @@ namespace UI
         private static readonly Color ChipIdle = new(1f, 1f, 1f, 0.10f);
         private static readonly Color ChipDone = new(1f, 1f, 1f, 0.22f);
         private static readonly Color TextDim = new(0.80f, 0.82f, 0.88f, 1f);
+        public static readonly Color PopupBorder = new(0.95f, 0.84f, 0.38f, 1f);
+        public static readonly Color PopupFill = new(0.12f, 0.13f, 0.18f, 0.97f);
+        private const float PopupBorderThickness = 3.5f;
 
         private GameManager _gm;
         private SelectionManager _sm;
@@ -30,9 +33,15 @@ namespace UI
         private TMP_Text _title;
         private TMP_Text _sub;
         private TMP_Text _instruction;
+        private Image _instructionBadge;
+        private Image _instructionGlyph;
         private readonly Image[] _chips = new Image[3];
         private readonly TMP_Text[] _chipTexts = new TMP_Text[3];
         private RectTransform _orderPicker;
+        private RectTransform _orderButtons;
+        private RectTransform _bidPicker;
+        private RectTransform _bidButtons;
+        private string _bidPickerKey = "";
 
         private CanvasGroup _splash;
         private Image _splashBand;
@@ -65,6 +74,7 @@ namespace UI
         private void Start()
         {
             _sm = SelectionManager.Instance;
+            if (_gm.CommandCards != null) _gm.CommandCards.OnConquestBonus += OnConquestBonus;
             Refresh();
         }
 
@@ -74,7 +84,15 @@ namespace UI
             {
                 _gm.OnPlayerTurnChanged -= OnPlayerTurnChanged;
                 _gm.OnCommanderKilled -= OnCommanderKilled;
+                if (_gm.CommandCards != null) _gm.CommandCards.OnConquestBonus -= OnConquestBonus;
             }
+        }
+
+        private void OnConquestBonus(Player p, Cards.Card card)
+        {
+            var reward = card == null ? "" : _gm.IsLocal(p) ? $" and <b>{card.Name}</b>" : " and a command card";
+            Flash($"{p.Name} conquered {InvadeEarth.Rules.IncomeRules.ConquestBonusTerritories} territories this turn: " +
+                  $"+{InvadeEarth.Rules.IncomeRules.ConquestBonusEnergy} energy{reward}.");
         }
 
         // ---------------- Commander killed: red toast ----------------
@@ -127,7 +145,9 @@ namespace UI
 
         private void Refresh()
         {
-            if (_gm == null) return;
+            if (_gm == null || _colorBar == null || _title == null || _sub == null) return;
+            for (var i = 0; i < _chips.Length; i++)
+                if (_chips[i] == null || _chipTexts[i] == null) return;
             var p = _gm.CurrentPlayer;
             var color = PlayerColor(p);
 
@@ -139,7 +159,7 @@ namespace UI
             SetText(_sub, $"Year {_gm.Year}/{GameManager.MaxYears}  ·  Turn {Mathf.Max(_gm.Turn, 1)}");
 
             // Phase stepper
-            if (_gm.IsBidding || _gm.IsChoosingOrder || _gm.GameState != GameState.Playing)
+            if (_gm.IsBidding || _gm.IsChoosingOrder || _gm.IsPlacingStartingUnits || _gm.GameState != GameState.Playing)
             {
                 SetChip(0, _gm.IsBidding ? "Bidding for turn order" : _gm.IsChoosingOrder ? "Choosing turn order"
                     : _gm.IsPlacingStartingUnits ? "Placing starting units" : "—", true, color);
@@ -165,7 +185,71 @@ namespace UI
             }
 
             SetText(_instruction, Instruction());
+            RefreshInstructionIcon();
             RefreshOrderPicker(color);
+            RefreshBidPicker(color);
+        }
+
+        private void RefreshInstructionIcon()
+        {
+            if (_instructionBadge == null) return;
+            Sprite icon = null;
+            Color fill = Color.white;
+            if (_gm.IsPlacingStartingUnits && _gm.PendingDecision is { Kind: Decisions.DecisionKind.PlaceStartingUnit } placing)
+            {
+                if (placing.Subject == "SpaceStation")
+                {
+                    icon = Map.MapBadges.StationIcon();
+                    fill = new Color(0.10f, 0.12f, 0.22f);
+                }
+                else if (System.Enum.TryParse(placing.Subject, out Expansions.CommanderType type))
+                {
+                    icon = Map.MapBadges.IconFor(type);
+                    fill = Map.MapBadges.TypeColor(type);
+                }
+            }
+            var show = icon != null;
+            _instructionBadge.gameObject.SetActive(show);
+            if (!show)
+            {
+                Place(_instruction.rectTransform, new Vector2(0, 0), new Vector2(1, 1), new Vector2(28, 8), new Vector2(-12, -106));
+                return;
+            }
+            _instructionBadge.color = fill;
+            _instructionGlyph.sprite = icon;
+            Place(_instruction.rectTransform, new Vector2(0, 0), new Vector2(1, 1), new Vector2(66, 8), new Vector2(-12, -106));
+        }
+
+        // Buttons 0..energy while a human bids for turn order.
+        private void RefreshBidPicker(Color color)
+        {
+            var p = _gm.CurrentPlayer;
+            var show = _gm.IsBidding && p != null && !p.IsBot() && _gm.IsLocal(p);
+            _bidPicker.gameObject.SetActive(show);
+            if (!show) { _bidPickerKey = ""; return; }
+
+            var max = p.GetEnergy();
+            var key = p.Name + ":" + max;
+            if (key == _bidPickerKey) return;
+            _bidPickerKey = key;
+
+            foreach (Transform child in _bidButtons) Destroy(child.gameObject);
+            for (int n = 0; n <= max; n++)
+            {
+                var bid = n;
+                var img = NewImage($"Bid{bid}", _bidButtons, color);
+                img.raycastTarget = true;
+                var button = img.gameObject.AddComponent<Button>();
+                button.targetGraphic = img;
+                button.onClick.AddListener(() => _gm.SubmitBid(bid));
+                var label = NewText("Label", img.rectTransform, 26, FontStyles.Bold, TextAlignmentOptions.Center);
+                label.color = ReadableOn(color);
+                label.text = bid == 0 ? "0\n<size=60%>pass</size>" : bid.ToString();
+                Stretch(label.rectTransform);
+                var le = img.gameObject.AddComponent<LayoutElement>();
+                le.preferredWidth = 72;
+                le.minWidth = 56;
+            }
         }
 
         // Buttons "1st / 2nd / ..." while a human chooses their turn position.
@@ -182,11 +266,11 @@ namespace UI
             if (key == _orderPickerKey) return;
             _orderPickerKey = key;
 
-            foreach (Transform child in _orderPicker) Destroy(child.gameObject);
+            foreach (Transform child in _orderButtons) Destroy(child.gameObject);
             foreach (var position in free)
             {
                 var pos = position;
-                var img = NewImage($"Pos{pos}", _orderPicker, color);
+                var img = NewImage($"Pos{pos}", _orderButtons, color);
                 img.raycastTarget = true;
                 var button = img.gameObject.AddComponent<Button>();
                 button.targetGraphic = img;
@@ -234,9 +318,20 @@ namespace UI
                     : $"Waiting for <b>{_gm.InputPlayer?.Name}</b> to place their {unit}…";
             }
 
+            if (_gm.IsDrafting && _gm.PendingDecision is { Kind: Decisions.DecisionKind.ClaimTerritory } claim)
+                return _gm.IsLocal(_gm.InputPlayer)
+                    ? $"<b>{_gm.InputPlayer.Name}</b>, click an empty (grey) territory to claim it with 1 MOD. " +
+                      $"{claim.Options.Count} left."
+                    : $"Waiting for <b>{_gm.InputPlayer?.Name}</b> to claim a territory…";
+            if (_gm.IsDrafting && _gm.PendingDecision is { Kind: Decisions.DecisionKind.PlaceStartingTroops })
+                return _gm.IsLocal(_gm.InputPlayer)
+                    ? $"<b>{_gm.InputPlayer.Name}</b>, click your territories to place MODs: <b>{_gm.DraftBatchLeft}</b> more now " +
+                      $"({_gm.DraftUnitsLeft(_gm.InputPlayer)} left in your army)."
+                    : $"Waiting for <b>{_gm.InputPlayer?.Name}</b> to place MODs…";
+
             if (_gm.IsBidding)
-                return $"<b>{p.Name}</b>: type a bid from 0 to {p.GetEnergy()} energy and press <b>Submit</b>. " +
-                       "Highest bid plays first this year.";
+                return $"<b>{p.Name}</b>: tap a bid from <b>0</b> to <b>{p.GetEnergy()}</b> energy. " +
+                       "Highest bid chooses turn order first this year.";
 
             if (_gm.IsChoosingOrder)
                 return $"<b>{p.Name}</b>, you bid highest: choose when you play this year " +
@@ -251,7 +346,21 @@ namespace UI
                     : $"Waiting for <b>{who?.Name}</b> to remove units (MOD Reduction)…";
             }
             if (_gm.PendingDecision != null)
-                return $"Waiting for <b>{_gm.InputPlayer?.Name}</b> to respond to the attack…";
+            {
+                var secondsLeft = _gm.DecisionSecondsLeft;
+                var clock = double.IsInfinity(secondsLeft) ? "" : $" ({Mathf.CeilToInt((float)secondsLeft)}s)";
+                if (_gm.PendingDecision.Kind == Decisions.DecisionKind.EvacuationDestination)
+                    return _gm.IsLocal(_gm.InputPlayer)
+                        ? $"<b>{_gm.InputPlayer.Name}</b>, Evacuation: click the territory your units move to.{clock}"
+                        : $"Waiting for <b>{_gm.InputPlayer?.Name}</b> to choose where to evacuate…{clock}";
+                if (_gm.PendingDecision.Kind == Decisions.DecisionKind.ArmageddonTarget)
+                    return _gm.IsLocal(_gm.InputPlayer)
+                        ? $"<b>{_gm.InputPlayer.Name}</b>, Armageddon: click the target for <b>{_gm.PendingDecision.Subject}</b>.{clock}"
+                        : $"Waiting for <b>{_gm.InputPlayer?.Name}</b> to aim {_gm.PendingDecision.Subject} (Armageddon)…{clock}";
+                if (_gm.PendingDecision.Kind == Decisions.DecisionKind.ArmageddonCard)
+                    return $"<b>ARMAGEDDON</b>: waiting for <b>{_gm.InputPlayer?.Name}</b> to play nuclear cards for free…{clock}";
+                return $"Waiting for <b>{_gm.InputPlayer?.Name}</b> to respond to the attack…{clock}";
+            }
 
             if (p.IsBot())
                 return $"<b>{p.Name}</b> (AI) is playing…";
@@ -330,7 +439,9 @@ namespace UI
 
         private void ShowSplash(string title, string sub, Color color)
         {
-            _splashBand.color = new Color(color.r, color.g, color.b, 0.92f);
+            _splashBand.color = PopupBorder;
+            var fill = _splashBand.transform.Find("Fill")?.GetComponent<Image>();
+            if (fill != null) fill.color = new Color(color.r, color.g, color.b, 0.92f);
             _splashTitle.color = ReadableOn(color);
             _splashSub.color = ReadableOn(color);
             _splashTitle.text = title;
@@ -393,25 +504,60 @@ namespace UI
                 _chipTexts[i].overflowMode = TextOverflowModes.Ellipsis;
             }
 
+            _instructionBadge = NewImage("InstructionBadge", prt, Color.white);
+            Place(_instructionBadge.rectTransform, new Vector2(0, 0), new Vector2(0, 0), new Vector2(28, 14), new Vector2(58, 44));
+            _instructionBadge.preserveAspect = true;
+            _instructionGlyph = NewImage("Glyph", _instructionBadge.rectTransform, Color.white);
+            _instructionGlyph.preserveAspect = true;
+            Place(_instructionGlyph.rectTransform, new Vector2(0.15f, 0.15f), new Vector2(0.85f, 0.85f), Vector2.zero, Vector2.zero);
+            _instructionBadge.gameObject.SetActive(false);
+
             _instruction = NewText("Instruction", prt, 21, FontStyles.Normal, TextAlignmentOptions.TopLeft);
             Place(_instruction.rectTransform, new Vector2(0, 0), new Vector2(1, 1), new Vector2(28, 8), new Vector2(-12, -106));
             _instruction.textWrappingMode = TextWrappingModes.Normal;
             _instruction.overflowMode = TextOverflowModes.Ellipsis;
 
             // Commander-killed toast (upper middle, doesn't block clicks).
-            _toast = NewImage("CommanderKilled", transform, new Color(0.62f, 0.08f, 0.08f, 0.95f));
+            _toast = NewImage("CommanderKilled", transform, PopupBorder);
             Place(_toast.rectTransform, new Vector2(0.24f, 0.64f), new Vector2(0.76f, 0.79f), Vector2.zero, Vector2.zero);
+            FramePopup(_toast, new Color(0.62f, 0.08f, 0.08f, 0.95f));
             _toastText = NewText("Text", _toast.rectTransform, 22, FontStyles.Normal, TextAlignmentOptions.Center);
             Place(_toastText.rectTransform, Vector2.zero, Vector2.one, new Vector2(14, 6), new Vector2(-14, -6));
             _toastText.textWrappingMode = TextWrappingModes.Normal;
             _toast.gameObject.SetActive(false);
 
+            // Bid picker (top-centre): framed panel, one button per affordable amount.
+            var bidImg = NewImage("BidPicker", transform, PopupBorder);
+            _bidPicker = bidImg.rectTransform;
+            Place(_bidPicker, new Vector2(0.26f, 0.68f), new Vector2(0.74f, 0.84f), Vector2.zero, Vector2.zero);
+            bidImg.raycastTarget = true;
+            var bidFill = FramePopup(bidImg, PopupFill);
+            bidFill.raycastTarget = true;
+            _bidButtons = new GameObject("Buttons", typeof(RectTransform)).GetComponent<RectTransform>();
+            _bidButtons.SetParent(bidFill.transform, false);
+            Stretch(_bidButtons);
+            var bidLayout = _bidButtons.gameObject.AddComponent<HorizontalLayoutGroup>();
+            bidLayout.spacing = 8;
+            bidLayout.padding = new RectOffset(14, 14, 12, 12);
+            bidLayout.childAlignment = TextAnchor.MiddleCenter;
+            bidLayout.childControlWidth = bidLayout.childControlHeight = true;
+            bidLayout.childForceExpandWidth = false;
+            bidLayout.childForceExpandHeight = true;
+            _bidPicker.gameObject.SetActive(false);
+
             // Turn-position picker (top-centre).
-            _orderPicker = new GameObject("TurnOrderPicker", typeof(RectTransform)).GetComponent<RectTransform>();
-            _orderPicker.SetParent(transform, false);
-            Place(_orderPicker, new Vector2(0.36f, 0.72f), new Vector2(0.64f, 0.80f), Vector2.zero, Vector2.zero); // top-centre, below the dice panel
-            var pickerLayout = _orderPicker.gameObject.AddComponent<HorizontalLayoutGroup>();
+            var orderImg = NewImage("TurnOrderPicker", transform, PopupBorder);
+            _orderPicker = orderImg.rectTransform;
+            Place(_orderPicker, new Vector2(0.34f, 0.70f), new Vector2(0.66f, 0.82f), Vector2.zero, Vector2.zero);
+            orderImg.raycastTarget = true;
+            var orderFill = FramePopup(orderImg, PopupFill);
+            orderFill.raycastTarget = true;
+            _orderButtons = new GameObject("Buttons", typeof(RectTransform)).GetComponent<RectTransform>();
+            _orderButtons.SetParent(orderFill.transform, false);
+            Stretch(_orderButtons);
+            var pickerLayout = _orderButtons.gameObject.AddComponent<HorizontalLayoutGroup>();
             pickerLayout.spacing = 8;
+            pickerLayout.padding = new RectOffset(12, 12, 10, 10);
             pickerLayout.childControlWidth = pickerLayout.childControlHeight = true;
             pickerLayout.childForceExpandWidth = pickerLayout.childForceExpandHeight = true;
             _orderPicker.gameObject.SetActive(false);
@@ -423,9 +569,10 @@ namespace UI
             _splash = splashGo.GetComponent<CanvasGroup>();
             _splash.blocksRaycasts = false;
             _splash.interactable = false;
-            _splashBand = NewImage("Band", splashGo.transform, Color.white);
+            _splashBand = NewImage("Band", splashGo.transform, PopupBorder);
             _splashBand.raycastTarget = false;
             Place(_splashBand.rectTransform, new Vector2(0, 0.42f), new Vector2(1, 0.58f), Vector2.zero, Vector2.zero);
+            FramePopup(_splashBand, Color.white); // fill color overridden each splash
             _splashTitle = NewText("Title", _splashBand.rectTransform, 64, FontStyles.Bold, TextAlignmentOptions.Center);
             Place(_splashTitle.rectTransform, new Vector2(0, 0.35f), new Vector2(1, 1), Vector2.zero, Vector2.zero);
             _splashSub = NewText("Sub", _splashBand.rectTransform, 28, FontStyles.Normal, TextAlignmentOptions.Center);
@@ -466,6 +613,24 @@ namespace UI
             img.color = color;
             img.raycastTarget = false;
             return img;
+        }
+
+        // Gold rim around a popup: panel Image becomes the border; returns the inset fill.
+        public static Image FramePopup(Image panel, Color fillColor, float thickness = PopupBorderThickness)
+        {
+            panel.color = PopupBorder;
+            var existing = panel.transform.Find("Fill")?.GetComponent<Image>();
+            if (existing != null)
+            {
+                existing.color = fillColor;
+                return existing;
+            }
+            var fill = NewImage("Fill", panel.transform, fillColor);
+            fill.raycastTarget = panel.raycastTarget;
+            Place(fill.rectTransform, Vector2.zero, Vector2.one,
+                new Vector2(thickness, thickness), new Vector2(-thickness, -thickness));
+            fill.transform.SetAsFirstSibling();
+            return fill;
         }
 
         internal static TMP_Text NewText(string name, Transform parent, float size, FontStyles style, TextAlignmentOptions align)

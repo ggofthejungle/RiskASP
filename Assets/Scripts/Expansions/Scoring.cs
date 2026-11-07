@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Cards;
+using InvadeEarth.Rules;
 using Map;
 using player;
 
@@ -11,33 +12,32 @@ namespace Expansions
     // If only one player is left alive, they win outright.
     public static class Scoring
     {
-        public const int ColonyInfluencePoints = 3;
+        public const int ColonyInfluencePoints = ScoringRules.ColonyInfluencePoints;
 
-        public static int ScoreOf(Player p)
-        {
-            if (p.IsDead()) return 0;
-            var score = p.GetTerritoryCount();
-            var continents = ContinentRepository.Instance != null
-                ? ContinentRepository.Instance.Continents.Values
-                : Enumerable.Empty<Continent>();
-            score += continents.Where(c => c.IsOwnedByPlayer(p)).Sum(c => c.BonusTroops);
-            score += p.Cards.Count(c => c.Timing == CardTiming.EndOfGame && p.HasCommanderInPlay(c.Commander))
-                     * ColonyInfluencePoints;
-            return score;
-        }
+        public static int ScoreOf(Player p) => ScoringRules.Score(LineFor(p));
 
         // Players from first to last place.
         public static List<Player> Ranking(IEnumerable<Player> players)
         {
             var list = players.ToList();
-            var alive = list.Where(p => !p.IsDead()).ToList();
-            if (alive.Count == 1)
-                return alive.Concat(list.Where(p => p.IsDead())).ToList();
-            return list
-                .OrderByDescending(ScoreOf)
-                .ThenByDescending(p => p.GetEnergy())
-                .ThenByDescending(p => p.GetTroopsCountInTerritories())
-                .ToList();
+            var lines = list.Select(LineFor).ToArray();
+            return ScoringRules.Rank(lines).Select(i => list[i]).ToList();
+        }
+
+        static ScoreLine LineFor(Player p)
+        {
+            var continents = ContinentRepository.Instance != null
+                ? ContinentRepository.Instance.Continents.Values
+                : Enumerable.Empty<Continent>();
+            return new ScoreLine
+            {
+                Alive = !p.IsDead(),
+                Territories = p.GetTerritoryCount(),
+                ContinentBonus = continents.Where(c => c.IsOwnedByPlayer(p)).Sum(c => c.BonusTroops),
+                ColonyCards = p.Cards.Count(c => c.Timing == CardTiming.EndOfGame && p.HasCommanderInPlay(c.Commander)),
+                Energy = p.GetEnergy(),
+                Troops = p.GetTroopsCountInTerritories(),
+            };
         }
     }
 }

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using Actions;
 using EmbASP.predicates;
 using Extensions;
@@ -70,8 +71,11 @@ namespace TurnPhases.AI
             {
                 if (atom is AttackPredicate attack)
                 {
+                    var from = _tr.FromName(attack.From.StripQuotes());
+                    var commanders = AttackAction.D8Commanders(from)
+                        .Take(System.Math.Max(0, BattleSimulator.MaxAttackDice - attack.Troops));
                     var action = new AttackAction(player, attack.Turn, attack.AttackTurn,
-                        _tr.FromName(attack.From.StripQuotes()), _tr.FromName(attack.To.StripQuotes()), attack.Troops, AttackAction.D8Commanders(_tr.FromName(attack.From.StripQuotes())));
+                        from, _tr.FromName(attack.To.StripQuotes()), attack.Troops, commanders);
                     attackPhaseActions.Add(action);
                 }
                 else if (atom is AttackReinforcePredicate afterAttackMove)

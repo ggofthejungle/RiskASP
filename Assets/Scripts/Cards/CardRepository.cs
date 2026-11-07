@@ -7,7 +7,6 @@ using JetBrains.Annotations;
 using Map;
 using player;
 using UnityEngine;
-using Expansions;
 using Unity.VisualScripting;
 
 namespace Cards
@@ -21,7 +20,20 @@ namespace Cards
         public Card[] AllCards { get; private set; }
 
 
+        // Cards this device can't place. Locally (and on the online host) that is exactly the draw deck.
+        // Online, on the other devices it also holds the cards behind other players' face-down cards.
         public HashSet<Card> CardsInDeck { get; private set; }
+
+        // Cards left in each deck. Public: every draw says which deck it came from.
+        private readonly Dictionary<CommanderType, int> _deckCount = new();
+        public int DeckCount(CommanderType deck) => _deckCount.TryGetValue(deck, out var n) ? n : 0;
+        public void TookFromDeck(CommanderType deck) => _deckCount[deck] = DeckCount(deck) - 1;
+
+        public Card CardById(int id)
+        {
+            if (AllCards != null && id >= 0 && id < AllCards.Length && AllCards[id].Id == id) return AllCards[id];
+            return AllCards?.FirstOrDefault(c => c.Id == id);
+        }
 
 
         public Commander DiplomatCommander = new Commander(CommanderType.Diplomat);
@@ -46,6 +58,7 @@ namespace Cards
 
             AllCards = GenerateCards();
             CardsInDeck = new HashSet<Card>(AllCards);
+            foreach (var c in AllCards) _deckCount[c.Commander] = DeckCount(c.Commander) + 1;
 
 
             // ExchangeTypes = GenerateExchangeTypes().ToArray();

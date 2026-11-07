@@ -10,6 +10,11 @@ namespace Decisions
         DefenseReaction, // defender may react before an attack's dice are rolled
         RemoveUnits,     // MOD Reduction: pick one of your territories to lose a unit (options = territory names)
         PlaceStartingUnit, // game start: pick the territory for a starting unit (Subject = Diplomat / LandCommander / SpaceStation)
+        EvacuationDestination, // Evacuation: pick where the units go (options = your other territories, Subject = attacked territory)
+        ArmageddonCard,   // Armageddon: play a nuclear card for free (options = "Card:<id>" + Pass)
+        ArmageddonTarget, // Armageddon: the territory for that card (options = territory names, Subject = card name)
+        ClaimTerritory,      // take-turns setup: claim an empty territory with 1 MOD (options = empty territories)
+        PlaceStartingTroops, // take-turns setup: place 1 MOD (options = your territories, Subject = MODs left in this batch)
     }
 
     // Option ids a player can answer with. Defense cards will be added later as "Card:<id>".
@@ -29,16 +34,22 @@ namespace Decisions
         public DecisionKind Kind { get; }
         public IReadOnlyList<string> Options { get; }
         public string Subject { get; } // what the decision is about (e.g. which starting unit), optional
+        // Online, on a device that can't see the asked player's hand: their card options aren't listed, so any
+        // "Card:<id>" answer is accepted here (the host has already checked it).
+        public bool AnyCard { get; }
 
-        public PendingDecision(int playerId, DecisionKind kind, IEnumerable<string> options, string subject = null)
+        public PendingDecision(int playerId, DecisionKind kind, IEnumerable<string> options, string subject = null,
+            bool anyCard = false)
         {
             PlayerId = playerId;
             Kind = kind;
             Options = (options ?? Enumerable.Empty<string>()).ToList().AsReadOnly();
             Subject = subject;
+            AnyCard = anyCard;
         }
 
-        public bool HasOption(string option) => Options.Contains(option);
+        public bool HasOption(string option) =>
+            Options.Contains(option) || (AnyCard && option != null && option.StartsWith("Card:"));
 
         public override string ToString() => $"{Kind}{(Subject != null ? $"({Subject})" : "")} for player {PlayerId} [{string.Join(", ", Options)}]";
     }

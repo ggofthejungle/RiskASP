@@ -133,10 +133,11 @@ public class CommanderBattleTests
     {
         Add(_origin, CommanderType.LandCommander);
         Add(_origin, CommanderType.NuclearCommander);
-        Assert.IsTrue(Attack(3, CommanderType.LandCommander, CommanderType.NuclearCommander));
+        Assert.IsTrue(Attack(1, CommanderType.LandCommander, CommanderType.NuclearCommander));
         var r = _gm.AttackPhase.LastAttackResult;
         Assert.AreEqual(3, r.AttackerRolls.Length);
         Assert.AreEqual(2, r.AttackerD8Count, "The commanders' dice come first");
+        Assert.IsFalse(Attack(3, CommanderType.LandCommander), "3 MODs + commander would be 4 dice");
         yield break;
     }
 
@@ -169,7 +170,7 @@ public class CommanderBattleTests
         _origin.SetTroops(30);
         _target.SetTroops(30);
         for (int i = 0; i < 12; i++)
-            Assert.IsTrue(Attack(3, CommanderType.LandCommander));
+            Assert.IsTrue(Attack(2, CommanderType.LandCommander));
         var lost = _gm.AttackPhase.AttackResults.Sum(r => r.AttackerLosses);
         Assert.Greater(lost, 0, "Some units were lost in 12 rolls");
         Assert.IsTrue(Has(_origin, CommanderType.LandCommander), "MODs took every loss");

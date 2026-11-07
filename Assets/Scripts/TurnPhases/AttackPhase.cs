@@ -4,6 +4,7 @@ using System.Linq;
 using Actions;
 using Decisions;
 using Expansions;
+using InvadeEarth.Rules;
 using JetBrains.Annotations;
 using Map;
 using player;
@@ -61,7 +62,7 @@ namespace TurnPhases
         }
 
         private bool DefenderCanReact(AttackAction attack) =>
-            _gm.CommandCards != null && _gm.CommandCards.PlayableReactions(attack.Target.Owner, attack).Any();
+            _gm.CommandCards != null && Secrets.PublicBool(() => _gm.CommandCards.PlayableReactions(attack.Target.Owner, attack).Any());
 
 
         public void Start(Player player)
@@ -127,10 +128,12 @@ namespace TurnPhases
         {
             var defender = attack.Target.Owner;
             var options = new List<string>();
-            options.AddRange(_gm.CommandCards.PlayableReactions(defender, attack).Select(Cards.CommandCards.OptionFor));
+            var known = Secrets.Knows(defender);
+            if (known)
+                options.AddRange(_gm.CommandCards.PlayableReactions(defender, attack).Select(Cards.CommandCards.OptionFor));
             options.Add(DecisionOptions.Pass);
             options.Add(DecisionOptions.PassForRestOfTurn);
-            _gm.OpenDecision(new PendingDecision(_gm.GetPlayerId(defender), DecisionKind.DefenseReaction, options),
+            _gm.OpenDecision(new PendingDecision(_gm.GetPlayerId(defender), DecisionKind.DefenseReaction, options, anyCard: !known),
                 OnDefenderAnswered);
         }
 
@@ -142,9 +145,35 @@ namespace TurnPhases
 
             var defender = response.Player;
             var card = _gm.CommandCards.CardFromOption(defender, response.Option);
+            if (card != null && card.CardType == Cards.CardType.Evacuation)
+            {
+                AskEvacuationDestination(attack, defender, card);
+                return;
+            }
+            ContinueAfterReaction(attack, defender, card, response.Option, null);
+        }
+
+        // Evacuation: the defender picks which of their territories takes the units.
+        private void AskEvacuationDestination(AttackAction attack, Player defender, Cards.Card card)
+        {
+            _pendingAttack = attack;
+            var options = defender.Territories.Where(t => t != attack.Target).Select(t => t.Name).ToList();
+            _gm.OpenDecision(new PendingDecision(_gm.GetPlayerId(defender), DecisionKind.EvacuationDestination, options, attack.Target.Name),
+                answer =>
+                {
+                    var pending = _pendingAttack;
+                    _pendingAttack = null;
+                    if (pending == null) return;
+                    var to = Map.TerritoryRepository.Instance.FromName(answer.Option);
+                    ContinueAfterReaction(pending, defender, card, answer.Option, to);
+                });
+        }
+
+        private void ContinueAfterReaction(AttackAction attack, Player defender, Cards.Card card, string option, Territory evacuateTo)
+        {
             if (card != null)
             {
-                var cancelled = _gm.CommandCards.PlayReaction(defender, card, attack);
+                var cancelled = _gm.CommandCards.PlayReaction(defender, card, attack, evacuateTo);
                 if (cancelled)
                 {
                     _ceaseFire.Add(defender);
@@ -155,14 +184,14 @@ namespace TurnPhases
                 }
                 // More than one card per invasion is allowed: ask again while the defender can still react.
                 if (attack.Target.Owner == defender && attack.Target.Troops > 0
-                    && _gm.CommandCards.PlayableReactions(defender, attack).Any())
+                    && Secrets.PublicBool(() => _gm.CommandCards.PlayableReactions(defender, attack).Any()))
                 {
                     _pendingAttack = attack;
                     AskDefender(attack);
                     return;
                 }
             }
-            else if (response.Option == DecisionOptions.PassForRestOfTurn)
+            else if (option == DecisionOptions.PassForRestOfTurn)
                 _passedForTurn.Add(defender);
 
             SetState(AttackState.Attacking);
@@ -188,8 +217,17 @@ namespace TurnPhases
                 ? new AttackResult(attackAction, 0, 0, attackAction.Origin.Troops, 0, 0, new int[0], new int[0])
                 : _bs.SimulateAttack(attackAction);
 
-            attackResult.Origin.RemoveTroops(attackResult.AttackerLosses - attackResult.AttackerCommanderLosses);
-            attackResult.Target.RemoveTroops(attackResult.DefenderLosses);
+            var applied = TroopMovement.ApplyBattle(
+                attackResult.Origin.Troops,
+                attackResult.Target.Troops,
+                attackResult.AttackerLosses,
+                attackResult.AttackerCommanderLosses,
+                attackResult.DefenderLosses,
+                attackResult.RemainingDefendingTroops);
+            var originLoss = attackResult.Origin.Troops - applied.OriginTroops;
+            var targetLoss = attackResult.Target.Troops - applied.TargetTroops;
+            if (originLoss > 0) attackResult.Origin.RemoveTroops(originLoss);
+            if (targetLoss > 0) attackResult.Target.RemoveTroops(targetLoss);
             // Attacking commanders die only if no attacking MOD was left to take the hit (e.g. a commander alone).
             foreach (var type in attackAction.Commanders.Reverse().Take(attackResult.AttackerCommanderLosses))
             {
@@ -209,6 +247,8 @@ namespace TurnPhases
                 // Commanders that attacked move in with the army (2210 FAQ).
                 FortifyAction.MoveCommanders(attackResult.Origin, attackResult.Target, attackAction.Commanders);
                 ConqueredTerritoriesCount++;
+                if (IncomeRules.EarnsConquestBonus(ConqueredTerritoriesCount))
+                    _gm.CommandCards?.GrantConquestBonus(attackAction.Player);
                 SetState(AttackState.Fortifying);
             }
             
@@ -228,8 +268,14 @@ namespace TurnPhases
                 Debug.LogWarning($"AttackPhase:  Player {attackReinforceAction.Player.Name} Cannot reinforce while in state {_state}");
 
             var troops = attackReinforceAction.ReinforcingTroops;
-            attackReinforceAction.From.RemoveTroops(troops);
-            attackReinforceAction.To.AddTroops(troops);
+            var moved = TroopMovement.Move(attackReinforceAction.From.Troops, attackReinforceAction.To.Troops, troops);
+            if (!moved.Ok)
+            {
+                Debug.LogWarning($"AttackPhase: move-in of {troops} was rejected.");
+                return;
+            }
+            attackReinforceAction.From.RemoveTroops(attackReinforceAction.From.Troops - moved.FromTroops);
+            attackReinforceAction.To.AddTroops(moved.ToTroops - attackReinforceAction.To.Troops);
             FortifyAction.MoveCommanders(attackReinforceAction.From, attackReinforceAction.To, attackReinforceAction.MovingCommanders);
             _attackTurn++;
             

@@ -28,10 +28,21 @@ namespace Cards
             CommanderType = commanderType;
         }
 
+        // Online: another player's card this device isn't allowed to see. Only its deck is known.
+        public bool IsHidden { get; private set; }
+        static int _nextHiddenId = -1;
+
+        public static Card FaceDown(CommanderType deck)
+        {
+            var card = new Card(null, default) { Name = "Face-down card", Id = _nextHiddenId--, IsHidden = true };
+            card.AssignCommander(deck);
+            return card;
+        }
+
         public CommanderType Commander => CommanderType;
         public CardSpec Spec => CardSpec.For(CardType);
         public int PowerUpCost => DeckLists.CostOf(CardType);
-        public CardTiming Timing => Spec.Timing;
+        public CardTiming Timing => IsHidden ? CardTiming.NotImplemented : Spec.Timing;
         public string AbilityName => _method?.Method.Name;
         public int AbilityParameterCount => _method?.Method.GetParameters().Length ?? 0;
 

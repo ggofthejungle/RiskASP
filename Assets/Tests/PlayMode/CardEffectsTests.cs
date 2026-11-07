@@ -239,14 +239,52 @@ public class CardEffectsTests
     }
 
     [UnityTest]
-    public IEnumerator NotImplementedCards_CannotBePlayed()
+    public IEnumerator Armageddon_LetsPlayersPlayNuclearCardsForFree()
     {
-        foreach (var type in new[] { CardType.DecoyRevealed, CardType.Armageddon })
-        {
-            var card = Give(_alice, type);
-            Assert.AreEqual(CardTiming.NotImplemented, card.Timing, type.ToString());
-            Assert.IsFalse(Play(card));
-        }
+        var armageddon = Give(_alice, CardType.Armageddon);
+        var rocket = Give(_alice, CardType.RocketStrikeLand);
+        Assert.IsTrue(Play(armageddon));
+        Assert.AreEqual(16, _alice.GetEnergy(), "only Armageddon's own cost is paid");
+
+        // Alice is asked first; Bob has no Nuclear Commander, so he is skipped.
+        var d = _gm.PendingDecision;
+        Assert.IsNotNull(d);
+        Assert.AreEqual(Decisions.DecisionKind.ArmageddonCard, d.Kind);
+        Assert.AreEqual(_alice, _gm.InputPlayer);
+        Assert.IsTrue(_gm.HandlePlayerAction(new DecisionResponseAction(_alice, _gm.Turn, CommandCards.OptionFor(rocket))));
+
+        d = _gm.PendingDecision;
+        Assert.AreEqual(Decisions.DecisionKind.ArmageddonTarget, d.Kind);
+        var target = _bob.Territories.First();
+        Assert.IsTrue(d.HasOption(target.Name));
+        Assert.IsFalse(d.HasOption(_alice.Territories.First().Name), "only opponents' territories");
+        Assert.IsTrue(_gm.HandlePlayerAction(new DecisionResponseAction(_alice, _gm.Turn, target.Name)));
+
+        Assert.IsFalse(_alice.Cards.Contains(rocket));
+        Assert.AreEqual(16, _alice.GetEnergy(), "Rocket Strike was free");
+        Assert.IsNull(_gm.PendingDecision, "no nuclear cards left, so Armageddon is over");
+        Assert.IsNull(_gm.CommandCards.ArmageddonPlayer);
+        yield break;
+    }
+
+    [UnityTest]
+    public IEnumerator DecoyRevealed_MovesCommandersBetweenOwnTerritories()
+    {
+        var home = _alice.Territories.First(t => t.CommandersList.Any(c => c.CommanderType == CommanderType.NuclearCommander));
+        var far = _alice.Territories.First(t => t != home);
+        var other = _alice.Territories.First(t => t != home && t != far);
+        var card = Give(_alice, CardType.DecoyRevealed);
+
+        Assert.IsFalse(Play(card), "no moves");
+        Assert.IsFalse(Play(card, home, CommanderType.NuclearCommander, _bob.Territories.First()), "to an opponent");
+        Assert.IsFalse(Play(card, far, CommanderType.NuclearCommander, home), "nothing to move there");
+
+        // Move the Nuclear Commander twice in one play (home -> far -> other).
+        Assert.IsTrue(Play(card, home, CommanderType.NuclearCommander, far, far, CommanderType.NuclearCommander, other));
+        Assert.IsFalse(home.CommandersList.Any(c => c.CommanderType == CommanderType.NuclearCommander));
+        Assert.IsFalse(far.CommandersList.Any(c => c.CommanderType == CommanderType.NuclearCommander));
+        Assert.IsTrue(other.CommandersList.Any(c => c.CommanderType == CommanderType.NuclearCommander));
+        Assert.IsFalse(_alice.Cards.Contains(card));
         yield break;
     }
 

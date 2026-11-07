@@ -1,4 +1,5 @@
 using System;
+using InvadeEarth.Rules;
 using Map;
 using player;
 using TurnPhases;
@@ -26,7 +27,7 @@ namespace Actions
         }
 
         public static int MinToMove(AttackAction attack) =>
-            Math.Min(Math.Max(1, Math.Min(attack.Troops, 3)), attack.Origin.GetAvailableTroops());
+            TroopMovement.MinMoveIn(attack.Troops, attack.Origin.Troops);
 
         public override bool IsValid()
         {

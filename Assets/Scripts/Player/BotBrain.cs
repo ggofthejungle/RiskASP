@@ -256,10 +256,8 @@ namespace player
                 inputProgram.AddObjectInput(new CardsCountPredicate(turn, player.Name, player.Cards.Count));
             }
 
-            // current player cards
-            foreach (var currentPlayerCard in currentPlayer.Cards)
-                inputProgram.AddObjectInput(new CardPredicate(turn, currentPlayer.Name, currentPlayerCard));
-
+            // No card(...) facts: they described classic set-trading cards. Command cards are played by
+            // BotEconomy / DefenderAI, not the solver.
 
             CurrentPhase.OnRequest(currentPlayer, inputProgram);
         }

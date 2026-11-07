@@ -5,11 +5,11 @@ using Antlr4.Runtime.Misc;
 using Cards;
 using Expansions;
 using Extensions;
+using InvadeEarth.Rules;
 using Map;
 using UnityEngine;
 using UnityEngine.PlayerLoop;
 using UnityEngine.Serialization;
-using Random = UnityEngine.Random;
 
 namespace player
 {
@@ -71,10 +71,8 @@ namespace player
             return _territories.Contains(territory);
         }
 
-        private int GetTerritoryCountBonus()
-        {
-            return GetTerritoryCount() / 3;
-        }
+        public int GetTotalTroopBonus() =>
+            IncomeRules.TroopBonus(GetTerritoryCount(), ContinentRepository.Instance.GetContinentBonusForPlayer(this));
 
         public void SetName(string newName)
         {
@@ -113,12 +111,9 @@ namespace player
 
         public void RandomlyDistributeTroops(int troops)
         {
-            while (troops > 0)
-            {
-                var territory = _territories.ElementAt(Random.Range(0, _territories.Count));
-                territory.AddTroops(1);
-                troops--;
-            }
+            var list = _territories.ToList();
+            foreach (var pick in TroopMovement.ScatterPicks(list.Count, troops, GameRandom.Current))
+                list[pick].AddTroops(1);
         }
 
         public void AddTerritory(Territory territory) => _territories.Add(territory);
@@ -126,13 +121,6 @@ namespace player
         public void RemoveTerritory(Territory territory)
         {
             _territories.Remove(territory);
-        }
-
-        public int GetTotalTroopBonus()
-        {
-            var continentBonus = ContinentRepository.Instance.GetContinentBonusForPlayer(this);
-            var territoriesBonus = GetTerritoryCountBonus();
-            return territoriesBonus + continentBonus;
         }
 
         // A commander is "in play" when it's on the map in a territory this player controls (2210 rules).

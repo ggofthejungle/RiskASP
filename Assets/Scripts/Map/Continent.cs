@@ -20,7 +20,7 @@ namespace Map
 
         private void SetupCheck()
         {
-            if (Territories.Count == 0)
+            if (Territories.Count == 0 && TerritoryRepository.Instance.Devastated.Count == 0)
                 Debug.LogError($"Continent {Name} has no territories", this);
 
             var territory = Territories.FirstOrDefault(t => t.Continent != this);
@@ -32,10 +32,13 @@ namespace Map
         }
     
     
+        // A continent loses its devastated territories; the bonus needs all of the rest. One that was
+        // devastated completely gives no bonus.
         public bool IsComplete()
         {
+            if (Territories.Count == 0) return false;
             var owner = Territories.First().Owner;
-            return Territories.All(t => t.Owner == owner);
+            return owner != null && Territories.All(t => t.Owner == owner);
         }
     
         public Player GetOwner()
@@ -47,7 +50,7 @@ namespace Map
 
         public bool IsOwnedByPlayer(Player player)
         {
-            return Territories.All(t => t.Owner == player);
+            return player != null && Territories.Count > 0 && Territories.All(t => t.Owner == player);
         }
 
 

@@ -48,9 +48,30 @@ namespace Map
 
 
 
+        // No owner yet (the take-turns setup) or devastated (out of the game).
+        static PlayerColor _unclaimed, _devastated;
+        static PlayerColor Neutral(Color normal)
+        {
+            var c = ScriptableObject.CreateInstance<PlayerColor>();
+            c.Normal = normal;
+            c.Highlight = Color.Lerp(normal, Color.white, 0.25f);
+            c.Selected = Color.Lerp(normal, Color.white, 0.4f);
+            c.Disabled = Color.Lerp(normal, Color.black, 0.3f);
+            return c;
+        }
+
+        PlayerColor ColorOfOwner()
+        {
+            if (_territory.Devastated) return _devastated ??= Neutral(new Color(0.16f, 0.15f, 0.14f, 1f));
+            if (_territory.Owner == null || _territory.Owner.Color == null)
+                return _unclaimed ??= Neutral(new Color(0.62f, 0.64f, 0.68f, 1f));
+            return _territory.Owner.Color;
+        }
+
         private void Start()
         {
-            _playerColor = _territory.Owner.Color;
+            _playerColor = ColorOfOwner();
+            UpdateGraphics();
             // Commanders and stations are shown by Map/MapBadges now (clear icons); hide the old debug texts.
             if (_commandersText != null) _commandersText.gameObject.SetActive(false);
             if (_spaceStationText != null) _spaceStationText.gameObject.SetActive(false);
@@ -119,9 +140,17 @@ namespace Map
 
         private void UpdateGraphics()
         {
-            _playerColor = _territory.Owner.Color;
+            _playerColor = ColorOfOwner();
             UpdateColor();
             SetTroopsCount(_territory.Troops);
+            var showCount = !_territory.Devastated && _territory.Owner != null;
+            _troopsCountText.gameObject.SetActive(showCount);
+            _troopsCountBackgroundSpriteRenderer.gameObject.SetActive(showCount);
+            if (_territory.Devastated)
+            {
+                _territoryNameText.text = _territory.Name.Replace('_', ' ') + "\n<size=70%>devastated</size>";
+                _territoryNameText.color = new Color(0.72f, 0.70f, 0.66f, 1f);
+            }
             //SetCommanderAndSpaceStationLabels() //if I knew what string to put in parentheses
         }
 

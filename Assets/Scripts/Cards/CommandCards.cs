@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Decisions;
 using Expansions;
+using InvadeEarth.Rules;
 using player;
 using TurnPhases;
 using UnityEngine;
@@ -70,35 +71,51 @@ namespace Cards
                 ? null
                 : "Choose an opponent's commander.";
 
-        // Pilot: only Energy Crisis is playable. Add cards here one at a time, each with a test.
-        public static CardSpec For(CardType type) => type switch
+        // Decoys Revealed: (from, commander, to) triples, applied in order. Both ends must be yours.
+        public static string DecoyMoves(Player p, object[] targets)
         {
-            // Power-up costs match the 2210 decks as modelled in the reference Java version (avioane/InvadeEarth).
-            // Diplomat
-            CardType.EnergyCrisis => new CardSpec(0, CardTiming.BeforeFirstInvasion, ownerIsFirstArgument: true),
-            CardType.CeaseFire => new CardSpec(2, CardTiming.OpponentInvades),
-            CardType.TerritorialStation => new CardSpec(1, CardTiming.BeforeFirstInvasion, checkTargets: OwnTerritoryForStation),
-            CardType.ModReduction => new CardSpec(2, CardTiming.BeforeFirstInvasion, ownerIsFirstArgument: true),
-            CardType.Redeployment => new CardSpec(0, CardTiming.EndOfTurn),
-            CardType.ColonyInfluenceD => new CardSpec(0, CardTiming.EndOfGame),
-            CardType.Evacuation => new CardSpec(0, CardTiming.OpponentInvades),
-            // Land
-            CardType.AssembleModsL => new CardSpec(1, CardTiming.BeforeFirstInvasion, checkTargets: OwnTerritory),
-            CardType.StealthModsL => new CardSpec(0, CardTiming.OpponentInvades),
-            CardType.ReinforcementsL => new CardSpec(0, CardTiming.BeforeFirstInvasion, checkTargets: ThreeDifferentOwnTerritories),
-            CardType.FrequencyJamL => new CardSpec(0, CardTiming.BeforeFirstInvasion, checkTargets: AnOpponent),
-            CardType.ScoutForces => new CardSpec(0, CardTiming.BeforeFirstInvasion),
-            CardType.ColonyInfluenceL => new CardSpec(0, CardTiming.EndOfGame),
-            // Nuclear (land variants)
-            CardType.RocketStrikeLand => new CardSpec(2, CardTiming.BeforeFirstInvasion, checkTargets: OpponentTerritory),
-            CardType.ScatterBombLand => new CardSpec(1, CardTiming.BeforeFirstInvasion, ownerIsFirstArgument: true),
-            CardType.TheMother => new CardSpec(3, CardTiming.BeforeFirstInvasion),
-            CardType.AssassinBomb => new CardSpec(1, CardTiming.BeforeFirstInvasion, checkTargets: OpponentCommander),
-            // Not implemented yet: DecoyRevealed (move any commanders anywhere: needs a multi-step UI),
-            // Armageddon (every player plays nuclear cards in turn order: needs its own turn flow).
-            CardType.LandDeathTrap => new CardSpec(3, CardTiming.OpponentInvades),
-            CardType.StealthStation => new CardSpec(0, CardTiming.OpponentInvades),
-            _ => new CardSpec(0, CardTiming.NotImplemented),
+            if (targets == null || targets.Length < 3 || targets.Length % 3 != 0)
+                return "Move at least one commander: click where it is, then where it goes.";
+            var at = new Dictionary<Map.Territory, List<CommanderType>>();
+            List<CommanderType> In(Map.Territory t)
+            {
+                if (!at.TryGetValue(t, out var list))
+                    at[t] = list = t.CommandersList.Select(c => c.CommanderType).ToList();
+                return list;
+            }
+            for (var i = 0; i < targets.Length; i += 3)
+            {
+                if (!(targets[i] is Map.Territory from && targets[i + 1] is CommanderType type && targets[i + 2] is Map.Territory to))
+                    return "Each move is a territory, a commander and a territory.";
+                if (from.Owner != p || to.Owner != p) return "Commanders can only move between territories you occupy.";
+                if (from == to) return "Pick a different territory to move it to.";
+                if (!In(from).Remove(type)) return $"There is no {type} of yours in {from.Name}.";
+                In(to).Add(type);
+            }
+            return null;
+        }
+
+        // Pilot: only Energy Crisis is playable. Add cards here one at a time, each with a test.
+        public static CardSpec For(CardType type)
+        {
+            var rule = CardCatalog.For(type.ToString());
+            var timing = (CardTiming)Enum.Parse(typeof(CardTiming), rule.Timing.ToString());
+            return new CardSpec(rule.PowerUpCost, timing, OwnerGoesFirst(type), CheckFor(type));
+        }
+
+        static bool OwnerGoesFirst(CardType type) =>
+            type is CardType.EnergyCrisis or CardType.ModReduction or CardType.ScatterBombLand;
+
+        static Func<Player, object[], string> CheckFor(CardType type) => type switch
+        {
+            CardType.TerritorialStation => OwnTerritoryForStation,
+            CardType.AssembleModsL => OwnTerritory,
+            CardType.ReinforcementsL => ThreeDifferentOwnTerritories,
+            CardType.FrequencyJamL => AnOpponent,
+            CardType.RocketStrikeLand => OpponentTerritory,
+            CardType.AssassinBomb => OpponentCommander,
+            CardType.DecoyRevealed => DecoyMoves,
+            _ => null,
         };
     }
 
@@ -109,12 +126,11 @@ namespace Cards
     //    and not be under Frequency Jam. Played cards go to the discard pile and are never reshuffled.
     public class CommandCards
     {
-        public const int BuyCost = 1;
-        public const int MaxBuysPerTurn = 4;
+        public const int BuyCost = CardCatalog.BuyCost;
+        public const int MaxBuysPerTurn = CardCatalog.MaxBuysPerTurn;
 
         private readonly GameManager _gm;
         private readonly CardRepository _cr;
-        private readonly System.Random _rng = new();
 
         public int BuysThisTurn { get; private set; }
         public IReadOnlyList<Card> DiscardPile => _discard;
@@ -186,37 +202,141 @@ namespace Cards
         // ---------------- Scout Forces ----------------
         // "Draw a land territory card and secretly place it facedown. Place 5 MODs on it. When you occupy this
         //  territory, immediately place the MODs." We pick a random territory the player doesn't occupy.
+        // Online the territory is secret: only the host and the scout know it (Secrets.Private). Everyone knows
+        // how many scouted territories each player has; when one of those players takes a territory, the host
+        // says whether it was scouted.
         private readonly Dictionary<Map.Territory, Player> _scouted = new();
+        private readonly Dictionary<Player, int> _scoutsLeft = new();
+        private bool _watchingOwners;
         public IEnumerable<Map.Territory> ScoutedBy(Player p) => _scouted.Where(kv => kv.Value == p).Select(kv => kv.Key).ToList();
+        public int ScoutsLeft(Player p) => _scoutsLeft.TryGetValue(p, out var n) ? n : 0;
         public const int ScoutForcesUnits = 5;
 
         private void Scout(Player p)
         {
-            var candidates = Map.TerritoryRepository.Instance.Territories.Where(t => t.Owner != p && !_scouted.ContainsKey(t)).ToList();
-            if (candidates.Count == 0) return;
-            var t = candidates[_rng.Next(candidates.Count)];
-            _scouted[t] = p;
-            t.OnOwnerChanged += OnScoutedOwnerChanged(t);
+            WatchOwners();
+            Map.Territory picked = null;
+            if (Secrets.Decides)
+            {
+                var candidates = Map.TerritoryRepository.Instance.Territories
+                    .Where(t => t.Owner != p && !_scouted.ContainsKey(t)).OrderBy(t => t.Name).ToList();
+                if (candidates.Count > 0) picked = candidates[Secrets.DrawRandom.Range(0, candidates.Count)];
+            }
+            if (!Secrets.PublicBool(() => picked != null)) return;
+            var name = Secrets.Private(p, () => picked.Name);
+            picked ??= name != null ? Map.TerritoryRepository.Instance.FromName(name) : null;
+            if (picked != null) _scouted[picked] = p;
+            _scoutsLeft[p] = ScoutsLeft(p) + 1;
         }
 
-        private Action<Player, Player> OnScoutedOwnerChanged(Map.Territory t)
+        private void WatchOwners()
         {
-            Action<Player, Player> handler = null;
-            handler = (_, newOwner) =>
+            if (_watchingOwners) return;
+            _watchingOwners = true;
+            foreach (var territory in Map.TerritoryRepository.Instance.Territories)
             {
-                if (!_scouted.TryGetValue(t, out var scout) || newOwner != scout) return;
-                _scouted.Remove(t);
-                t.OnOwnerChanged -= handler;
-                t.AddTroops(ScoutForcesUnits);
-                Debug.Log($"Scout Forces: {scout.Name} occupied {t.Name} and placed {ScoutForcesUnits} MODs.");
-            };
-            return handler;
+                var t = territory;
+                t.OnOwnerChanged += (_, newOwner) => OnOwnerChanged(t, newOwner);
+            }
+        }
+
+        private void OnOwnerChanged(Map.Territory t, Player newOwner)
+        {
+            if (newOwner == null || ScoutsLeft(newOwner) == 0) return;
+            if (!Secrets.PublicBool(() => _scouted.TryGetValue(t, out var s) && s == newOwner)) return;
+            _scouted.Remove(t);
+            _scoutsLeft[newOwner] = ScoutsLeft(newOwner) - 1;
+            t.AddTroops(ScoutForcesUnits);
+            Debug.Log($"Scout Forces: {newOwner.Name} occupied {t.Name} and placed {ScoutForcesUnits} MODs.");
         }
 
         // Our map has only land territories, so the Naval and Space decks (water / Moon cards) are out of play.
         public static bool IsDeckInPlay(CommanderType deck) => DeckLists.DecksInPlay.Contains(deck);
 
-        public int CardsLeftInDeck(CommanderType deck) => _cr.CardsInDeck.Count(c => c.Commander == deck);
+        public int CardsLeftInDeck(CommanderType deck) => _cr.DeckCount(deck);
+
+        // ---------------- Hidden hands (online) ----------------
+        // Every device knows how many cards each player holds and which deck each came from. Only the host and
+        // the owner know which cards they are; the other devices hold face-down cards (Card.IsHidden).
+
+        // Takes one card for p from the cards `allowed` lets through (null if there are none).
+        private Card Draw(Player p, Func<Card, bool> allowed)
+        {
+            Card picked = null;
+            if (Secrets.Decides)
+            {
+                Secrets.Source?.BeforeDeciding();
+                var choices = _cr.CardsInDeck.Where(allowed).OrderBy(c => c.Id).ToList();
+                if (choices.Count > 0) picked = choices[Secrets.DrawRandom.Range(0, choices.Count)];
+            }
+            var deckName = Secrets.Public(() => picked == null ? "" : picked.Commander.ToString());
+            if (string.IsNullOrEmpty(deckName)) return null;
+            var deck = (CommanderType)Enum.Parse(typeof(CommanderType), deckName);
+            var idText = Secrets.Private(p, () => picked.Id.ToString());
+            var card = picked ?? (int.TryParse(idText, out var id) ? _cr.CardById(id) : null);
+
+            _cr.TookFromDeck(deck);
+            if (card == null)
+                card = Card.FaceDown(deck);
+            else
+                _cr.CardsInDeck.Remove(card);
+            p.AddCard(card);
+            return card;
+        }
+
+        // p's face-down card turns out to be `card` (they played it, or this device may now see it).
+        // True if p holds it afterwards.
+        public bool Reveal(Player p, Card card)
+        {
+            if (p == null || card == null || card.IsHidden) return false;
+            if (p.Cards.Contains(card)) return true;
+            if (!_cr.CardsInDeck.Contains(card)) return false;
+            var faceDown = p.Cards.FirstOrDefault(c => c.IsHidden && c.Commander == card.Commander)
+                           ?? p.Cards.FirstOrDefault(c => c.IsHidden);
+            if (faceDown == null) return false;
+            p.RemoveCard(faceDown);
+            _cr.CardsInDeck.Remove(card);
+            p.AddCard(card);
+            return true;
+        }
+
+        // A new online host (after the old one left) holds face-down cards it now has to know. Players who
+        // reconnect say which cards they hold first; the rest (bots, players who are away) get cards from
+        // the ones nobody can account for. Nobody knew those cards, so this is as good as the original.
+        public void ResolveFaceDownCards(IRandom rng, Player only = null)
+        {
+            foreach (var p in _gm.Players)
+            {
+                if (only != null && p != only) continue;
+                foreach (var faceDown in p.Cards.Where(c => c.IsHidden).ToList())
+                {
+                    var pool = _cr.CardsInDeck.Where(c => c.Commander == faceDown.Commander).OrderBy(c => c.Id).ToList();
+                    if (pool.Count == 0) pool = _cr.CardsInDeck.OrderBy(c => c.Id).ToList();
+                    if (pool.Count == 0) break;
+                    Reveal(p, pool[rng.Range(0, pool.Count)]);
+                }
+            }
+        }
+
+        // The host says which cards p holds (p is this device's player). Replaces the hand this device had.
+        public void SetOwnHand(Player p, IEnumerable<Card> cards)
+        {
+            var wanted = cards.Where(c => c != null && !c.IsHidden).Distinct().ToList();
+            var old = p.Cards.ToList();
+            if (old.Count == wanted.Count && old.All(wanted.Contains)) return;
+            p.RemoveCards(old);
+            foreach (var c in old.Where(c => !c.IsHidden)) _cr.CardsInDeck.Add(c);
+            foreach (var c in wanted)
+            {
+                foreach (var other in _gm.Players.Where(o => o != p && o.Cards.Contains(c)))
+                {
+                    other.RemoveCard(c);
+                    other.AddCard(Card.FaceDown(c.Commander));
+                }
+                _cr.CardsInDeck.Remove(c);
+            }
+            p.AddCards(wanted);
+        }
 
         // null = allowed, otherwise the reason (shown to the player / logged).
         public string WhyCantBuy(Player p, CommanderType deck)
@@ -265,7 +385,11 @@ namespace Cards
         public Card CardFromOption(Player p, string option)
         {
             if (p == null || option == null || !option.StartsWith(CardOptionPrefix)) return null;
-            return int.TryParse(option.Substring(CardOptionPrefix.Length), out var id) ? p.Cards.FirstOrDefault(c => c.Id == id) : null;
+            if (!int.TryParse(option.Substring(CardOptionPrefix.Length), out var id)) return null;
+            var held = p.Cards.FirstOrDefault(c => c.Id == id);
+            if (held != null) return held;
+            var card = _cr.CardById(id);
+            return Reveal(p, card) ? card : null;
         }
 
         public IEnumerable<Card> PlayableReactions(Player defender, Actions.AttackAction attack) =>
@@ -293,13 +417,16 @@ namespace Cards
             return null;
         }
 
-        // Where Evacuation sends the units: the defender's strongest other territory (no path needed).
+        // Default Evacuation destination (bots, timeouts): the defender's strongest other territory (no path needed).
+        // A human defender picks it (DecisionKind.EvacuationDestination).
         public static Map.Territory EvacuationDestination(Player p, Map.Territory attacked) =>
             p.Territories.Where(t => t != attacked).OrderByDescending(t => t.Troops).FirstOrDefault();
 
         // Plays a reaction card. Returns true if the invasion is cancelled (Cease Fire).
-        public bool PlayReaction(Player p, Card card, Actions.AttackAction attack)
+        public bool PlayReaction(Player p, Card card, Actions.AttackAction attack, Map.Territory evacuateTo = null)
         {
+            if (evacuateTo != null && (evacuateTo.Owner != p || evacuateTo == attack.Target))
+                throw new InvalidOperationException("Evacuate to another territory you hold.");
             var why = WhyCantReact(p, card, attack);
             if (why != null) throw new InvalidOperationException(why);
 
@@ -319,7 +446,7 @@ namespace Cards
                     card.UseAbility(attack.Origin);
                     break;
                 case CardType.Evacuation:
-                    card.UseAbility(attack.Target, EvacuationDestination(p, attack.Target));
+                    card.UseAbility(attack.Target, evacuateTo ?? EvacuationDestination(p, attack.Target));
                     break;
                 case CardType.CeaseFire:
                     cancelled = true; // AttackPhase stops the invasion and blocks further attacks on p this turn
@@ -334,14 +461,26 @@ namespace Cards
             var why = WhyCantBuy(p, deck);
             if (why != null) throw new InvalidOperationException(why);
 
-            var choices = _cr.CardsInDeck.Where(c => c.Commander == deck).ToList();
-            var card = choices[_rng.Next(choices.Count)];
-            _cr.CardsInDeck.Remove(card);
+            var card = Draw(p, c => c.Commander == deck);
             p.SetEnergy(p.GetEnergy() - BuyCost);
-            p.AddCard(card);
             BuysThisTurn++;
             Debug.Log($"{p.Name} bought a {deck} card ({BuysThisTurn}/{MaxBuysPerTurn} this turn).");
             OnCardBought?.Invoke(p, card);
+            return card;
+        }
+
+        public Action<Player, Card> OnConquestBonus;
+
+        // Free card for the conquest bonus: from a deck whose commander the player has in play if possible,
+        // otherwise from any deck in play. null when every deck is empty.
+        public Card GrantConquestBonus(Player p)
+        {
+            p.SetEnergy(p.GetEnergy() + IncomeRules.ConquestBonusEnergy);
+            var anyPreferred = DeckLists.DecksInPlay.Any(d => p.HasCommanderInPlay(d) && CardsLeftInDeck(d) > 0);
+            var card = Draw(p, c => IsDeckInPlay(c.Commander) && (!anyPreferred || p.HasCommanderInPlay(c.Commander)));
+            Debug.Log($"{p.Name} conquered {IncomeRules.ConquestBonusTerritories} territories: +{IncomeRules.ConquestBonusEnergy} energy" +
+                      (card != null ? $" and a {card.Commander} card." : " (no cards left to draw)."));
+            OnConquestBonus?.Invoke(p, card);
             return card;
         }
 
@@ -351,6 +490,12 @@ namespace Cards
             if (why != null) throw new InvalidOperationException(why);
 
             p.SetEnergy(p.GetEnergy() - card.PowerUpCost);
+            Resolve(p, card, targets);
+        }
+
+        private void Resolve(Player p, Card card, object[] targets)
+        {
+            targets ??= Array.Empty<object>();
             p.RemoveCard(card);
             _discard.Add(card); // never reshuffled
             var args = card.Spec.OwnerIsFirstArgument
@@ -368,6 +513,14 @@ namespace Cards
                 case CardType.ModReduction:
                     StartModReduction(p);
                     break;
+                case CardType.Armageddon:
+                    StartArmageddon(p);
+                    break;
+                case CardType.DecoyRevealed:
+                    for (var i = 0; i + 2 < targets.Length; i += 3)
+                        Actions.FortifyAction.MoveCommanders((Map.Territory)targets[i], (Map.Territory)targets[i + 2],
+                            new[] { (CommanderType)targets[i + 1] });
+                    break;
                 default:
                     card.UseAbility(args);
                     break;
@@ -376,5 +529,116 @@ namespace Cards
         }
 
         private bool IsOwnTurnBeforeFirstInvasion(Player p) => _gm.IsCommandStep(p);
+
+        // ---------------- Armageddon ----------------
+        // "All players, in turn order, may play any number of nuclear command cards without paying the energy cost."
+        // Starting with the player who played it, each player is asked (ArmageddonCard) until they pass. A card with
+        // a target asks for it next (ArmageddonTarget). The usual rules still apply apart from energy and timing:
+        // the Nuclear Commander must be in play and the player must not be jammed.
+        private readonly Queue<Player> _armageddon = new();
+        private Card _armageddonCard;
+        public Player ArmageddonPlayer { get; private set; }
+
+        public string WhyCantPlayFree(Player p, Card card)
+        {
+            if (card == null || !p.Cards.Contains(card)) return $"{p.Name} doesn't hold that card.";
+            if (card.Commander != CommanderType.NuclearCommander || card.CardType == CardType.Armageddon)
+                return "Only other nuclear cards can be played during Armageddon.";
+            if (card.Timing == CardTiming.NotImplemented) return $"{card.Name} can't be played yet (not implemented).";
+            if (!p.canPlayCommandCards) return "You are jammed (Frequency Jam) and can't play command cards this turn.";
+            if (!p.HasCommanderInPlay(card.Commander)) return $"You need your {card.Commander} in play to play {card.Name}.";
+            var targets = ArmageddonTargets(p, card);
+            if (targets != null && targets.Count == 0) return $"{card.Name} has nothing to target.";
+            return null;
+        }
+
+        // Territory names the card can target, or null if it takes no target.
+        public static List<string> ArmageddonTargets(Player p, Card card) => card.CardType switch
+        {
+            CardType.RocketStrikeLand => Map.TerritoryRepository.Instance.Territories
+                .Where(t => t.Owner != p).Select(t => t.Name).ToList(),
+            CardType.AssassinBomb => Map.TerritoryRepository.Instance.Territories
+                .Where(t => t.Owner != p && t.CommandersList.Count > 0).Select(t => t.Name).ToList(),
+            _ => null,
+        };
+
+        // Assassin Bomb goes for the Nuclear Commander when there is one (same choice as the card bar).
+        public static CommanderType AssassinTarget(Map.Territory t) =>
+            t.CommandersList.OrderByDescending(c => c.CommanderType == CommanderType.NuclearCommander).First().CommanderType;
+
+        private void StartArmageddon(Player owner)
+        {
+            var order = _gm.GetPlayersInTurnOrder().Where(o => !o.IsDead()).ToList();
+            var start = Math.Max(0, order.IndexOf(owner));
+            _armageddon.Clear();
+            for (var i = 0; i < order.Count; i++)
+                _armageddon.Enqueue(order[(start + i) % order.Count]);
+            NextArmageddonPlayer();
+        }
+
+        private void NextArmageddonPlayer()
+        {
+            while (_armageddon.Count > 0)
+            {
+                ArmageddonPlayer = _armageddon.Dequeue();
+                if (AskArmageddon()) return;
+            }
+            ArmageddonPlayer = null;
+            Debug.Log("Armageddon is over.");
+        }
+
+        private bool AskArmageddon()
+        {
+            var p = ArmageddonPlayer;
+            if (!Secrets.PublicBool(() => p.Cards.Any(c => WhyCantPlayFree(p, c) == null))) return false;
+            var known = Secrets.Knows(p);
+            var options = known
+                ? p.Cards.Where(c => WhyCantPlayFree(p, c) == null).Select(OptionFor).Append(DecisionOptions.Pass).ToList()
+                : new List<string> { DecisionOptions.Pass };
+            _gm.OpenDecision(new PendingDecision(_gm.GetPlayerId(p), DecisionKind.ArmageddonCard, options, anyCard: !known),
+                OnArmageddonCard);
+            return true;
+        }
+
+        private void OnArmageddonCard(Actions.DecisionResponseAction response)
+        {
+            var p = response.Player;
+            var card = CardFromOption(p, response.Option);
+            if (card == null)
+            {
+                NextArmageddonPlayer();
+                return;
+            }
+            var targets = ArmageddonTargets(p, card);
+            if (targets == null)
+            {
+                PlayFree(p, card, Array.Empty<object>());
+                return;
+            }
+            _armageddonCard = card;
+            _gm.OpenDecision(new PendingDecision(_gm.GetPlayerId(p), DecisionKind.ArmageddonTarget, targets, card.Name),
+                OnArmageddonTarget);
+        }
+
+        private void OnArmageddonTarget(Actions.DecisionResponseAction response)
+        {
+            var card = _armageddonCard;
+            _armageddonCard = null;
+            var t = Map.TerritoryRepository.Instance.FromName(response.Option);
+            var targets = card.CardType == CardType.AssassinBomb ? new object[] { t, AssassinTarget(t) } : new object[] { t };
+            PlayFree(response.Player, card, targets);
+        }
+
+        private void PlayFree(Player p, Card card, object[] targets)
+        {
+            var why = WhyCantPlayFree(p, card) ?? card.Spec.CheckTargets?.Invoke(p, targets);
+            if (why != null) Debug.LogWarning($"Armageddon: {p.Name} can't play {card.Name}: {why}");
+            else
+            {
+                Debug.Log($"Armageddon: {p.Name} plays {card.Name} for free.");
+                Resolve(p, card, targets);
+            }
+            if (!AskArmageddon()) NextArmageddonPlayer();
+        }
     }
 }

@@ -3,6 +3,7 @@ using System.Linq;
 using System.Text;
 using Actions;
 using Cards;
+using InvadeEarth.Rules;
 using Map;
 using player;
 using UnityEngine;
@@ -35,16 +36,15 @@ namespace TurnPhases
         public void Start(Player player)
         {
             _remainingTroopsToPlace = player.GetTotalTroopBonus();
-            player.SetEnergy( player.GetEnergy() + CalculateEnergyOnTerritories(player));
+            player.SetEnergy(player.GetEnergy() + IncomeRules.EnergyIncome(player.GetTerritoryCount(),
+                Map.ContinentRepository.Instance.GetContinentBonusForPlayer(player)));
             
             OnTroopsToPlaceChanged?.Invoke();
 
             foreach (var territory in player.Territories)
             {
                 if (territory.containsSpaceStation)
-                {
-                    territory.AddTroops(1);
-                }
+                    territory.AddTroops(IncomeRules.StationTroopGrant);
             }
 
             if (_remainingTroopsToPlace == 0) _gm.NextTurnPhase();
@@ -56,8 +56,12 @@ namespace TurnPhases
         {
             if (action is ReinforceAction placeTroopsAction)
             {
-                placeTroopsAction.Territory.AddTroops(placeTroopsAction.Troops);
-                _remainingTroopsToPlace -= placeTroopsAction.Troops;
+                if (!TroopMovement.TryPlace(placeTroopsAction.Territory.Troops, placeTroopsAction.Troops,
+                        _remainingTroopsToPlace, out var troops, out var left))
+                    return;
+                var added = troops - placeTroopsAction.Territory.Troops;
+                placeTroopsAction.Territory.AddTroops(added);
+                _remainingTroopsToPlace = left;
 
                 OnTroopsPlaced?.Invoke(placeTroopsAction);
                 OnTroopsToPlaceChanged?.Invoke();
@@ -84,20 +88,8 @@ namespace TurnPhases
                 _gm.NextTurnPhase();
         }
 
-       
         public void End(Player player)
         {
-        }
-        
-
-        private int CalculateEnergyOnTerritories(Player player)
-        {
-            int numOfTerritories = player.GetTerritoryCount();
-
-            if (numOfTerritories < 12)
-                return 3;
-            
-            return numOfTerritories / 3;
         }
     }
 }

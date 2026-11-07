@@ -53,7 +53,7 @@ namespace Map
 
         private void UpdateColor()
         {
-            _spriteRenderer.color = _territory.Owner.Color.Normal;
+            _spriteRenderer.color = _territory.Owner != null && _territory.Owner.Color != null ? _territory.Owner.Color.Normal : Color.white;
         }
     }
 }

@@ -47,9 +47,15 @@ namespace Actions
                 return false;
             }
 
-            if (Troops > 3)
+            if (Troops > BattleSimulator.MaxAttackDice)
             {
-                LogError($"Troops ({Troops}) is greater than 3");
+                LogError($"Troops ({Troops}) is greater than {BattleSimulator.MaxAttackDice}");
+                return false;
+            }
+
+            if (Troops + Commanders.Count > BattleSimulator.MaxAttackDice)
+            {
+                LogError($"MODs ({Troops}) + commanders ({Commanders.Count}) exceed {BattleSimulator.MaxAttackDice} dice");
                 return false;
             }
 

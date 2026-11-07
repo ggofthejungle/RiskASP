@@ -75,3 +75,65 @@ and Cloud Code). CLAUDE.md also lists Photon PUN for turns: whether Photon stays
    state and returns/pushes the outcome. `LocalPlayer` comes from the logged-in PlayFab/UGS player.
 4. Reaction-window RPC + timer + AI fallback.
 5. Snapshot/rejoin. Hidden-information filtering.
+
+## Host lockstep: host migration and secrets (Nov 6, night)
+For now one player's device is the host (`OnlineMatch`); a Cloud Code server is later.
+
+**Host migration (built, not play-tested).**
+- Host and join options use `.WithHostMigration(new LockstepMigrationData())`. The room's own snapshot is only the
+  entry count, because every device already has the whole game and the log.
+- When the host leaves, the room picks a new host (`SessionHostChanged`) and moves the Relay network to it.
+- The new host's `OnlineMatch` turns `IsHost` on, drops out-of-order entries it was waiting for, starts its own
+  secret random stream, marks the old host's seat as away (a sequenced seat entry), and restarts a bot that was
+  mid-turn (`GameManager.ResumeBots`).
+- Clients see "Lost the host. Moving the match…", reconnect to the new host (`OnlineNet.ConnectedToHost`), and ask
+  for entries from their count.
+- A client that has more entries than the new host (it got an entry the new host missed) gets `ahead` and reloads
+  and replays the new host's log.
+- If the room can't migrate (`MigrationFailed`), players are told to rejoin by code.
+- Limits:
+  - An action sent to the old host that never came back is lost; the player does it again.
+  - Migration data is uploaded every 5 s, and only with 2 or more players.
+
+**Secret dice and draws (built, not play-tested).**
+- The public seed only sets up the match (deal and scene start).
+- From the first entry, the host draws from `RecordingRandom` with a crypto-random seed. Every number drawn while
+  applying an entry goes out in `Envelope.Rolls`.
+- Clients apply each entry with `ReplayRandom` returning those numbers in order. They log an error if the counts
+  differ; the board hash catches the rest.
+- Result: knowing the seed no longer tells anyone future dice, card draws or tie-breaks.
+
+**Hidden hands (built Nov 7, probed, not play-tested online).**
+- Every rule whose result depends on a hand goes through `Secrets` (`Cards/Secrets.cs`). `OnlineMatch` is the
+  `ISecretSource`.
+  - `Secrets.Public(work)`: the host works the answer out and adds it to the entry's `Facts`. The other devices take
+    the host's answer in order.
+  - `Secrets.Private(owner, work)`: the same, but the answer goes only to the owner's device (`Envelope.Private`,
+    stored per seat in `_privateLog`; each client gets its own copy of every entry).
+  - Local games have no source, so everything is worked out on the spot (single player, pass and play and the tests
+    behave as before).
+- Draws (`CommandCards.Draw`, used by buying and the conquest bonus):
+  - The host picks the card from `DrawRandom`. That is a second secret stream whose numbers are never sent.
+  - The deck it came from is public; the card id is private to the owner.
+  - Other devices add a face-down card (`Card.FaceDown(deck)`, `IsHidden`, never playable).
+  - Every device lowers the public `CardRepository.DeckCount`. `CardsInDeck` now means "cards this device can't place":
+    exactly the deck on the host, the deck plus other players' hidden cards elsewhere.
+- Hand-dependent answers that come from the host:
+  - whether the reaction window opens, and whether to ask again after a card;
+  - whether an Armageddon player has a free card;
+  - every AI answer to a decision (`DefenderAI`, for bots and away players).
+- Questions to a player whose hand a device can't see list no card options there (`PendingDecision.AnyCard`), so any
+  `Card:<id>` answer is accepted. The host has already checked it.
+- Reveals:
+  - Playing a card reveals it (`CommandCards.Reveal`, called from `CardFromOption` and the play action's decoding).
+  - When a player is eliminated, the winner's device is told the card ids.
+  - At game over, every hand is revealed so Colony Influence scores agree.
+- `BoardHash` covers public state only: hand sizes and deck counts.
+- After a host migration the new host has face-down cards too:
+  - Each reconnecting client's sync request lists the cards it holds (`Batch`), and the host accepts them if they fit.
+  - Face-down cards nobody claims (bots, away players) are dealt from the cards nobody can account for
+    (`ResolveFaceDownCards`, also run before the host works out anything hidden).
+  - After every sync the host sends the client its hand (`KindHand`), applied once the client has caught up to the
+    same entry. If the host had to deal a player's cards again, that player's hand changes; this is rare.
+- Still public: Scout Forces' chosen territory (picked with the recorded dice, so every device knows it). A device's
+  memory still holds the face-down count and the deck of each card.

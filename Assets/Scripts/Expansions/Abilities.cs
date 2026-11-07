@@ -330,7 +330,7 @@ namespace Expansions
             // Choose an opponent's commander. Roll an 8-sided die. On 3 or higher, destroy the chosen commander.
             var commander = territory.CommandersList.FirstOrDefault(c => c.CommanderType == commanderType);
             if (commander == null) return;
-            var roll = UnityEngine.Random.Range(1, 9);
+            var roll = GameRandom.Current.Range(1, 9);
             LastRoll = roll;
             if (roll >= 3)
             {
@@ -354,7 +354,7 @@ namespace Expansions
         public void RocketStrikeLand(Territory target)
         {
             // Choose any opponent's land territory. Roll a 6-sided die. Destroy that many units there.
-            var roll = UnityEngine.Random.Range(1, 7);
+            var roll = GameRandom.Current.Range(1, 7);
             LastRoll = roll;
             DestroyUnits(target, roll);
         }
@@ -376,7 +376,7 @@ namespace Expansions
         {
             // Turn over 3 land territory cards. Destroy half the opponents' units on those territories (round up).
             var all = Map.TerritoryRepository.Instance.Territories;
-            var drawn = all.OrderBy(_ => UnityEngine.Random.value).Take(3).ToList();
+            var drawn = all.OrderBy(_ => GameRandom.Current.Value).Take(3).ToList();
             LastScatterTargets = drawn;
             foreach (var t in drawn.Where(t => t.Owner != cardOwner))
                 DestroyHalfRoundUp(t);
@@ -399,7 +399,7 @@ namespace Expansions
             // Roll a 6-sided die. Destroy one unit in each territory of the continent rolled (everyone's).
             var continents = Map.ContinentRepository.Instance.Continents.Values.OrderBy(c => c.Name).ToList();
             if (continents.Count == 0) return;
-            var roll = UnityEngine.Random.Range(1, 7);
+            var roll = GameRandom.Current.Range(1, 7);
             LastRoll = roll;
             var continent = continents[(roll - 1) % continents.Count];
             LastContinentHit = continent;

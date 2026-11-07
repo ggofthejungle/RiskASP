@@ -12,12 +12,43 @@ public static class TestRunHelper
 {
     public const string ResultsPath = "Logs/test-results.txt";
     public const string FilterPath = "Logs/test-filter.txt";
+    // Survives the domain reload that Play Mode triggers. The native refresh counter does too,
+    // so this is only a "we already called Disallow" flag, not a second Disallow.
+    const string RefreshHeld = "InvadeEarth.Tests.RefreshHeld";
     private static readonly TestRunnerApi Api;
 
     static TestRunHelper()
     {
         Api = ScriptableObject.CreateInstance<TestRunnerApi>();
         Api.RegisterCallbacks(new ResultWriter());
+        EditorApplication.playModeStateChanged += OnPlayMode;
+        // A killed test run can leave the flag set. This process never called Disallow, so just drop the flag.
+        if (!EditorApplication.isPlayingOrWillChangePlaymode)
+            EditorPrefs.SetBool(RefreshHeld, false);
+    }
+
+    // Play Mode tests edit StartingPlayersConfiguration while a scene is running. With auto-refresh on,
+    // Unity then tries to reimport that asset on the main thread and waits for Play Mode to end.
+    // Play Mode is waiting for the reimport, so the editor locks up and never throws.
+    // A try/catch cannot catch that: LoadAssetAtPath does not return.
+    static void HoldAssetRefresh()
+    {
+        if (EditorPrefs.GetBool(RefreshHeld, false)) return;
+        AssetDatabase.DisallowAutoRefresh();
+        EditorPrefs.SetBool(RefreshHeld, true);
+    }
+
+    static void ReleaseAssetRefresh()
+    {
+        if (!EditorPrefs.GetBool(RefreshHeld, false)) return;
+        EditorPrefs.SetBool(RefreshHeld, false);
+        AssetDatabase.AllowAutoRefresh();
+    }
+
+    static void OnPlayMode(PlayModeStateChange change)
+    {
+        if (change == PlayModeStateChange.EnteredEditMode)
+            ReleaseAssetRefresh();
     }
 
     [MenuItem("Invade Earth/Run Hot-Seat Tests")]
@@ -26,6 +57,7 @@ public static class TestRunHelper
         Directory.CreateDirectory("Logs");
         File.WriteAllText(ResultsPath, "QUEUED\n");
         TurnOffErrorPause();
+        HoldAssetRefresh();
         var filter = new Filter
         {
             testMode = TestMode.PlayMode,
@@ -80,7 +112,11 @@ public static class TestRunHelper
             File.AppendAllText(ResultsPath, line + "\n");
         }
 
-        public void RunFinished(ITestResultAdaptor result) =>
+        public void RunFinished(ITestResultAdaptor result)
+        {
             File.AppendAllText(ResultsPath, $"FINISHED passed={result.PassCount} failed={result.FailCount} skipped={result.SkipCount}\n");
+            if (!EditorApplication.isPlaying)
+                ReleaseAssetRefresh();
+        }
     }
 }

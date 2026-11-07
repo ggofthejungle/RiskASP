@@ -94,7 +94,7 @@ namespace Map
             var color = ColorOf(owner);
 
             // 1) Defender is deciding: show the declared attack.
-            var pending = _gm.AttackPhase.PendingAttack;
+            var pending = _gm.AttackPhase?.PendingAttack;
             if (_gm.CurrentPhase is AttackPhase && pending != null)
             {
                 Draw(pending.Origin, pending.Origin.transform.position, pending.Target, pending.Target.transform.position, color, 1f);

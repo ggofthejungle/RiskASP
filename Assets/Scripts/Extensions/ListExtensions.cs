@@ -10,7 +10,7 @@ namespace Extensions
             while (n > 1)
             {
                 n--;
-                var k = UnityEngine.Random.Range(0, n + 1);
+                var k = GameRandom.Current.Range(0, n + 1);
                 (list[k], list[n]) = (list[n], list[k]);
             }
         }

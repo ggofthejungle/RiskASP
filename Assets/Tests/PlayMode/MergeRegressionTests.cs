@@ -247,12 +247,14 @@ public class MergeRegressionTests
         var bobTerritories = _bob.GetTerritoryCount();
         Assert.GreaterOrEqual(bobTerritories, 12);
 
+        var continents = Map.ContinentRepository.Instance;
         BidSoFirstIs(_alice); // Alice bids 1, Bob 0
-        Assert.AreEqual(3 - 1 + 3, _alice.GetEnergy(), "10 territories -> +3");
+        Assert.AreEqual(3 - 1 + 3 + continents.GetContinentBonusForPlayer(_alice), _alice.GetEnergy(), "10 territories -> +3");
 
         PlayQuickTurn();
         Assert.AreEqual(_bob, _gm.CurrentPlayer);
-        Assert.AreEqual(3 - 0 + bobTerritories / 3, _bob.GetEnergy(), $"{bobTerritories} territories -> +{bobTerritories / 3}");
+        Assert.AreEqual(3 - 0 + bobTerritories / 3 + continents.GetContinentBonusForPlayer(_bob), _bob.GetEnergy(),
+            $"{bobTerritories} territories -> +{bobTerritories / 3} plus continents");
         yield break;
     }
 

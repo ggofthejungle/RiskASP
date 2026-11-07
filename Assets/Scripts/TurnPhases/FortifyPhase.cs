@@ -1,5 +1,6 @@
 using System;
 using Actions;
+using InvadeEarth.Rules;
 using Map;
 using player;
 using UnityEngine;
@@ -32,8 +33,14 @@ namespace TurnPhases
         {
             if (action is FortifyAction fortifyAction)
             {
-                fortifyAction.From.RemoveTroops(fortifyAction.MovedTroops);
-                fortifyAction.To.AddTroops(fortifyAction.MovedTroops);
+                var moved = TroopMovement.Move(fortifyAction.From.Troops, fortifyAction.To.Troops, fortifyAction.MovedTroops);
+                if (!moved.Ok)
+                {
+                    Debug.LogWarning($"FortifyPhase: move of {fortifyAction.MovedTroops} was rejected.");
+                    return;
+                }
+                fortifyAction.From.RemoveTroops(fortifyAction.From.Troops - moved.FromTroops);
+                fortifyAction.To.AddTroops(moved.ToTroops - fortifyAction.To.Troops);
                 FortifyAction.MoveCommanders(fortifyAction.From, fortifyAction.To, fortifyAction.MovingCommanders);
                 OnFortifyAction?.Invoke(fortifyAction);
                 if (ExtraMoves > 0)

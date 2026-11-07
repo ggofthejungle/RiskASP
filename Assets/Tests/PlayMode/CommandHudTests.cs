@@ -133,6 +133,8 @@ public class CommandHudTests
         var where = _alice.Territories.First();
         var before = where.Troops;
         _hud.ClickCard(card);
+        Assert.IsTrue(_hud.IsConfirming, "Clicking a card previews it first");
+        _hud.Confirm();
         Assert.IsTrue(_sm.IsTargeting);
         Click(where);
         Assert.AreEqual(before + 3, where.Troops);
@@ -147,6 +149,7 @@ public class CommandHudTests
         var t = _alice.Territories.Take(3).ToArray();
         var before = t.Select(x => x.Troops).ToArray();
         _hud.ClickCard(card);
+        _hud.Confirm();
         Click(t[0]); Click(t[1]);
         Assert.IsTrue(_sm.IsTargeting, "Still waiting for the third");
         Click(t[2]);

@@ -19,6 +19,17 @@ namespace Map
         public List<Territory> NeighbourTerritories = new();
         public Player Owner;
         public int Troops { get; private set; }
+        // 2210 setup: a wasteland for the whole game. Cut out of the map (TerritoryRepository.Devastate).
+        public bool Devastated { get; private set; }
+
+        internal void MarkDevastated()
+        {
+            Devastated = true;
+            NeighbourTerritories.Clear();
+            Troops = 0;
+            Owner = null;
+            OnStateChanged?.Invoke();
+        }
 
         public bool containsSpaceStation = false;
         public bool containsCommanders = false;
@@ -38,6 +49,7 @@ namespace Map
 
         private void SetupChecks()
         {
+            if (Devastated) return;
             if (!Name.Equals(name))
                 Debug.LogError($"Territory name ({Name}) does not match GameObject name ({gameObject.name})");
 

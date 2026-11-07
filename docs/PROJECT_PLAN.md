@@ -1,8 +1,8 @@
 # Invade Earth: full project plan (handoff for the next agent)
 
-Written Oct 30, 2026 from the code on `dev` (commit `2e80778`) plus every card on the Trello board
+Written Oct 30, 2026 from the code on `dev` (base `6b5ca01` + uncommitted PT-2 Cursor session) plus every card on the Trello board
 "Invade Earth" (https://trello.com/b/BaUFhOdd/invade-earth). Owner: George (GitHub `ggofthejungle`).
-Read `CLAUDE.md` first for how to work in this repo. This file covers what the game is, what's done,
+Read `CLAUDE.md` first for how to work in this repo (includes late-evening session log). This file covers what the game is, what's done,
 what's decided, what's still open and the order to do the rest.
 
 ---
@@ -28,7 +28,7 @@ Every item below has PlayMode tests; the last run was **118/118**.
 
 | Area | State |
 |---|---|
-| Turn flow | Starting placement (CC-5) → bid (typed, Enter submits) → highest bidder chooses position → Reinforce/Attack/Fortify per player → 5 years → ranking screen |
+| Turn flow | Bid → highest bidder chooses position → year-1 starting placement (CC-5) → Reinforce/Attack/Fortify per player → 5 years → ranking screen |
 | Input model | `PendingDecision` separates the turn owner (`CurrentPlayer`) from the input owner (`InputPlayer`). Every action goes through `GameManager.HandlePlayerAction`, which rejects actions from the wrong player. Bots answer instantly through `DefenderAI`. |
 | Serialization | `ActionData` / `ActionCodec` (including commanders). Bid and turn-order choice are NOT actions yet (ON-1 part 1). |
 | Commanders | Diplomat (d6), Land and Nuclear (d8). Each player starts with a Diplomat, a Land Commander and a Space Station, placed by clicking. Hire costs 3 energy. Commanders join attacks only when picked, and die only if no attacking MOD is left. Winners move in. Commanders can go along on a Fortify move. |
@@ -42,7 +42,7 @@ Every item below has PlayMode tests; the last run was **118/118**.
 **Not done or known gaps:**
 - Decoys Revealed and Armageddon are not implemented.
 - Evacuation's destination is picked automatically (the defender's strongest territory).
-- Bot bids are always 0. The ASP solver bots don't know about cards, hiring or Cease Fire, and are untested since the merge.
+- Bots bid with a simple reserve rule (`BotBidding`); untested in play. The ASP solver bots don't know about cards, hiring or Cease Fire, and are untested since the merge.
 - Energy income is approximate: +3, or territories/3 with 12+ territories. The rulebook uses a score-chart lookup instead.
 - Territories at game start are still random. Only commanders and the station are picked.
 - Score, energy and turn order for all players are not shown on screen (Trello UI backlog).
@@ -72,14 +72,14 @@ Every item below has PlayMode tests; the last run was **118/118**.
 | # | Question | Status |
 |---|---|---|
 | 1 | End condition: 5 years + most points? | **Implemented that way.** Trello card "Game end condition change?" is still open, so ask George before changing it. |
-| 2 | Bid input: free number or 4 fixed options? | Free number + Enter is implemented. **Open for mobile/async**: fixed buttons may be better there. |
+| 2 | Bid input: free number or 4 fixed options? | **Done:** one button per amount, 0 to the player's energy (PT-2); the typed box is gone. |
 | 3 | New map: data-driven adjacency JSON? Mobile collider size? | **Open.** Recommendation: JSON adjacency + artwork, generous colliders. Needed before sale. |
 | 4 | Remove moon–earth links? | Not relevant while the map is land-only. Revisit with the new map. |
 | 5 | Map first or cards first? | **Decided in practice:** cards first, on the existing map (done). |
 | 6 | Classic Risk cards: hide or delete? | **Decided:** deleted (set-trading removed). |
 | 7 | How to do interrupt cards? | **Decided:** live defender-only window plus timer. The "pre-set/armed reaction cards" idea (Trello Research card 5) is parked and worth revisiting if async play-by-turn is built. |
-| 8 | Devastation: how does it break paths? | **Open.** Needs George's ruling (impassable? removes edges? permanent?). |
-| 9 | Initial placement: random or alternating picks? | **Partly decided:** commanders and the station are picked (CC-5). Territories are still random. The Trello backlog asks for "take turns placing troops". Ask George. |
+| 8 | Devastation: how does it break paths? | **Decided (George, Nov 7):** like removing a node from the graph: all its links go, as if it was never there, for the whole game. Built (DEV-1). |
+| 9 | Initial placement: random or alternating picks? | **Decided (George, Nov 7):** a match option the host picks: Random, or Take turns (2210 setup). Commanders and the station are still picked after (CC-5). Built (PLACE-1). |
 | 10 | Backend split? | **Decided:** PlayFab + UGS, no Photon. |
 | 11 | Tests? | **Decided:** yes (118 PlayMode tests; rules-engine unit tests once ON-1 part 2 exists). |
 | 12 | Energy cost for attacking/moving? | **Open, recommend dropping it**: it conflicts with the 2210 rules. Confirm with George. |
@@ -90,17 +90,28 @@ Task IDs match `CLAUDE.md`. Sizes: S = under 1 hour of agent work, M = a session
 **Always give George the size and ask before starting an L task.**
 
 ### Phase A: finish the playable local game (now)
-- **PT-2 (CURRENT):** George play-tests from the Menu scene: placement, bid, choose order, command bar,
-  attack arrow, commander pickers, defender prompt. Fix what he reports. (S–M per round)
+- **PT-2 (CURRENT):** George play-tests from the Menu scene. Year order is now **bid → choose order → CC-5 placement → reinforce**.
+  Lobby pre-fills 2 humans (red/blue). Bid is tap-buttons. Attack MODs+commanders ≤ 3 dice. Map badge icons + legend tooltips.
+  Built Nov 6, not play-tested: card preview + Play confirm, Move-in on a second click of the same territory. Commander
+  death was re-checked: it matches the locked rule, and George said keep it.
+  Keep fixing what he reports. (S–M per round)
 - **Q-OPEN:** ask George: after PT-2, ON-1 part 1 or part 2 first?
-- **CC-6:** Evacuation: let the defender choose the destination. (S)
+- **CC-6:** Evacuation: let the defender choose the destination. (S) — built Nov 6 (map click; bots/timeouts pick the strongest).
 - **CC-7:** Decoys Revealed (move any commanders to any of your territories) and Armageddon (all players, in turn
-  order, play nuclear cards for free). (M)
-- **RULE-1:** check the "conquer 3 territories → 1 energy + 1 command card" correction card against the rulebook and the code. Fix if needed. (S)
-- **RULE-2:** energy income from the rulebook score chart instead of the approximation. (S)
-- **UI-1:** a scoreboard strip with every player's score, energy, card count and turn order, updated each turn. (M)
-- **DEV-1:** Devastation, once George rules on question 8. (M)
-- **PLACE-1:** take turns placing troops / territories, if George wants it (question 9). (M)
+  order, play nuclear cards for free) — both built Nov 6, not play-tested. (M)
+- **RULE-1:** "conquer 3 territories → 1 energy + 1 command card" — George said implement it; built Nov 6 (once per turn, on the 3rd conquest). (S)
+- **RULE-2:** energy income from the rulebook score chart instead of the approximation. (S) — built Nov 7:
+  energy = the chart value for your territory count (the same number as your MODs) + your continent bonuses.
+  The chart's numbers aren't in the rulebook text, so it assumes territories ÷ 3, minimum 3; George to check his copy.
+- **UI-1:** a scoreboard strip with every player's score, energy, card count and turn order, updated each turn. (M) — built Nov 6 (`UI/Scoreboard.cs`).
+- **DEV-1:** Devastation (M) — built Nov 7, probed in Play Mode. Match option 0–4 (default 4). Random territories
+  are cut out of the map before the deal (no owner, no links, no continent; drawn dark with "devastated").
+  A pick that would leave a territory with no neighbours is skipped. A continent's bonus needs all its
+  remaining territories.
+- **PLACE-1:** take turns placing troops / territories (M) — built Nov 7, probed with bots only. Match option
+  Random / Take turns. Take turns: random order, claim empty territories with 1 MOD each until the map is full,
+  then place the rest of the army (40/35/30/25 for 2–5 players) 3 MODs at a time, then bidding as usual.
+  Menu: Play → Match rules; online, the host sets both in the room and everyone plays the host's rules.
 
 ### Phase B: online foundation (ON-1, per `docs/online-plan.md`)
 1. **Part 1 (M):**
@@ -112,6 +123,9 @@ Task IDs match `CLAUDE.md`. Sizes: S = under 1 hour of agent work, M = a session
    - A pure C# rules assembly, `InvadeEarth.Rules`, with no UnityEngine.
    - It holds GameState, the reducers, battle, cards and scoring, moved out of the MonoBehaviours step by step behind the existing tests.
    - It must compile for UGS Cloud Code (.NET) or PlayFab CloudScript (Azure Functions).
+   Status Nov 7: for now one player's device is the host (lockstep). Built: secret dice and draws, hidden hands
+   and Scout Forces, host migration, timer, rejoin by replay. A Cloud Code server is still to come
+   (`docs/online-plan.md`).
 3. **Part 3 (L):** server authority:
    - Clients send actions; the server validates them, rolls the dice and broadcasts the results.
    - Hidden info is filtered per player (hands, Scout Forces cards).
@@ -128,6 +142,10 @@ Task IDs match `CLAUDE.md`. Sizes: S = under 1 hour of agent work, M = a session
 - **MM-2 (L):**
   - A C# heuristic AI that runs on mobile and WebGL and handles cards, hiring, stations, bidding and reactions.
   - Keep the ASP solver as an optional desktop "hard" AI. DLV2 must never ship.
+  - Started Nov 7: `TurnPhases/AI/BotEconomy.cs`. At the start of a bot's turn it re-hires lost commanders,
+    plays the cards in hand that don't stop the game for others (not MOD Reduction / Armageddon / Decoys),
+    builds a station (years 1–4) and buys up to 2 cards, keeping 2 energy for defence cards. Bidding
+    (`BotBidding`) and reactions (`DefenderAI`) were already C#. Still solver-only: placing MODs, attacks, fortify.
 - **OL-1 Login (M):** copy PlayFab/CBS auth from Battle Planes (`ggofthejungle/Mine-master`: `AuthController.cs`,
   `LobbyManager.cs`). Device/anonymous login first; Google/Steam/Apple later. Decide: a separate PlayFab
   title, or share the DT Games one.
@@ -144,7 +162,8 @@ Task IDs match `CLAUDE.md`. Sizes: S = under 1 hour of agent work, M = a session
   - Rewrite every card name and all card text, ideally with tweaked effects and costs.
   - Rename the commanders.
   - No "Risk" or "2210" anywhere, including store tags and keywords.
-- **LEGAL-3 (S):**
+- **LEGAL-3 (S):** — in-game part done Nov 7: Credits → Licenses shows the full RiskASP MIT notice, plus short
+  PlayFab SDK (Apache 2.0) and SimpleJson (MIT) notices. Ask in LEGAL-4 whether the full Apache text must ship too.
   - Keep the Farfi55/RiskASP MIT notice in the repo and on an in-game credits screen.
   - Don't reuse code from avioane/InvadeEarth (Java, no license); it was only read as a rules reference.
 - **LEGAL-4 (George):** a 1-hour IP attorney review before the store page goes public.

@@ -5,7 +5,15 @@
         "Unity.TextMeshPro",
         "UnityEngine.UI",
         "Unity.VisualScripting.Core",
-        "Unity.Mathematics"
+        "Unity.Mathematics",
+        "InvadeEarth.Rules",
+        "PlayFab",
+        "Unity.Services.Core",
+        "Unity.Services.Authentication",
+        "Unity.Services.Multiplayer",
+        "Unity.Netcode.Runtime",
+        "Unity.Networking.Transport",
+        "Unity.Collections"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

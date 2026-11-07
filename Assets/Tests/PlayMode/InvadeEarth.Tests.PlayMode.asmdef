@@ -4,7 +4,10 @@
     "references": [
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner",
-        "InvadeEarth.Game"
+        "UnityEngine.UI",
+        "Unity.TextMeshPro",
+        "InvadeEarth.Game",
+        "InvadeEarth.Rules"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

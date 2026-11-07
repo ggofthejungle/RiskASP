@@ -37,8 +37,8 @@ George's Trello table, checked against the rulebook and the Java version (which 
 | 5. Play command cards | n/a | "Before first invasion" cards: any time on your turn **until your first invasion** (Java allows them in the invade step too, before the first invasion) | ✅ pilot: allowed in Reinforce and in Attack before the first attack |
 | 6. Attack | Dice d6 | Commanders/stations roll d8. **After every declared invasion, players get a reaction window** (see below) | d8 ✅ partly, window = RW-1 plumbing ✅ |
 | 7. Fortify | 1 move | "Free move", Redeployment card gives an extra one | ✅ |
-| 8. End of turn | Draw a card if you conquered | "End of turn" cards (Redeployment). **No free card** | ❌ still draws a free card on conquest |
-| Game start | n/a | 3 energy. **Every player starts with a Diplomat, a Land Commander and a Space Station.** 4 devastated territories. | 3 energy ✅. Commanders test-placed on ONE territory ❌ |
+| 8. End of turn | Draw a card if you conquered | "End of turn" cards (Redeployment). **No free card** | ✅ no free card (removed in CC-1). The "3 conquests → 1 energy + 1 card" correction (RULE-1) is not implemented |
+| Game start | n/a | 3 energy. **Every player starts with a Diplomat, a Land Commander and a Space Station.** 4 devastated territories. | 3 energy ✅. Players place their commanders and station (CC-5) ✅. No devastated territories ❌ |
 
 **Design consequences**
 - Keep `Reinforce → Attack → Fortify` as the three big phases (the banner stepper shows them). Add **sub-steps inside the turn**: Collect → Deploy → Command (hire, stations, buy cards, play before-invasion cards) → Attack → Fortify → End of turn. A separate `CommandPhase` between Reinforce and Attack is the cleanest place for hire/build/buy. Card *playing* must stay allowed until the first invasion.

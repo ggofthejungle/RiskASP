@@ -14,8 +14,8 @@ using UnityEngine.TestTools;
 using UnityEditor;
 #endif
 
-// CC-5: before year 1, each player (in turn order) picks a territory for their Diplomat, Land Commander and
-// Space Station. One PlaceStartingUnit decision per unit, answered by clicking the map.
+// CC-5: year 1 is bid → choose turn order → then each player (in that order) places Diplomat,
+// Land Commander and Space Station. Then the first reinforce turn starts.
 public class StartingPlacementTests
 {
     private const string ConfigPath = "Assets/ScriptableObjects/StartingPlayersConfiguration.asset";
@@ -43,7 +43,7 @@ public class StartingPlacementTests
         for (int i = 0; i < 300; i++)
         {
             _gm = GameManager.Instance;
-            if (_gm != null && _gm.IsPlacingStartingUnits) break;
+            if (_gm != null && _gm.IsBidding) break;
             yield return null;
         }
         Assert.IsNotNull(_gm);
@@ -61,11 +61,22 @@ public class StartingPlacementTests
         }
     }
 
-    [UnityTest]
-    public IEnumerator PlacementComesFirst_ThreePicksPerPlayer_ThenBidding()
+    private void BidAndChooseOrder()
     {
-        Assert.IsTrue(_gm.IsPlacingStartingUnits);
-        Assert.IsFalse(_gm.IsBidding);
+        Assert.IsTrue(_gm.IsBidding, "Year starts with bidding");
+        Assert.IsFalse(_gm.IsPlacingStartingUnits);
+        while (_gm.IsBidding)
+            Assert.IsTrue(_gm.SubmitBid(0));
+        while (_gm.IsChoosingOrder)
+            Assert.IsTrue(_gm.ChooseTurnPosition(_gm.AvailableTurnPositions[0]));
+    }
+
+    [UnityTest]
+    public IEnumerator BidAndOrderFirst_ThenThreePicksPerPlayer_ThenReinforce()
+    {
+        BidAndChooseOrder();
+
+        Assert.IsTrue(_gm.IsPlacingStartingUnits, "After seats are chosen, starting units are placed");
         Assert.IsTrue(_gm.Players.All(p => p.Territories.All(t => t.CommandersList.Count == 0 && !t.containsSpaceStation)),
             "Nothing placed yet");
 
@@ -75,7 +86,7 @@ public class StartingPlacementTests
         {
             var p = _gm.GetPlayerById(d.PlayerId);
             Assert.AreEqual(p, _gm.CurrentPlayer);
-            var where = p.Territories.Skip(i % 3).First(); // different territories
+            var where = p.Territories.Skip(i % 3).First();
             order.Add((p, d.Subject));
             chosen[(p, d.Subject)] = where;
             Assert.IsTrue(_gm.HandlePlayerAction(new DecisionResponseAction(p, _gm.Turn, where.Name)));
@@ -86,7 +97,8 @@ public class StartingPlacementTests
         Assert.AreEqual(order[0].Item1, order[2].Item1, "One player places all three, then the next");
         Assert.AreNotEqual(order[0].Item1, order[3].Item1);
         Assert.IsFalse(_gm.IsPlacingStartingUnits);
-        Assert.IsTrue(_gm.IsBidding, "Then year 1 bidding starts");
+        Assert.IsFalse(_gm.IsBidding);
+        Assert.IsInstanceOf<TurnPhases.ReinforcePhase>(_gm.CurrentPhase, "Then year-1 turns begin");
 
         foreach (var ((p, unit), t) in chosen)
         {
@@ -101,6 +113,7 @@ public class StartingPlacementTests
     [UnityTest]
     public IEnumerator YouCanOnlyPlaceOnYourOwnTerritory()
     {
+        BidAndChooseOrder();
         var d = _gm.PendingDecision;
         var p = _gm.GetPlayerById(d.PlayerId);
         var enemy = _gm.Players.First(x => x != p).Territories.First();
@@ -112,6 +125,7 @@ public class StartingPlacementTests
     [UnityTest]
     public IEnumerator Placement_ByClickingTheMap()
     {
+        BidAndChooseOrder();
         var p = _gm.CurrentPlayer;
         var where = p.Territories.First();
         var sel = SelectionManager.Instance.TerritoryToSelectionMap[where];
@@ -126,6 +140,7 @@ public class StartingPlacementTests
     [UnityTest]
     public IEnumerator TheAIPicksInstantly()
     {
+        BidAndChooseOrder();
         var d = _gm.PendingDecision;
         var pick = DefenderAI.Choose(_gm, d);
         CollectionAssert.Contains(d.Options, pick);

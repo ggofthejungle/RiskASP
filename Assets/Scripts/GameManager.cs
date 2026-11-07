@@ -7,6 +7,7 @@ using Cards;
 using Decisions;
 using Expansions;
 using Extensions;
+using InvadeEarth.Rules;
 using Map;
 using player;
 using TurnPhases;
@@ -14,7 +15,6 @@ using UnityEngine;
 using TMPro;
 using UI;
 using UnityEngine.UI;
-using Random = System.Random;
 
 public class GameManager : MonoBehaviour
 {
@@ -37,6 +37,13 @@ public class GameManager : MonoBehaviour
 
     private Queue<Player> _playerQueue = new();
     public List<Player> GetPlayersInTurnOrder() => _playerQueue.ToList();
+
+    // This year's seats, 1st to last (the queue rotates as turns are taken; this doesn't).
+    // Before any seats are chosen, or while some are still free, it is the player list.
+    public IReadOnlyList<Player> SeatOrder =>
+        _chosenPositions.Length > 0 && _chosenPositions.All(p => p != null)
+            ? _chosenPositions.Concat(Players.Where(p => !_chosenPositions.Contains(p))).ToList()
+            : Players;
 
     // Turn owner: whose turn it is.
     public Player CurrentPlayer => _currentPlayer;
@@ -122,8 +129,34 @@ public class GameManager : MonoBehaviour
         Purchases = new Purchases(this);
         AnnualBidding = new AnnualBidding(this);
         CreatePlayers();
+        ApplyMatchSession();
 
         SubscribeToEvents();
+    }
+
+    // Match rules from the menu (online: the host's). A scene loaded without the menu keeps the plain setup.
+    public MatchOptions Options { get; private set; } = MatchOptions.Plain;
+
+    // One human on this device is the local player (single player vs bots).
+    // Two or more humans share the device, so the pass-the-device covers come on.
+    void ApplyMatchSession()
+    {
+        if (!MatchSession.TryConsume(out var kind)) return;
+        Options = MatchSession.Options;
+        if (kind == MatchKind.Online)
+        {
+            if (!OnlineMatch.TryTake(out var match)) return;
+            Relay = match;
+            LocalPlayer = GetPlayerById(match.MySeat);
+            PassTheDeviceScreens = false;
+            ReactionTimeoutSeconds = (float)DecisionClock.OnlineReactionSeconds;
+            return;
+        }
+        if (kind != MatchKind.SinglePlayer && kind != MatchKind.HotSeat) return;
+        var humans = Players.Where(p => p != null && !p.IsBot()).ToList();
+        PassTheDeviceScreens = humans.Count > 1;
+        if (humans.Count == 1)
+            LocalPlayer = humans[0];
     }
 
     private void SubscribeToEvents()
@@ -139,6 +172,11 @@ public class GameManager : MonoBehaviour
         var cards = new List<Card>(eliminated.Cards);
         eliminatedBy.AddCards(cards);
         eliminated.RemoveCards(cards);
+        // Online: the winner's device now sees the cards it took.
+        var ids = Secrets.Private(eliminatedBy, () => string.Join(",", cards.Select(c => c.Id)));
+        if (!Secrets.Decides && !string.IsNullOrEmpty(ids))
+            foreach (var id in ids.Split(','))
+                CommandCards.Reveal(eliminatedBy, _cr.CardById(int.Parse(id)));
 
         if (Players.Count(player => player.IsAlive()) == 1)
             GameOver();
@@ -166,9 +204,54 @@ public class GameManager : MonoBehaviour
     private int _turnsTakenThisYear;
     private GameObject _bidButton;
     private GameObject _bidInputGO;
-    private readonly Random _rng = new Random();
+
+    // Online: actions made on this device go to the host instead of being applied here. The host sends
+    // the accepted ones back to everyone in one order, and they are applied with ApplyAgreed.
+    // null = local game.
+    public IActionRelay Relay { get; private set; }
+    private int _agreedDepth;
+
+    // The solver bots take their turns on one device only (the host online); the others replay the moves.
+    // Bids, seat choices and AI answers to decisions are not solver moves: they run everywhere, inside ApplyAgreed.
+    public bool RunsBotAI => Relay == null || Relay.DecidesTimeouts;
+
+    public void ResumeBots()
+    {
+        foreach (var bot in FindObjectsByType<player.BotPlayer>(FindObjectsInactive.Exclude))
+            bot.Resume();
+    }
+
+    // Applies an action every device has agreed on. Anything it sets off (AI answers, the last seat
+    // being auto-taken, bots) happens inside the same call, so it happens identically everywhere.
+    public bool ApplyAgreed(PlayerAction action)
+    {
+        _agreedDepth++;
+        try { return HandlePlayerAction(action); }
+        finally { _agreedDepth--; }
+    }
+
+    public void ApplyAgreedConnection(Player p, bool connected)
+    {
+        _agreedDepth++;
+        try { SetConnected(p, connected); }
+        finally { _agreedDepth--; }
+    }
+
+    private void OnDestroy()
+    {
+        Relay?.Unbind();
+        if (Instance == this) Instance = null;
+    }
 
     private void Start()
+    {
+        _agreedDepth++;
+        try { StartMatch(); }
+        finally { _agreedDepth--; }
+        Relay?.Bind(this);
+    }
+
+    private void StartMatch()
     {
         OnPlayerTurnChanged += LogPlayerTurnChanged;
         SetupGame();
@@ -178,19 +261,142 @@ public class GameManager : MonoBehaviour
             _bidButton.GetComponent<Button>().onClick.AddListener(HandlePlayerBidEnergy);
         SetUpBidBox();
         CreateHud();
+        if (Options.Placement == TerritorySetup.TakeTurns)
+        {
+            StartDraft();
+            return;
+        }
+        BeginFirstYear();
+    }
+
+    // 2210 year order: bid → choose seats → (year 1: place starting commanders/station) → turns.
+    private void BeginFirstYear()
+    {
         if (AutoPlaceStartingUnits)
         {
             foreach (var player in Players)
                 Purchases.PlaceStartingUnits(player);
-            StartYear();
+            _startingUnitsPlaced = true;
         }
-        else
-            StartPlacement();
+        StartYear();
+    }
+
+    // ---------------- Take-turns setup (match option, 2210 rules) ----------------
+    // In a random order, each player claims one empty territory with 1 MOD, round after round, until the
+    // map is full. Then, in the same order, everyone places the rest of their starting army 3 MODs at a time.
+    public const int DraftBatch = 3;
+    public bool IsDrafting { get; private set; }
+    // MODs the current player may still place in this batch of 3.
+    public int DraftBatchLeft { get; private set; }
+    public int DraftUnitsLeft(Player p) => _draftLeft != null && _draftLeft.TryGetValue(p, out var n) ? n : 0;
+    private List<Player> _draftOrder;
+    private Dictionary<Player, int> _draftLeft;
+    private int _draftTurn;
+    private bool _draftStepping, _draftAgain;
+
+    private void StartDraft()
+    {
+        IsDrafting = true;
+        var order = Enumerable.Range(0, Players.Count).ToArray();
+        OpeningDeal.Shuffle(order, GameRandom.Current);
+        _draftOrder = order.Select(i => Players[i]).ToList();
+        var army = OpeningDeal.TroopsForPlayerCount(Players.Count);
+        _draftLeft = Players.ToDictionary(p => p, _ => army);
+        _draftTurn = 0;
+        DraftBatchLeft = 0;
+        Debug.Log("Take-turns setup, order: " + string.Join(", ", _draftOrder.Select(p => p.Name)));
+        NextDraftStep();
+    }
+
+    // Bots answer at once, inside OpenDecision; looping here instead of recursing keeps the stack flat
+    // through a whole all-bot setup.
+    private void NextDraftStep()
+    {
+        if (_draftStepping) { _draftAgain = true; return; }
+        _draftStepping = true;
+        try
+        {
+            do { _draftAgain = false; DraftStep(); } while (_draftAgain);
+        }
+        finally { _draftStepping = false; }
+    }
+
+    private void DraftStep()
+    {
+        var empty = _tr.Territories.Where(t => t.Owner == null).ToList();
+        if (empty.Count > 0)
+        {
+            var claimer = _draftOrder[_draftTurn % _draftOrder.Count];
+            _draftTurn++;
+            SetDraftPlayer(claimer);
+            OpenDecision(new PendingDecision(GetPlayerId(claimer), DecisionKind.ClaimTerritory,
+                empty.Select(t => t.Name).ToList()), OnClaimed);
+            return;
+        }
+
+        if (DraftBatchLeft <= 0 || DraftUnitsLeft(_currentPlayer) <= 0)
+        {
+            var next = NextDraftPlacer();
+            if (next == null)
+            {
+                FinishDraft();
+                return;
+            }
+            SetDraftPlayer(next);
+            DraftBatchLeft = Math.Min(DraftBatch, DraftUnitsLeft(next));
+        }
+        OpenDecision(new PendingDecision(GetPlayerId(_currentPlayer), DecisionKind.PlaceStartingTroops,
+            _currentPlayer.Territories.Select(t => t.Name).ToList(), DraftBatchLeft.ToString()), OnDraftPlaced);
+    }
+
+    private Player NextDraftPlacer()
+    {
+        for (var i = 0; i < _draftOrder.Count; i++)
+        {
+            var p = _draftOrder[_draftTurn % _draftOrder.Count];
+            _draftTurn++;
+            if (DraftUnitsLeft(p) > 0 && p.Territories.Any()) return p;
+        }
+        return null;
+    }
+
+    private void SetDraftPlayer(Player p)
+    {
+        if (_currentPlayer == p) return;
+        var old = _currentPlayer;
+        _currentPlayer = p;
+        OnPlayerTurnChanged?.Invoke(old, _currentPlayer);
+    }
+
+    private void OnClaimed(DecisionResponseAction response)
+    {
+        var territory = _tr.FromName(response.Option);
+        territory.SetOwner(response.Player, 1);
+        _draftLeft[response.Player]--;
+        NextDraftStep();
+    }
+
+    private void OnDraftPlaced(DecisionResponseAction response)
+    {
+        _tr.FromName(response.Option).AddTroops(1);
+        _draftLeft[response.Player]--;
+        DraftBatchLeft--;
+        NextDraftStep();
+    }
+
+    private void FinishDraft()
+    {
+        IsDrafting = false;
+        DraftBatchLeft = 0;
+        Debug.Log("Take-turns setup done.");
+        BeginFirstYear();
     }
 
     // Turn banner + instructions + turn splash, and the attack/move arrow on the map.
     public UI.TurnHud TurnHud { get; private set; }
     public UI.CommandHud CommandHud { get; private set; }
+    public UI.Scoreboard Scoreboard { get; private set; }
+    public UI.PauseMenu PauseMenu { get; private set; }
 
     // A commander died (killed attacking, destroyed on conquest, Assassin Bomb...). Owner, type, where, how.
     public Action<Player, CommanderType, Territory, string> OnCommanderKilled;
@@ -209,6 +415,53 @@ public class GameManager : MonoBehaviour
     // Off by default because the real game is online, where each player has their own device.
     [SerializeField] private bool _passTheDeviceScreens = false;
     public bool PassTheDeviceScreens { get => _passTheDeviceScreens; set => _passTheDeviceScreens = value; }
+
+    // Seconds a human defender gets in the reaction window before it auto-passes. 0 = no limit (local play).
+    // Online matches set DecisionClock.OnlineReactionSeconds.
+    public float ReactionTimeoutSeconds { get; set; }
+    private readonly DecisionClock _decisionClock = new();
+    public double DecisionSecondsLeft => _decisionClock.SecondsLeft(Time.realtimeSinceStartupAsDouble);
+
+    // A player whose device dropped. Their questions are answered by the AI straight away.
+    private readonly HashSet<int> _disconnected = new();
+    public bool IsConnected(Player p) => p != null && !_disconnected.Contains(GetPlayerId(p));
+    public void SetConnected(Player p, bool connected)
+    {
+        var id = GetPlayerId(p);
+        if (id < 0) return;
+        if (connected) _disconnected.Remove(id);
+        else _disconnected.Add(id);
+        if (!connected && _pendingDecision != null && _pendingDecision.PlayerId == id)
+            AnswerForAbsentPlayer();
+    }
+
+    private void Update()
+    {
+        if (Relay != null && !Relay.DecidesTimeouts) return;
+        if (_pendingDecision != null && _decisionClock.Expired(Time.realtimeSinceStartupAsDouble))
+            TimeOutDecision();
+    }
+
+    // Reaction window ran out: Pass. Asking the AI instead would play cards the player chose not to.
+    private void TimeOutDecision()
+    {
+        var d = _pendingDecision;
+        _decisionClock.Stop();
+        var who = GetPlayerById(d.PlayerId);
+        Debug.Log($"{who?.Name} ran out of time on {d.Kind}.");
+        if (d.Kind is DecisionKind.DefenseReaction or DecisionKind.ArmageddonCard && d.HasOption(DecisionOptions.Pass))
+            HandlePlayerAction(new DecisionResponseAction(who, _turn, DecisionOptions.Pass));
+        else
+            AnswerForAbsentPlayer();
+    }
+
+    private void AnswerForAbsentPlayer()
+    {
+        var d = _pendingDecision;
+        if (d == null) return;
+        var who = GetPlayerById(d.PlayerId);
+        HandlePlayerAction(new DecisionResponseAction(who, _turn, Secrets.Public(() => DefenderAI.Choose(this, d))));
+    }
     public Map.SelectionArrow SelectionArrow { get; private set; }
     public Map.MapBadges MapBadges { get; private set; }
 
@@ -220,9 +473,11 @@ public class GameManager : MonoBehaviour
         {
             TurnHud = UI.TurnHud.Create(this, canvas);
             CommandHud = UI.CommandHud.Create(this, canvas);
+            Scoreboard = UI.Scoreboard.Create(this, canvas);
+            PauseMenu = UI.PauseMenu.Create(this, canvas);
         }
         SelectionArrow = Map.SelectionArrow.Create(this);
-        MapBadges = Map.MapBadges.Create(this);
+        MapBadges = Map.MapBadges.Create(this, canvas);
     }
 
     private void StartYear()
@@ -237,88 +492,48 @@ public class GameManager : MonoBehaviour
         _isBidding = true;
         foreach (var player in Players)
             player._energyBid = -1;
+        _yearTable = YearOrder.Begin(_playerQueue.Select(p => new YearSeat
+        {
+            PlayerId = GetPlayerId(p),
+            Alive = !p.IsDead(),
+            Energy = p.GetEnergy(),
+        }).ToArray());
         if (_currentPhase != EmptyPhase)
             SetTurnPhase(EmptyPhase);
         SetBidUIActive(true);
 
         var oldPlayer = _currentPlayer;
-        _currentPlayer = _playerQueue.First(p => !p.IsDead());
+        _currentPlayer = GetPlayerById(_yearTable.ActorId);
         OnPlayerTurnChanged?.Invoke(oldPlayer, _currentPlayer);
         PromptCurrentBidder();
     }
 
-    // Bid box: bigger, digits only, and Enter submits (keyboard), the button still works (touch).
+    // Old typed bid box in the scene is retired; TurnHud shows 0..energy buttons instead.
     private void SetUpBidBox()
     {
-        var input = BidInput;
-        if (input != null)
-        {
-            input.lineType = TMP_InputField.LineType.SingleLine; // Enter -> onSubmit
-            input.contentType = TMP_InputField.ContentType.IntegerNumber;
-            input.characterLimit = 3;
-            input.onSubmit.AddListener(_ => HandlePlayerBidEnergy());
-            input.pointSize = 30;
-            if (input.placeholder is TMP_Text placeholder)
-            {
-                placeholder.text = "Bid (0-3), Enter";
-                placeholder.fontSize = 24;
-            }
-            var rt = (RectTransform)input.transform;
-            rt.sizeDelta = new Vector2(300, 64);
-            rt.anchoredPosition = new Vector2(-780, 262);
-        }
-        if (_bidButton != null)
-        {
-            var rt = (RectTransform)_bidButton.transform;
-            rt.sizeDelta = new Vector2(300, 52);
-            rt.anchoredPosition = new Vector2(-780, 196);
-            var label = _bidButton.GetComponentInChildren<TMP_Text>();
-            if (label != null) label.fontSize = 26;
-        }
-    }
-
-    private TMP_InputField BidInput => _bidInputGO != null ? _bidInputGO.GetComponent<TMP_InputField>() : BidEnergyInput;
-
-    // Put the cursor in the bid box so the next human bidder can just type and press Enter.
-    private void FocusBidBox()
-    {
-        var input = BidInput;
-        if (input == null || !input.gameObject.activeInHierarchy) return;
-        if (input.placeholder is TMP_Text placeholder && _currentPlayer != null)
-            placeholder.text = $"Bid 0-{_currentPlayer.GetEnergy()}, Enter";
-        input.Select();
-        input.ActivateInputField();
+        if (_bidButton != null) _bidButton.SetActive(false);
+        if (_bidInputGO != null) _bidInputGO.SetActive(false);
+        if (BidEnergyInput != null) BidEnergyInput.gameObject.SetActive(false);
     }
 
     private void PromptCurrentBidder()
     {
         if (_currentPlayer.IsBot())
         {
-            SubmitBid(0); // simple bot bid for now
+            SubmitBid(BotBidding.Choose(_currentPlayer.GetEnergy(), _year, MaxYears, GameRandom.Current));
             return;
         }
-        ShowMessage($"Year {_year}: {_currentPlayer.Name}, bid energy for turn order (0-{_currentPlayer.GetEnergy()}). Type it and press Enter.");
-        FocusBidBox();
+        ShowMessage($"Year {_year}: {_currentPlayer.Name}, pick a bid (0-{_currentPlayer.GetEnergy()}).");
     }
 
-    // Called by the Bid button (reads the input field).
+    // Kept for any leftover scene Bid button wiring; prefers the number-button path.
     public void HandlePlayerBidEnergy()
     {
-        var input = BidInput;
-        var text = input != null ? input.text : "";
-        if (!int.TryParse(text, out var bid))
-        {
-            ShowMessage("Invalid bid. Please enter a whole number.");
-            FocusBidBox();
-            return;
-        }
-        if (input != null)
-            input.text = "";
-        if (!SubmitBid(bid))
-            FocusBidBox();
+        ShowMessage($"Pick a bid from 0 to {_currentPlayer?.GetEnergy() ?? 0}.");
     }
 
     // Submits a bid for the current bidder. Returns false (and changes nothing) if the bid is invalid.
+    // Valid bids go through HandlePlayerAction so the same path can come from the network.
     public bool SubmitBid(int bid)
     {
         if (!_isBidding || _currentPlayer == null)
@@ -334,35 +549,51 @@ public class GameManager : MonoBehaviour
             return false;
         }
 
-        _currentPlayer._energyBid = bid;
-        Debug.Log($"Year {_year}: {_currentPlayer.Name} bid {bid}");
+        return HandlePlayerAction(new BidAction(_currentPlayer, _turn, bid));
+    }
 
-        var next = _playerQueue.FirstOrDefault(p => !p.IsDead() && p._energyBid < 0);
-        if (next == null)
+    // The year's bid table. Rules live in YearOrder; this is the scene copy.
+    YearTable _yearTable;
+
+    bool ApplyBid(int bid)
+    {
+        var bidder = _currentPlayer;
+        if (_yearTable == null || !YearOrder.TryBid(_yearTable, GetPlayerId(bidder), bid, GameRandom.Current, out var next))
         {
-            FinishBidding();
+            Debug.LogWarning("Bid rejected by the year rules.");
+            return false;
+        }
+
+        _yearTable = next;
+        WriteSeats(next);
+        Debug.Log($"Year {_year}: {bidder.Name} bid {bid}");
+        if (next.Choosing)
+        {
+            OpenChoosing(next);
             return true;
         }
 
         var oldPlayer = _currentPlayer;
-        _currentPlayer = next;
+        _currentPlayer = GetPlayerById(next.ActorId);
         OnPlayerTurnChanged?.Invoke(oldPlayer, _currentPlayer);
         PromptCurrentBidder();
         return true;
     }
 
-    private void FinishBidding()
+    void WriteSeats(YearTable table)
     {
-        var bidders = _playerQueue.Where(p => !p.IsDead()).ToList();
-        var dead = _playerQueue.Where(p => p.IsDead()).ToList();
-        var tieBreak = bidders.ToDictionary(p => p, _ => _rng.Next());
-        var ordered = bidders.OrderByDescending(p => p._energyBid).ThenBy(p => tieBreak[p]).ToList();
+        foreach (var seat in table.Seats)
+        {
+            var player = GetPlayerById(seat.PlayerId);
+            player._energyBid = seat.Bid;
+            player.SetEnergy(seat.Energy);
+        }
+    }
 
-        foreach (var player in ordered)
-            player.SetEnergy(player.GetEnergy() - player._energyBid);
-
+    void OpenChoosing(YearTable next)
+    {
         Debug.Log($"Bidding done (year {_year}). Bid order: " +
-                  string.Join(", ", ordered.Select(p => $"{p.Name} ({p._energyBid})")));
+                  string.Join(", ", next.ChooserIds.Select(id => $"{GetPlayerById(id).Name} ({next.Seats.First(s => s.PlayerId == id).Bid})")));
 
         _isBidding = false;
         SetBidUIActive(false);
@@ -371,26 +602,32 @@ public class GameManager : MonoBehaviour
 
         // 2210: in bid order (highest first), each player CHOOSES their turn position for this year.
         _isChoosingOrder = true;
-        _choosers = new Queue<Player>(ordered);
-        _chosenPositions = new Player[ordered.Count];
-        _deadAfterChoosing = dead;
+        SyncChoosing(next);
         PromptNextChooser();
     }
 
-    // ---------------- Placing starting units (before year 1) ----------------
-    // In turn order, each player picks a territory for their Diplomat, then their Land Commander, then their
-    // Space Station: one PlaceStartingUnit decision per unit, addressed to that player (online: their device;
-    // bots: DefenderAI picks instantly).
+    void SyncChoosing(YearTable next)
+    {
+        _chosenPositions = next.SeatOwner.Select(id => id < 0 ? null : GetPlayerById(id)).ToArray();
+        _choosers = new Queue<Player>(next.ChooserIds.Skip(next.NextChooser).Select(GetPlayerById));
+        _deadAfterChoosing = next.DeadIds.Select(GetPlayerById).ToList();
+    }
+
+    // ---------------- Placing starting units (after year-1 bid + turn order) ----------------
+    // In the chosen turn order, each player picks a territory for their Diplomat, then Land Commander, then
+    // Space Station. Then the first reinforce turn begins.
     public static bool AutoPlaceStartingUnits = false; // tests / quick start: place them automatically instead
     public static readonly string[] StartingUnits = { "Diplomat", "LandCommander", "SpaceStation" };
     public bool IsPlacingStartingUnits => _isPlacing;
     private bool _isPlacing;
+    private bool _startingUnitsPlaced;
     private readonly Queue<(Player player, string unit, int index)> _placements = new();
     public int PlacementIndex { get; private set; } // 1..3 for the current player
 
     private void StartPlacement()
     {
         _isPlacing = true;
+        // Place in the year's turn order (already in _playerQueue after choosing).
         foreach (var player in _playerQueue.Where(p => !p.IsDead()))
             for (int i = 0; i < StartingUnits.Length; i++)
                 _placements.Enqueue((player, StartingUnits[i], i + 1));
@@ -402,8 +639,9 @@ public class GameManager : MonoBehaviour
         if (_placements.Count == 0)
         {
             _isPlacing = false;
+            _startingUnitsPlaced = true;
             Debug.Log("Starting units placed.");
-            StartYear();
+            StartNextPlayerTurn();
             return;
         }
 
@@ -482,8 +720,22 @@ public class GameManager : MonoBehaviour
             return false;
         }
 
-        var chooser = _choosers.Dequeue();
-        _chosenPositions[position - 1] = chooser;
+        return HandlePlayerAction(new ChooseTurnPositionAction(_currentPlayer, _turn, position));
+    }
+
+    bool ApplyTurnPosition(int position)
+    {
+        if (_yearTable == null || _choosers.Count == 0)
+            return false;
+        var chooser = _choosers.Peek();
+        if (!YearOrder.TryChoose(_yearTable, GetPlayerId(chooser), position, out var next))
+        {
+            Debug.LogWarning("Turn position rejected by the year rules.");
+            return false;
+        }
+
+        _yearTable = next;
+        SyncChoosing(next);
         Debug.Log($"Year {_year}: {chooser.Name} plays {Ordinal(position)}");
         PromptNextChooser();
         return true;
@@ -505,6 +757,12 @@ public class GameManager : MonoBehaviour
             SetGameState(GameState.Playing);
 
         _turnsTakenThisYear = 0;
+        // Year 1 only: after seats are chosen, place starting commanders/station in that order.
+        if (!_startingUnitsPlaced && !AutoPlaceStartingUnits)
+        {
+            StartPlacement();
+            return;
+        }
         StartNextPlayerTurn();
     }
 
@@ -550,8 +808,10 @@ public class GameManager : MonoBehaviour
 
     private void SetBidUIActive(bool active)
     {
-        if (_bidButton != null) _bidButton.SetActive(active);
-        if (_bidInputGO != null) _bidInputGO.SetActive(active);
+        // Typed bid UI stays hidden; TurnHud's bid buttons show/hide from IsBidding.
+        if (_bidButton != null) _bidButton.SetActive(false);
+        if (_bidInputGO != null) _bidInputGO.SetActive(false);
+        if (BidEnergyInput != null) BidEnergyInput.gameObject.SetActive(false);
     }
 
     private void ShowMessage(string message)
@@ -567,23 +827,47 @@ public class GameManager : MonoBehaviour
     }
     private void SetupGame()
     {
-        _tr.RandomlyAssignTerritories(Players);
-        DistributeTroops();
+        DevastateTerritories(Options.Devastated);
+        if (Options.Placement == TerritorySetup.TakeTurns)
+        {
+            AssignEnergy();
+            EnqueuePlayers();
+            return; // territories are claimed in StartDraft
+        }
+        var deal = OpeningDeal.Deal(_tr.Territories.Count, Players.Count, GameRandom.Current);
+        for (var i = 0; i < deal.OwnerOf.Length; i++)
+        {
+            var territory = _tr.Territories[i];
+            territory.SetOwner(Players[deal.OwnerOf[i]], deal.Troops[i]);
+        }
         AssignEnergy();
         EnqueuePlayers();
-        //this order can be random to start bidding. after bidding, the order will be set on a turn-by-turn basis
-        //call it once so that HandlePlayerBidEnergy can continue
-        // 2210: every player starts with a Diplomat, a Land Commander and a Space Station: they pick where
-        // (StartPlacement, before year 1), unless AutoPlaceStartingUnits.
     }
 
+
+    // Random territories become wasteland before anything is dealt. A pick that would cut a territory off
+    // from every neighbour is skipped.
+    private void DevastateTerritories(int count)
+    {
+        if (count <= 0) return;
+        var order = Enumerable.Range(0, _tr.Territories.Count).ToArray();
+        OpeningDeal.Shuffle(order, GameRandom.Current);
+        var candidates = order.Select(i => _tr.Territories[i]).ToList();
+        var done = 0;
+        foreach (var t in candidates)
+        {
+            if (done >= count) break;
+            if (t.NeighbourTerritories.Any(n => n.NeighbourTerritories.Count <= 1)) continue;
+            _tr.Devastate(t);
+            done++;
+            Debug.Log($"{t.Name} is devastated.");
+        }
+    }
 
     private void AssignEnergy()
     {
         foreach (var player in Players)
-        {
-            player.SetEnergy(3);
-        }
+            player.SetEnergy(IncomeRules.StartingEnergy);
     }
 
     private void CreatePlayers()
@@ -621,19 +905,6 @@ public class GameManager : MonoBehaviour
         playerOrder.Shuffle();
         foreach (var i in playerOrder)
             _playerQueue.Enqueue(Players[i]);
-    }
-
-    private void DistributeTroops()
-    {
-        int[] troopsPerNumberOfPlayer = { -1, -1, 40, 35, 30, 25, 20 };
-
-        foreach (var player in Players)
-        {
-            int troopsPerPlayer = troopsPerNumberOfPlayer[Players.Count];
-            player.ClearTroops();
-            troopsPerPlayer = player.DistributeNTroopsPerTerritory(1, troopsPerPlayer);
-            player.RandomlyDistributeTroops(troopsPerPlayer);
-        }
     }
 
     public void NextTurnPhase()
@@ -674,6 +945,14 @@ public class GameManager : MonoBehaviour
             Debug.LogWarning("Invalid action " + action);
             return false;
         }
+
+        if (Relay != null && _agreedDepth == 0)
+            return Relay.Send(action);
+
+        if (action is BidAction bid)
+            return ApplyBid(bid.EnergyThePlayerBid);
+        if (action is ChooseTurnPositionAction seat)
+            return ApplyTurnPosition(seat.Position);
 
         // Command cards (2210): handled here, not by the phase, because they can happen in several phases.
         if (action is HireCommanderAction hire)
@@ -725,14 +1004,22 @@ public class GameManager : MonoBehaviour
         Debug.Log($"Decision opened: {decision} ({InputPlayer.Name})");
         OnPendingDecisionChanged?.Invoke(decision);
 
-        // AI defenders decide instantly.
+        // AI defenders, and players whose device dropped, decide instantly.
         var asked = InputPlayer;
-        if (asked != null && asked.IsBot())
-            HandlePlayerAction(new DecisionResponseAction(asked, _turn, DefenderAI.Choose(this, decision)));
+        if (asked != null && (asked.IsBot() || !IsConnected(asked)))
+        {
+            // The AI may look at the player's hand, so online the host decides and the others use its answer.
+            HandlePlayerAction(new DecisionResponseAction(asked, _turn, Secrets.Public(() => DefenderAI.Choose(this, decision))));
+            return;
+        }
+        if (decision.Kind is DecisionKind.DefenseReaction or DecisionKind.EvacuationDestination
+            or DecisionKind.ArmageddonCard or DecisionKind.ArmageddonTarget)
+            _decisionClock.Start(Time.realtimeSinceStartupAsDouble, ReactionTimeoutSeconds);
     }
 
     private void CloseDecision()
     {
+        _decisionClock.Stop();
         if (_pendingDecision == null) return;
         _pendingDecision = null;
         _onDecisionAnswered = null;
@@ -776,9 +1063,23 @@ public class GameManager : MonoBehaviour
     private void GameOver()
     {
         if (_gameState == GameState.Over) return;
+        RevealAllHands();
         FinalRanking = Scoring.Ranking(Players);
         Debug.Log("Game over. " + string.Join(", ", FinalRanking.Select(p => $"{p.Name}: {Scoring.ScoreOf(p)}")));
         SetGameState(GameState.Over);
+    }
+
+    // Colony Influence cards count in the final score, so at the end every device sees every hand.
+    private void RevealAllHands()
+    {
+        foreach (var p in Players)
+        {
+            var hand = p;
+            var ids = Secrets.Public(() => string.Join(",", hand.Cards.Select(c => c.Id)));
+            if (Secrets.Decides || string.IsNullOrEmpty(ids)) continue;
+            foreach (var id in ids.Split(','))
+                CommandCards.Reveal(p, _cr.CardById(int.Parse(id)));
+        }
     }
 
     public bool IsCurrentPlayer(Player player)

@@ -92,44 +92,61 @@ namespace UI
         }
 
 
-        private void AddPlayer()
-        {
-            //Debug.Log("AddPlayer");
-            if(PlayerCreated) return;
+        private void AddPlayer() => AddPlayer(-1, null);
 
-            var playerConfiguration = _uiPlayerCreationManager.PlayerConfigurations[0];
-            
-            var colorIndex = Random.Range(0, _uiPlayerCreationManager.PlayerColors.Length);
-            var playerColor = _uiPlayerCreationManager.PlayerColors[colorIndex];
+        // colorIndex < 0 = random. configIndex < 0 = Human if present, else 0.
+        public void AddPlayer(int colorIndex, string playerName, int configIndex = -1)
+        {
+            if (PlayerCreated) return;
+
+            var configs = _uiPlayerCreationManager.PlayerConfigurations;
+            var colors = _uiPlayerCreationManager.PlayerColors;
+            if (configs == null || configs.Length == 0 || colors == null || colors.Length == 0) return;
+
+            if (configIndex < 0 || configIndex >= configs.Length)
+            {
+                configIndex = 0;
+                for (int i = 0; i < configs.Length; i++)
+                    if (configs[i] != null && configs[i].Name == "Human") { configIndex = i; break; }
+            }
+            if (colorIndex < 0 || colorIndex >= colors.Length)
+                colorIndex = Random.Range(0, colors.Length);
+
+            var playerConfiguration = configs[configIndex];
+            var playerColor = colors[colorIndex];
             PlayerCreationConfiguration = new PlayerCreationConfiguration
             {
                 PlayerColor = playerColor,
-                PlayerConfiguration = playerConfiguration, 
-                PlayerName = "Player " + (_uiPlayerCreationManager.PlayerCount + 1),
+                PlayerConfiguration = playerConfiguration,
+                PlayerName = string.IsNullOrEmpty(playerName)
+                    ? "Player " + (_uiPlayerCreationManager.PlayerCount + 1)
+                    : playerName,
             };
-            
+
             _playerNameInputField.text = PlayerCreationConfiguration.PlayerName;
             _playerColorDropdown.value = colorIndex;
-            _playerConfigurationDropdown.value = 2;
+            _playerConfigurationDropdown.value = configIndex;
+            _playerColorImage.color = playerColor.Selected;
 
             _playerCreatedGfx.SetActive(PlayerCreated);
             _playerNotCreatedGfx.SetActive(!PlayerCreated);
-            
+
             OnPlayerAdded?.Invoke(PlayerCreationConfiguration);
-            
+        }
+
+        public void ClearIfCreated()
+        {
+            if (!PlayerCreated) return;
+            OnPlayerRemove?.Invoke(PlayerCreationConfiguration);
+            PlayerCreationConfiguration = null;
+            _playerCreatedGfx.SetActive(false);
+            _playerNotCreatedGfx.SetActive(true);
         }
 
         private void RemovePlayer()
         {
             Debug.Log("RemovePlayer");
-            if(!PlayerCreated) return;
-            
-            OnPlayerRemove?.Invoke(PlayerCreationConfiguration);
-            
-            PlayerCreationConfiguration = null;
-            _playerCreatedGfx.SetActive(PlayerCreated);
-            _playerNotCreatedGfx.SetActive(!PlayerCreated);
-            
+            ClearIfCreated();
         }
 
     }
