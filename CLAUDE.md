@@ -1,6 +1,6 @@
 # Invade Earth (RiskASP fork): handoff for Claude / Cursor
 
-Read this first. Last updated: Nov 7, 2026, ~1 AM. Everything through the Nov 7 session logs below is **committed and pushed on `dev`** (George asked). Owner: George (ggofthejungle).
+Read this first. Last updated: Nov 7, 2026, ~6:30 PM. Everything through the "Nov 7 (~1 AM): committed and pushed" log is **committed and pushed on `dev`**; the later Nov 7 logs (SAVE-1, OL-6, Game view, card polish, two-player correspondence probe, seas and moon, 5/4/3 card probe, click and edge probe, card-bar fight, 3-player floors and caps, sea groups) are uncommitted. Owner: George (ggofthejungle).
 **Full project plan (Trello + code, phases, open questions): `docs/PROJECT_PLAN.md`.**
 
 ## Where things are
@@ -138,24 +138,31 @@ PT-2 playtest fixes in working tree (not committed unless George asked again aft
   - Commander survival on 3v2/2v1 when excess losses would otherwise kill a commander with few MODs (may need extra rule beyond MOD-first; clarify with George if still broken after the dice-cap fix).
 
 ## Next steps (in order)
-Every task has a unique ID. **CURRENT TASK: ON-1 parts 2–3, in progress, uncommitted.** George said yes to both large slices (pure rules library, then clients send actions and the server rolls). Do not start a full GameManager rewrite in one step. Do not commit unless he asks. He pushes `dev` himself.
+Every task has a unique ID. **CURRENT: sea groups sit in open water, lines stop at the coast. Uncommitted.** Do not commit unless George asks. He pushes `dev` himself. No test runs (they hang Unity); compile + `Unity_RunCommand` probes only.
 
-Pick up by reading the Nov 6 session log below, then:
-1. Confirm Unity is open. If it is frozen, run `tools\restart-unity.ps1`.
-2. Compile. Run `DiceRulesTests` (new, not run yet), then `CommandCardTests` (froze on test 16 of 16 before the auto-refresh hold). If that class reaches `FINISHED`, the freeze fix worked.
-3. Keep moving pure rules. Attacks, cards, and placement are still applied by the Unity scene. `MatchBoard` can fight a tiny map by itself; `GameManager` does not use it yet.
+Pick up: read `docs/frontier-test-log.md`. Still not covered: take-turns placement, and clicking with the mouse in the Game view (the probes call the button methods).
 
-- **PT-2 still open, not this thread:** card preview + Play button, sticky Move-in click, commander-death edge cases.
-- Still open cards: Decoys Revealed, Armageddon; Evacuation destination still auto.
-- Phase A: CC-6, CC-7, RULE-1/2, UI-1 (see `docs/PROJECT_PLAN.md`).
-- **OL-1 / OL-2** still need a PlayFab title and UGS packages. Do not claim a Cloud Code deploy. Discord invite is still empty (`GameLinks.DiscordInvite`).
+Parked until George asks (do not start these on your own):
+1. Cloud Code as the only writer of the match log.
+2. Join while the host is fully offline (applications currently wait until the host opens the lobby).
+3. A real two-device pass through the Your games buttons (the probe called the same methods, not the menu clicks).
+
+Do not add Firebase / FCM. "Your turn" is already the Your games list. Lock-screen push is optional later. Leftover PlayFab matches on title 25C2C: **Y4ZZEU**, **W2ES27** (waiting on MailGuest after both players bid 0).
+
+Still open, not blocking:
+- Join while the host is fully offline (applications wait until they open the lobby).
+- Cloud Code as the only writer of the match log (anti-cheat).
+- Discord invite empty (`GameLinks.DiscordInvite`).
+- RULE-2 chart numbers: George to confirm his rulebook copy.
+- LEGAL: original map and card names before sale. Don't ship DLV2.
 
 ## Known gaps
-- Energy income: +3 per turn, or territories / 3 with 12+ territories (from main, `ReinforcePhase.Start`). The rulebook uses a score-chart lookup instead; this is close enough for now. Bot bids are still always 0.
-- Territories at game start are still random (only commanders and the station are picked, CC-5).
-- Bots: the ASP solver bots are untested since the merge; they don't know cards/hiring/Cease Fire.
+- RULE-2 uses territories÷3 min 3 for both MODs and energy + continent bonuses; George to check the rulebook chart.
+- Placement option exists (Random / Take turns). Random is still the default.
+- Solver bots still exist but Standard BOT (C# heuristic) is the default; don't ship DLV2.
 - Untracked: `Assets/_Recovery/` (Unity crash-recovery scenes) — ask George before deleting.
 - Working tree may include `ProjectSettings/SceneTemplateSettings.json` noise — don't commit unless intentional.
+- `Assets/InitTestScene*.unity` (junk from frozen test runs) can be deleted.
 
 ## Session log Nov 6 — UNCOMMITTED on `dev`. Chat to pick up.
 George: implement multiplayer from the plan, keep single-player vs bots, industry-standard main menu, then "yes and yes" to the pure rules library and to clients sending actions while the server rolls. Then keep going. Then save the chat.
@@ -303,3 +310,142 @@ George: "dev-1: like a node, if removed all the connections to its neighbors are
 - George: "commit and save progress to handoff note, and push". All the "UNCOMMITTED" work in the Nov 6 / Nov 7 logs above is now in one commit on `dev`, pushed to `origin/dev`.
 - Left out on purpose (still untracked or unstaged): `Assets/_Recovery/` (George's call), `Assets/InitTestScene*.unity` (junk from frozen test runs, safe to delete), `.idea/`, `ProjectSettings/SceneTemplateSettings.json` noise.
 - Next: play-test online (MPPM) and the take-turns setup; confirm the RULE-2 chart numbers; MM-2 next step is C# reinforce / attack / fortify for bots without the solver.
+
+## Session log Nov 7 (11 AM): MM-2 C# bot turn, GitHub buttons removed. UNCOMMITTED, compiled (0/0)
+- **MM-2 C# MODs:** `Rules/BotTactics.cs` (pure: `Place` 2/3 to the best attack front + shore up threatened borders, `ChooseAttack` when units that can leave ≥ defenders + 1, continent pull, +3 for knocking a player out, skips Cease Fire owners; `MoveIn`; `Fortify` one step toward the nearest border via `DistanceToBorder`). Adapter `TurnPhases/AI/HeuristicBrain.cs` builds a `BoardTerritory[]` (new `Continent` field) and queues normal actions. New `ASPSolver.Heuristic`; `BotBrain.UsesHeuristic` = Heuristic config, or the DLV2/Clingo exe isn't found (mobile/WebGL fall back automatically).
+- **"Standard BOT"** config: `Assets/Resources/Bots/standard_bot_conf.asset` (Heuristic), appended to the seat picker at runtime by `UIPlayerCreationManager`. It's now the default bot for Single Player and for online room bots (online host no longer has to be desktop). Solver bots still selectable. `MainMenuTests` updated (not run).
+- **Bug fixed:** the seat's chosen bot config was ignored (every bot used the prefab's FCC BOT). `PlayerCreator` now calls `BotPlayer.SetConfiguration`.
+- **Bug fixed:** `BotPlayer.OnAttackPhaseTurn` skipped while `AttackTurn <= 1`, so Cease Fire on a bot's first attack stalled it. Now skips only the phase-start event (brain not yet in its attack phase).
+- `BotEconomy`: no two Assassin Bombs on the same territory in one plan (the second was rejected).
+- Probe: 3 Standard BOTs, seed 11, full game to `Over` (year 5, 15 turns), 0 errors / 0 warnings. `BotTacticsTests` (5) written, NOT run; same cases checked by a RunCommand probe.
+- **GitHub button removed** (George): all 4 prefab instances (Menu top-left + seat picker, Main top-left + game-over window). Saving Menu also wrote unsaved edits that were already in the editor (TMP font size 26.9 etc.) and Unity 6.4 re-serialized both scenes. `Assets/Prefab/GitHub Button.prefab` is now unreferenced.
+- ~~Not yet: bots don't play MOD Reduction / Armageddon / Decoys themselves~~ (done, see below).
+
+## Session log Nov 7 (afternoon): bots play the "stopper" cards, tested as a human. UNCOMMITTED, compiled (0/0)
+George: "build the bot cards and test as if a human plays it. keep developing".
+- **`BotEconomy`:**
+ - **MOD Reduction and Armageddon** ("stoppers", `StopsTheGame`): at most one per turn, queued LAST in the plan. `BotPlayer` then sets `_waiting` and resumes (`Update`) only when no decision is open and the `ActionReader` queue is empty.
+ - `WorthStopping`: MOD Reduction needs an opponent with a territory of 2+ units. Armageddon needs 2+ other cards the bot could fire for free.
+ - When Armageddon is worth it, its 4 energy is set aside and the other nuclear cards wait to be fired for free.
+ - **Decoys Revealed:** commanders where the biggest enemy neighbour outnumbers the units move to `Safest`. The card is kept when nobody is in danger.
+- **Card names:** `Card.DisplayName` ("Rocket Strike", "Stealth MODs"; suffix dropped, "Land Death Trap" kept). `CardType` / `CardCatalog` keys unchanged. Before this, UI title-casing showed "Rocketstrikeland" everywhere.
+- **Tested in Play Mode with a human seat vs Standard BOT**, through the real entry points (`SubmitBid`, `ChooseTurnPosition`, `TerritorySelection.OnClicked`, `CommandHud.Choose` / `ClickHire` / `ClickBuy` / `Confirm`, `NextTurnPhaseButton`):
+ - Bid buttons, seat choice and CC-5 placement work.
+ - Bot MOD Reduction: the human clicked 4 removals and the bot resumed.
+ - Human defender played Stealth MODs and Cease Fire against the bot, and the bot carried on.
+ - Shop hire and buy work (confirm, then map click).
+ - Bot Armageddon: the bot fired 2 Scatter Bombs for free. The human got the "YOU: ARMAGEDDON" prompt, tapped Rocket Strike and clicked Siberia (4 to 1). Armageddon closed when the human's hand was empty, and the bot finished its turn.
+ - Bot Decoys Revealed: its Diplomat moved from a threatened Middle East to Western Australia, and the bot kept its second copy.
+ - Map clicks are ignored during the bot's turn.
+- Known limit: a commander re-hired in the same plan doesn't unlock its cards until next turn (`WhyCantPlay` checks the live board).
+- `StartingPlayersConfiguration.asset` left empty.
+
+## Session log Nov 7 (evening): card polish. UNCOMMITTED, compiled (0/0)
+George: "carry on a lot more cards". All 30 land-map cards already exist, so he chose **polish** (no new cards).
+- **Bot Redeployment:**
+ - `HeuristicBrain.Redeployment` plays the card in Fortify only if a second useful move exists after the first.
+ - `BotPlayer.OnFortified` re-arms `_waiting` while `ExtraMoves > 0`.
+ - Probe: the bot played it, made its moves and the turn passed.
+- **Card-play toasts:**
+ - `Cards/CardPlayReport.cs`. `CommandCards.Resolve` / `PlayReaction` diff every territory's units and raise `OnCardReport` (`LastReport`). The report also carries the roll (Rocket Strike, Assassin Bomb, The Mother), The Mother's continent, and Scatter Bomb's drawn territories.
+ - `TurnHud.DescribePlay` writes e.g. "Bot played **Rocket Strike** on Peru: rolled 1; Peru 4 to 3." It is shown in the stacked toast (max 4 lines). Commander deaths and the conquest bonus use the same toast.
+- **UI fixes:**
+ - `Nice` turns underscores into spaces.
+ - The player panel refreshes when energy, cards, units or territories change (`UIPlayerInfo.LateUpdate`).
+ - No more "Bot (Bot)".
+ - No "0" popup on unchanged territories, and gains show as "+N".
+ - The font has no "→" glyph, so the text says "to".
+ - The defender prompt says "1 unit".
+- **Played as a human vs Standard BOT (seed 21), through the real UI entry points:** every card works.
+ - Turn cards: Energy Crisis, Territorial Station, Assemble MODs, Reinforcements, Scout Forces, Rocket Strike, Scatter Bomb, The Mother, Assassin Bomb (killed the bot's Nuclear Commander), Frequency Jam, Decoys Revealed, MOD Reduction, human Armageddon (fired Rocket Strike then Scatter Bomb), Redeployment.
+ - Defense cards against the bot: Land Death Trap, Stealth Station, Evacuation (destination click), and Pass for rest of turn.
+- Tests written, NOT run: `CardEffectsTests.CardPlay_IsReported_WithTheUnitChanges`, `CardPlay_OnAPlayer_NamesThem`.
+- Never edit .cs files while in Play Mode: the recompile wipes `GameManager.Instance`.
+- **Fixed (George, Nov 7 noon):** the `CommandHud.RefreshPrompt` NRE. `PendingDecision` was `[Serializable]` with get-only properties, so a script reload rebuilt it empty (`Options` null). The attribute was removed and the prompt key is null-safe.
+- **Game view default** (`Assets/Editor/GameViewDefaults.cs`): Full HD 1920x1080 at 0.6x zoom on editor start and on every Play; also menu **Invade Earth > Game View: Full HD at 0.6x**. Uses reflection on internal `GameView` / `GameViewSizes` (adds a "Full HD" custom size if missing); logs one warning if a Unity upgrade breaks it. Editor only; builds are unaffected.
+
+## Session log Nov 7 (afternoon): SAVE-1 local save/resume. UNCOMMITTED, compiled (0/0), probed
+George: save/resume, play across days, each player taking their turn when free. Recommendation was local first, then PlayFab/UGS once accounts exist.
+- **SAVE-1:** `Saves/MatchSave.cs`. One file `persistentDataPath/saves/local.json` (seed, rules, seats, every top-level action). Nested bot bids and defender AI answers replay from the seed. Auto-saves after each accepted move. Play → **Continue**. New game replaces it. Game over deletes it. Esc leave keeps it.
+- Local matches now pick a seed (`MatchSession.Seed` optional for probes). `RunsBotAI` is off while the log replays, then `ResumeBots`.
+- Probe: seed 21, You bid 0 and took first seat, left at Diplomat placement (21/21 territories, 3 energy). Stopped Play, resumed: same prompt, same counts, 0 errors.
+- Tests written, NOT run: `MatchSaveTests` (JSON round-trip).
+
+## Session log Nov 7 (afternoon): OL-6 correspondence. UNCOMMITTED, compiled (0/0), probed on PlayFab
+George: start OL-6 with recommended / industry-standard practices.
+- **Store:** PlayFab Shared Group Data (gzipped action log, chunked). **Join:** PlayFab Groups apply + host admit. **Inbox:** group membership + user data `ie.matches`. **Identity:** device Custom ID, display name, optional username/email/password.
+- Menu: Multiplayer → Play at your own pace / Play live / Account. No 20 s timer. Bots run on the device that just handed them the turn.
+- `Correspondence.cs`, `MatchKind.Correspondence`, GameManager binds without a Relay. Local Continue file is not overwritten.
+- Probe on title 25C2C: Host created **Y4ZZEU**, started with 1 bot, human bid, left, Your games showed "Your turn · Year 1". 0 errors.
+- Not yet: Cloud Code as sole writer; join while the host is fully offline (applications wait until they open the lobby). Live UGS rooms unchanged.
+- **Do not add Firebase.** "Your turn" is the Your games list (free, already works). Lock-screen push is optional later. FCM (Android's push pipe) is a free Google API if we ever want it; we do not need Firebase Auth, Firestore, or a paid Firebase plan. Windows/Steam wouldn't use FCM anyway.
+
+## Session log Nov 7 (~2 PM): OL-6 two players across a reopen. UNCOMMITTED, probed on PlayFab
+- Host **Commander 9118** (`8A7D7663CCA9800E`) created **W2ES27**. Guest **MailGuest** (`235D3C900EAE4679`, custom id `ie-ol6-guest-probe`, not this PC's saved device) applied. Host admit stored both ids and the guest's display name (was hardcoded "Commander").
+- Quit/reopen on one editor, same PlayFab log: guest opened, saw the bid was theirs, bid 0 (1 action). Host opened again, replayed that action, bid 0 (2 actions). Your games then said "Waiting for MailGuest" (seat choice after the tied bids).
+- On open, the cloud meta is refreshed to whoever actually has the turn (`MatchSave.ReplayPending` → `Correspondence.NoteSaved`). Before that, Start always said seat 0.
+- `PlayFabLogin.SignInCustom` / `SignInThisDevice` switch accounts without replacing `ie.playfab.device`.
+- Scene loads have to happen on the player loop. Calling `SceneManager.LoadScene` from an editor async callback throws even while Play Mode is on.
+
+## Session log Nov 7 (~2:10 PM): seas and moon. UNCOMMITTED, compiled (0/0), probed in Play Mode
+George: "lets do moon and naval - for naval need to add to the map somehow." Original names (do not copy 2210 sea/moon names or the Java reference). Land-only tests and `MatchOptions.Plain` stay unchanged.
+
+- **Map** (`Map/Frontiers.cs`, built in code, no scene edits): 7 sea ovals in the gaps between land (north_atlantic, south_atlantic, gulf, indian_ocean, south_pacific, north_pacific, arctic_ocean) plus a 6-territory moon at the top-right (highlands, crater_chain, landing, basin, south_ridge, polar_ice). Continents `oceans` (bonus 2) and `moon` (bonus 3). Camera nudges only when frontiers build (size 7.8 at x -4.8, y 3.1).
+- **Launch:** a land space station links both ways to the two approach moons (`landing`, `south_ridge`) via `Frontiers.NoteStation`. Unlink on `RemoveSpaceStation`. Stations still only on land.
+- **Who can stand where:** Naval only on sea, Space only on moon, Land only on land, Diplomat and Nuclear anywhere. Attack and Fortify reject a commander that can't stand on the destination. Naval and Space attack with d8.
+- **Decks:** `CardRepository.AddFrontierDecks()` adds Naval, Space, and water/moon rockets and scatter bombs only when frontiers are on. HiddenEnergy, EnergyExtraction, InvadeSurface stay NotImplemented. Aqua Brother and Nicky Boy are not added. Land-only tests still see naval deck count 0.
+- **Match rules:** third field on the rules string (`devastated,placement,0|1`). Missing field = off, so old saves and rooms stay land-only. Menu default is On (`ie.rules.frontiers` default 1). "Seas and Moon" row on Match rules and in the online room.
+- **Devastate** skips non-land. Opening deal covers the extra 13 territories, so starting stacks are thinner (55 instead of 42).
+- Compile: one error (`IEnumerable` missing a using in `Purchases.cs`), fixed. Console then 0 errors.
+- **Probe (Play Mode, seed 21, then stopped):** frontiers on → 7 seas, 6 moon, 55 territories, coasts and sea chains linked, a land station links to `landing` and `south_ridge` and unlinks when removed, naval deck 18, space deck 20, camera 7.8 at x -4.8. Frontiers off → 42 land, naval deck 0, space deck 0, camera stays 7 at x -6.05. Screenshot `Logs/frontiers.png`. 0 errors.
+- **Naval and Space decks are playable.** Hidden Energy draws a sea and pays +4 energy at end of turn if you still hold it. Energy Extraction (1 energy) pays +7 at end of turn if you hold every moon territory. Invade Surface draws a land you don't hold; this turn the moon's near side (`landing`, `south_ridge`) can attack it. Bots play Hidden Energy whenever there are seas, Energy Extraction only when they already hold the moon, and Invade Surface when they have troops on the near side.
+- **Aqua Brother and Nicky Boy** (Nov 7, ~3:20 PM): in the nuclear deck only when seas and the moon are on. Cost 3, before the first invasion. A d6 picks a group of our seas (6 hits every sea) or one moon territory. Each territory hit loses 1 unit and keeps at least 1. Bots play them when an opponent has a stack there.
+- Sea and moon territories are flat discs (blue water, grey moon) with the owner colour, a unit count, and a wrapped name. They are not land-shaped.
+
+## Session log Nov 7 (~3:40 PM): 5, then 4, then 3 players. UNCOMMITTED, probed in Play Mode
+George: play every new commander and every new card at 5 players, then 4, then 3. Seed 21, seas and moon on, starting units placed automatically. The probe stopped Play Mode after the first command step. Console 0 errors after each run. The temporary probe script was removed.
+
+- **5 players:** 55 territories, all five seats alive (about 25 MODs each). Naval stood on a sea and not on land; Space stood on the moon and not on a sea; Land stayed off the moon; Diplomat stood on a sea; Nuclear stood on the moon.
+- **Cards, all three counts:** Assemble and Reinforcements (sea and moon) added units. Rocket Strike, Scatter Bomb, Aqua Brother, and Nicky Boy rolled and removed units, leaving at least 1. Hidden Energy drew a sea; Energy Extraction was banked; holding that sea and the whole moon paid +4 and +7 (25 energy to 36). Invade Surface opened a land attack from `landing`. Colony Influence stays an end-of-game score, so it correctly refused to be played. Stealth MODs (sea and moon) raised the defender 1 to 4. Water Death Trap and Orbital Mines cut the attacker's stack about in half. Both Frequency Jams played.
+- **4 and 3 players:** same card list, same standing rules, same +11 end-of-turn payout. 4 players start around 30 MODs, 3 players around 35. One 4-player deal did not own `landing` or `south_ridge` until the probe gave them over; Invade Surface then opened Greenland. A rocket that rolled against a 1-unit moon left it at 1.
+
+## Session log Nov 7 (~4:10 PM): clicks and edge cases. UNCOMMITTED, probed in Play Mode
+George: different card combinations, edge cases, and clicks on territories that are not yours, including attacks that should be illegal. Record: `docs/frontier-test-log.md`. 2 players, seed 21, seas and moon on. The temporary probe was removed.
+
+- Grey territories ignore the click. A reinforce onto enemy land, an attack from someone else's territory, an attack on a non-neighbour, an attack on your own territory, and a fortify from enemy land are all rejected. A 1-unit territory cannot start an attack. A legal enemy coast can be selected.
+- Invade Surface makes `landing` able to click only the drawn land. `highlands` cannot launch it.
+- Rockets and death traps leave at least 1 unit. Reinforcements rejects duplicates and mixed terrain. Hidden Energy pays nothing if the sea is lost. Energy Extraction pays nothing at 5/6 moons and 14 for two copies when the moon is held. A jammed player cannot play. A station removal unlinks only that land.
+- **Fixed:** move-in could place a Space commander on land, and evacuation could place a Naval commander on land. Commanders that cannot stand on the destination stay off it (evacuation loses them with the territory). The move-in and fortify pickers no longer offer those commanders. Attack, reinforce, and fortify clicks now ignore a grey or wrong-owner territory themselves.
+
+## Session log Nov 7 (~4:15 PM): card bar, launch, dice, Cease Fire. UNCOMMITTED, probed in Play Mode
+Drove the buttons. Hire placed Naval on South Atlantic and Space on South Ridge; land and sea were grey for the wrong commander. Building a station on Alaska linked it to `landing` and `south_ridge`. Invade Surface, confirmed from the card preview, drew Northern Europe. One real roll from Alaska took `landing` (attacker lost 0, defender lost 1). Move-in left 1 unit behind and put 12 on the moon; the Space commander stayed on South Ridge. The attack picker no longer offers a commander who cannot stand on the target. The build button only offers land. Cease Fire from the defender prompt blocked that player for the rest of the turn, and the next attack on them was rejected. Record: `docs/frontier-test-log.md`.
+
+## Session log Nov 7 (~4:35 PM): floors, caps, a third player, land-only. UNCOMMITTED, probed in Play Mode
+George: more edge cases that had not been run yet. 3 players, seed 21, two devastated lands, seas and moon on, then a 2-player land-only match. The temporary probe was removed. Record: `docs/frontier-test-log.md`.
+
+- Devastation took two land territories and left every sea and moon linked. Scatter Bomb, Aqua Brother, Nicky Boy, and The Mother all left a 1-unit territory at 1, and Scatter did not hit our own seas.
+- A second naval commander, a fifth station, and a fifth card buy were rejected. A space commander cannot decoy onto a sea. A diplomat may launch from a station to the moon; a land commander may not. Four attacking units are rejected.
+- A Water Death Trap on a 2-unit sea left 1 and cancelled the roll. Pass for the rest of the turn skipped the next window and the attack still happened. Frequency Jam opened no window. Cease Fire then blocked only that player; the other player could still be attacked. The next turn cleared the jam and closed Invade Surface.
+- Taking an enemy sea with the naval commander joining moved that commander in and removed the defender's. Fortify can move plain units from a sea onto your own coast, and cannot empty the sea, skip the map, or bring the naval commander onto land.
+- Land-only: 42 territories, naval and space decks at 0, naval hire refused.
+
+## Session log Nov 7 (~5 PM): sea lines and the moon row. UNCOMMITTED
+George: the seas need connection lines, some discs sat on land, and the moon was hard to find. The moon had been a cluster under the panel at the top-right.
+
+- Each sea and moon link is a thin line. A line to a land territory stops where the land sprite covers it, so it reads as a coast. A station's launch lines are gold.
+- The gulf sits in the water west of Central America. The north atlantic sits between the Americas and Europe. The arctic is above Greenland, clear of the dice. The indian ocean is below Madagascar.
+- The moon is a row of six discs along the bottom, under South America, with a MOON label. Left to right: highlands, crater chain, landing, basin, south ridge, polar ice. Landing and south ridge are the ones a space station can reach.
+
+## Session log Nov 7 (~5:30 PM): sea lines shortened. UNCOMMITTED
+George: the lines were crossing other territories, and the console showed an error.
+
+- A sea keeps a coast only when the straight line stays off every other territory, and is not a long chord across the map. The gulf only touches Central America. The arctic only touches Alaska and the Northwest Territory. The north pacific does not reach Alaska across Asia. The atlantic does not connect to the indian ocean through Africa. The moon row only links side-by-side neighbours. A station can still launch to the near side of the moon, but that route is not drawn across the land.
+- The console error was a resumed save applying troop placements while the space-station question was still open. Those saved moves are now dropped, with one warning, instead of a red error on every continue.
+- A land commander and a space station can only be placed on land. A diplomat can still stand on a sea or the moon.
+
+## Session log Nov 7 (~6:30 PM): sea groups. UNCOMMITTED
+George: naval territories should sit in groups of 2 or 3 where there is open water, and a connection line must not pass through another territory.
+
+- Seas are smaller discs in the actual gaps. Gulf + North Atlantic (between the Americas and Europe). South Atlantic + Cape Basin (between South America and Africa). Indian Ocean + Monsoon Reach. South Pacific + East Passage + North Pacific, in a column east of Asia. Arctic Ocean + High North, above the Northwest Territory. 11 seas, 59 territories with the moon.
+- A line is drawn from the edge of one territory to the point where it meets the next. If anything else is in between, that link is not added. The moon row is below the land, and only neighbours in the row are linked. A station can still launch, and that route is still not drawn.
+- Aqua Brother's die hits these same groups. Siam is not a neighbour of Monsoon Reach: that line would cross another country. Alaska has no shape to stop a line on, so the arctic group connects to the Northwest Territory and Greenland instead.

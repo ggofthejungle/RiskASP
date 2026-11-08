@@ -47,11 +47,11 @@ namespace Expansions
                 new Action<Territory, CommanderType>(AssassinBomb),
                 new Action(NickyBoy),
                 new Action<Territory>(RocketStrikeLand),
-                new Action(RocketStrikeMoon),
-                new Action(RocketStrikeWater),
+                new Action<Territory>(RocketStrikeMoon),
+                new Action<Territory>(RocketStrikeWater),
                 new Action<Player>(ScatterBombLand),
-                new Action(ScatterBombMoon),
-                new Action(ScatterBombWater),
+                new Action<Player>(ScatterBombMoon),
+                new Action<Player>(ScatterBombWater),
                 new Action(TheMother),
                 new Action<Territory>(AssembleMods),
                 new Action(ColonyInfluence),
@@ -160,7 +160,11 @@ namespace Expansions
             foreach (var commander in attackedTerritory.CommandersList.ToList())
             {
                 attackedTerritory.RemoveCommander(commander);
-                destinationTerritory.AddCommander(commander);
+                if (Purchases.CanStand(commander.CommanderType, destinationTerritory))
+                    destinationTerritory.AddCommander(commander);
+                else
+                    GameManager.Instance?.ReportCommanderKilled(attackedTerritory.Owner, commander.CommanderType,
+                        attackedTerritory, "could not evacuate there");
             }
         }
 
@@ -284,10 +288,7 @@ namespace Expansions
 
         public void HiddenEnergy()
         {
-            //Before First Invasion
-            //Draw a water or lava territory card. If you occupy this water or lava territory at the end of your turn, collect 4 energy. Discard
-            //the territory card at the end of this turn
-
+            // Played from CommandCards.PlayHiddenEnergy: draw a sea, +4 energy if you still hold it at end of turn.
         }
 
         // private void Reinforcements()
@@ -311,12 +312,16 @@ namespace Expansions
         
         //NuclearCommanderAbilities
 
-        public void AquaBrother()
+        public void AquaBrother() => StrikeZones(new[]
         {
-            // Before First Invasion
-            // Choose a planet, then roll a 6-sided die. Constul the table to see the water/lava zone(s) affected. Destroy one unit in each
-            //territory in the zone(s) rolled
-        }
+            new[] { "gulf", "north_atlantic" },
+            new[] { "south_atlantic", "cape_basin" },
+            new[] { "indian_ocean", "monsoon_reach" },
+            new[] { "south_pacific", "east_passage", "north_pacific" },
+            new[] { "arctic_ocean", "high_north" },
+            new[] { "gulf", "north_atlantic", "south_atlantic", "cape_basin", "indian_ocean", "monsoon_reach",
+                "south_pacific", "east_passage", "north_pacific", "arctic_ocean", "high_north" },
+        });
 
         public void Armageddon()
         {
@@ -341,16 +346,35 @@ namespace Expansions
 
         public int LastRoll { get; private set; } // last die rolled by a card (for the log / UI / tests)
 
-        public void NickyBoy()
+        public void NickyBoy() => StrikeZones(new[]
         {
-            // Before First Invasion
-            // Choose a planet, then roll a 6-sided die. Constul the table to see the lunar or asteroid zone(s) affected. Destroy one unit in
-            //each territory in the zone(s) rolled
+            new[] { "highlands" },
+            new[] { "crater_chain" },
+            new[] { "landing" },
+            new[] { "basin" },
+            new[] { "south_ridge" },
+            new[] { "polar_ice" },
+        });
+
+        // A d6 picks one of our own sea or moon groups. Each territory there loses 1 unit and keeps at least 1.
+        void StrikeZones(string[][] zones)
+        {
+            var roll = GameRandom.Current.Range(1, 7);
+            LastRoll = roll;
+            var names = zones[(roll - 1) % zones.Length];
+            var hit = new List<Territory>();
+            var repo = Map.TerritoryRepository.Instance;
+            if (repo != null)
+                foreach (var name in names)
+                {
+                    var t = repo.Territories.FirstOrDefault(x => x.Name == name);
+                    if (t == null) continue;
+                    hit.Add(t);
+                    DestroyUnits(t, 1);
+                }
+            LastScatterTargets = hit;
         }
-        
-        // Before First Invasion
-        // Choose a planet, then roll a 6-sided die. Constul the table to see the lunar or asteroid zone(s) affected. Destroy one unit in
-        //each territory in the zone(s) rolled
+
         public void RocketStrikeLand(Territory target)
         {
             // Choose any opponent's land territory. Roll a 6-sided die. Destroy that many units there.
@@ -359,23 +383,22 @@ namespace Expansions
             DestroyUnits(target, roll);
         }
 
-        public void RocketStrikeMoon()
-        {
-            
-        }
+        public void RocketStrikeWater(Territory target) => RocketStrikeLand(target);
 
-        public void RocketStrikeWater()
-        {
-            
-        }
+        public void RocketStrikeMoon(Territory target) => RocketStrikeLand(target);
         
         //Before First Invasion
         //Choose a planet and turn over 3 land territory cards for that planet. Destroy half the opponents' units on territories drawn.
         //Round up
-        public void ScatterBombLand(Player cardOwner)
+        public void ScatterBombLand(Player cardOwner) => Scatter(cardOwner, Map.TerrainKind.Land);
+
+        public void ScatterBombWater(Player cardOwner) => Scatter(cardOwner, Map.TerrainKind.Sea);
+
+        public void ScatterBombMoon(Player cardOwner) => Scatter(cardOwner, Map.TerrainKind.Moon);
+
+        void Scatter(Player cardOwner, Map.TerrainKind kind)
         {
-            // Turn over 3 land territory cards. Destroy half the opponents' units on those territories (round up).
-            var all = Map.TerritoryRepository.Instance.Territories;
+            var all = Map.TerritoryRepository.Instance.Territories.Where(t => t.Kind == kind).ToList();
             var drawn = all.OrderBy(_ => GameRandom.Current.Value).Take(3).ToList();
             LastScatterTargets = drawn;
             foreach (var t in drawn.Where(t => t.Owner != cardOwner))
@@ -384,15 +407,6 @@ namespace Expansions
 
         public List<Territory> LastScatterTargets { get; private set; } = new();
 
-        public void ScatterBombMoon()
-        {
-            
-        }
-
-        public void ScatterBombWater()
-        {
-            
-        }
 
         public void TheMother()
         {
@@ -426,8 +440,7 @@ namespace Expansions
 
         public void EnergyExtraction()
         {
-            // Before First Invasion
-            // If you occupy all the the lunar or asteroid territoires in a region of space at the end of this turn, collect 7 energy
+            // Played from CommandCards.PlayEnergyExtraction: +7 energy at end of turn if you hold every moon territory.
         }
 
         // public void FrequencyJam()
@@ -438,9 +451,7 @@ namespace Expansions
 
         public void InvadeSurface()
         {
-            // Before First Invasion
-            // Choose a planet. Turn over land territory cards for that planet until you turn over a territory you do not occupy. During this turn
-            //you may attack this land territory from any surrounding lunar or asteroid territories you occupy
+            // Played from CommandCards.PlayInvadeSurface: a land you don't hold can be attacked from the moon's near side this turn.
         }
 
         public void OrbitalMines(Territory invadingTerritory)
