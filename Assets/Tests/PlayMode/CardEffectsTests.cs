@@ -329,6 +329,41 @@ public class CardEffectsTests
 
     // ---------- Helpers ----------
 
+    // ---------- What everyone is told ----------
+
+    [UnityTest]
+    public IEnumerator CardPlay_IsReported_WithTheUnitChanges()
+    {
+        var card = Give(_alice, CardType.AssembleModsL);
+        var t = _alice.Territories.First();
+        int before = t.Troops;
+        CardPlayReport seen = null;
+        _gm.CommandCards.OnCardReport += r => seen = r;
+        Assert.IsTrue(Play(card, t));
+        Assert.IsNotNull(seen);
+        Assert.AreSame(card, seen.Card);
+        Assert.AreEqual(1, seen.Changes.Count);
+        Assert.AreEqual((before, before + 3), (seen.Changes[0].Before, seen.Changes[0].After));
+        var line = UI.TurnHud.DescribePlay(seen, false);
+        StringAssert.StartsWith("Alice played <b>Assemble MODs</b> on ", line);
+        StringAssert.Contains($"{before} to {before + 3}", line);
+        StringAssert.StartsWith("You played", UI.TurnHud.DescribePlay(seen, true));
+        yield break;
+    }
+
+    [UnityTest]
+    public IEnumerator CardPlay_OnAPlayer_NamesThem()
+    {
+        _bob.SetEnergy(5);
+        Assert.IsTrue(Play(Give(_alice, CardType.EnergyCrisis)));
+        var line = UI.TurnHud.DescribePlay(_gm.CommandCards.LastReport, false);
+        StringAssert.Contains("Energy Crisis", line);
+        StringAssert.Contains("1 energy from each opponent", line);
+        Assert.AreEqual("1 unit", UI.TurnHud.Units(1));
+        Assert.AreEqual("2 units", UI.TurnHud.Units(2));
+        yield break;
+    }
+
     private Card Give(Player p, CardType type)
     {
         var card = _cr.AllCards.First(c => c.CardType == type && _cr.CardsInDeck.Contains(c));

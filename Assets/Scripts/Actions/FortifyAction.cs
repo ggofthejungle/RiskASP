@@ -29,7 +29,7 @@ namespace Actions
             foreach (var type in types)
             {
                 var commander = System.Linq.Enumerable.FirstOrDefault(from.CommandersList, c => c.CommanderType == type);
-                if (commander == null) continue;
+                if (commander == null || !Expansions.Purchases.CanStand(type, to)) continue;
                 from.RemoveCommander(commander);
                 to.AddCommander(commander);
             }
@@ -58,6 +58,14 @@ namespace Actions
                 return false;
             }
 
+            var leaving = MovedTroops + MovingCommanders.Count;
+            var units = From.Troops + From.CommandersList.Count;
+            if (MovedTroops > From.Troops || leaving > units - 1)
+            {
+                Reject($"Leave 1 unit in {From.Name.Replace('_', ' ')}. A commander counts. You can move {System.Math.Max(0, units - 1)} of {units}.");
+                return false;
+            }
+
             if (MovedTroops > From.GetAvailableTroops())
             {
                 LogError(
@@ -72,15 +80,22 @@ namespace Actions
             }
 
             foreach (var type in MovingCommanders)
+            {
                 if (!System.Linq.Enumerable.Any(From.CommandersList, c => c.CommanderType == type))
                 {
                     LogError($"There is no {type} in {From.Name} to move");
                     return false;
                 }
+                if (!Expansions.Purchases.CanStand(type, To))
+                {
+                    LogError($"A {type} can't enter {To.Name}.");
+                    return false;
+                }
+            }
 
-            if (MovedTroops <= 0)
+            if (MovedTroops <= 0 && MovingCommanders.Count == 0)
             {
-                LogError($"Moved troops ({MovedTroops}) is less than or equal to 0");
+                Reject("Move at least 1 unit. A commander counts.");
                 return false;
             }
 

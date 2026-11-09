@@ -5,7 +5,8 @@ namespace UI
         None,
         SinglePlayer,
         HotSeat,
-        Online
+        Online,
+        Correspondence
     }
 
     // Set by the main menu, read once when the match scene loads.
@@ -24,6 +25,9 @@ namespace UI
         static MatchOptions _options;
 
         public static void Select(MatchKind kind) => Kind = kind;
+
+        // Optional. Consumed when the match starts; local saves store it so resume can replay.
+        public static int? Seed { get; set; }
 
         public static void ArmForNextLoad() => _pending = Kind;
 
@@ -46,30 +50,36 @@ namespace UI
         public const int MaxDevastated = 4;
         public int Devastated;
         public TerritorySetup Placement;
+        // Sea zones in the gaps, plus a moon. Off for tests and for a scene loaded with no menu.
+        public bool Frontiers;
 
         // A match scene loaded without the menu (tests, the editor) keeps the old setup.
-        public static MatchOptions Plain => new() { Devastated = 0, Placement = TerritorySetup.Random };
+        public static MatchOptions Plain => new() { Devastated = 0, Placement = TerritorySetup.Random, Frontiers = false };
 
         const string DevastatedPref = "ie.rules.devastated";
         const string PlacementPref = "ie.rules.placement";
+        const string FrontiersPref = "ie.rules.frontiers";
 
         public static MatchOptions Saved() => new()
         {
             Devastated = UnityEngine.Mathf.Clamp(UnityEngine.PlayerPrefs.GetInt(DevastatedPref, MaxDevastated), 0, MaxDevastated),
-            Placement = (TerritorySetup)UnityEngine.Mathf.Clamp(UnityEngine.PlayerPrefs.GetInt(PlacementPref, 0), 0, 1),
+            Placement = (TerritorySetup)UnityEngine.Mathf.Clamp(UnityEngine.PlayerPrefs.GetInt(PlacementPref, (int)TerritorySetup.TakeTurns), 0, 1),
+            Frontiers = UnityEngine.PlayerPrefs.GetInt(FrontiersPref, 1) == 1,
         };
 
         public void Save()
         {
             UnityEngine.PlayerPrefs.SetInt(DevastatedPref, Devastated);
             UnityEngine.PlayerPrefs.SetInt(PlacementPref, (int)Placement);
+            UnityEngine.PlayerPrefs.SetInt(FrontiersPref, Frontiers ? 1 : 0);
         }
 
         public string PlacementLabel => Placement == TerritorySetup.TakeTurns ? "Take turns" : "Random";
-        public string Summary => $"{Devastated} devastated territories · starting territories: {PlacementLabel.ToLowerInvariant()}";
+        public string FrontiersLabel => Frontiers ? "On" : "Off";
+        public string Summary => $"{Devastated} devastated territories · starting territories: {PlacementLabel.ToLowerInvariant()} · seas and moon: {FrontiersLabel.ToLowerInvariant()}";
 
-        // For the room's session property: "4,TakeTurns".
-        public string Encode() => Devastated + "," + Placement;
+        // For the room's session property: "4,TakeTurns,1".
+        public string Encode() => Devastated + "," + Placement + "," + (Frontiers ? "1" : "0");
 
         public static MatchOptions Decode(string text)
         {
@@ -77,6 +87,7 @@ namespace UI
             var parts = (text ?? "").Split(',');
             if (parts.Length > 0 && int.TryParse(parts[0], out var d)) o.Devastated = UnityEngine.Mathf.Clamp(d, 0, MaxDevastated);
             if (parts.Length > 1 && System.Enum.TryParse(parts[1], out TerritorySetup p)) o.Placement = p;
+            if (parts.Length > 2) o.Frontiers = parts[2] == "1";
             return o;
         }
     }

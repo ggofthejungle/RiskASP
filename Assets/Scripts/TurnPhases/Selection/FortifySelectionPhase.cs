@@ -56,6 +56,7 @@ namespace TurnPhases.Selection
         {
             if(_from == null)
             {
+                if (selection.IsDisabled || selection.Territory.Owner != player) return;
                 _from = selection;
                 _from.Select();
                 
@@ -63,6 +64,7 @@ namespace TurnPhases.Selection
             }
             else if(_to == null)
             {
+                if (selection.IsDisabled || selection.Territory.Owner != player) return;
                 _to = selection;
                 _to.Select();
                 

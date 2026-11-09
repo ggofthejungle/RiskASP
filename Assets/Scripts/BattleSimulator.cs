@@ -23,15 +23,15 @@ public class BattleSimulator : MonoBehaviour
     }
 
 
-    public AttackResult SimulateAttack(AttackAction attackAction)
+    public AttackResult SimulateAttack(AttackAction attackAction, int defenderDice)
     {
         var attackingTroops = attackAction.Dice; // units (MODs + commanders), max 3
-        var defendingTroops = Math.Min(attackAction.Target.Troops, MaxDefenseDice); // rules: at most 2 (was 3)
+        var defendingTroops = Math.Min(Math.Max(0, defenderDice), Math.Min(attackAction.Target.Troops, MaxDefenseDice));
 
         // 2210 dice: each attacking commander with an attack bonus replaces a d6 with a d8
         // (Land Commander on land = always on our map; Nuclear always; Diplomat never).
         // Defending: every unit rolls d8 in a territory with a space station; otherwise each commander there rolls a d8.
-        var (attackD8, attackD6) = AttackDice(attackAction.Commanders, attackingTroops);
+        var (attackD8, attackD6) = AttackDice(attackAction.Commanders, attackingTroops, attackAction.Origin, attackAction.Target);
         var (defenseD8, defenseD6) = DefenseDice(attackAction.Target, defendingTroops);
         if (attackD8 + defenseD8 > 0)
             Debug.Log($"Dice: attacker {attackD8} x d8 + {attackD6} x d6, defender {defenseD8} x d8 + {defenseD6} x d6");
@@ -67,15 +67,16 @@ public class BattleSimulator : MonoBehaviour
     public const int MaxAttackDice = BattleRules.MaxAttackDice;
     public const int MaxDefenseDice = BattleRules.MaxDefenseDice;
 
-    public static bool AttacksWithD8(CommanderType type) => DiceRules.AttacksWithD8(type.ToString());
+    public static bool AttacksWithD8(CommanderType type, Territory from, Territory to) =>
+        DiceRules.AttacksWithD8(type.ToString(), from != null ? from.Kind.ToString() : null, to != null ? to.Kind.ToString() : null);
 
-    // Dice for the attacking commanders that join (Land/Nuclear roll d8) plus MODs (d6).
-    public static (int d8, int d6) AttackDice(IEnumerable<CommanderType> attackingCommanders, int dice) =>
-        DiceRules.Split(dice, attackingCommanders.Count(t => DiceRules.AttacksWithD8(t.ToString())));
+    // Dice for the commanders who join this battle. MODs are the d6s.
+    public static (int d8, int d6) AttackDice(IEnumerable<CommanderType> attackingCommanders, int dice, Territory from, Territory to) =>
+        DiceRules.Split(dice, attackingCommanders.Count(t => AttacksWithD8(t, from, to)));
 
-    // As if every d8 commander in the territory joined.
-    public static (int d8, int d6) AttackDice(Territory origin, int dice) =>
-        AttackDice(origin.CommandersList.Select(c => c.CommanderType), dice);
+    // As if every commander in the territory joined an attack from it. Pass the target once it is known.
+    public static (int d8, int d6) AttackDice(Territory origin, int dice, Territory target = null) =>
+        AttackDice(origin.CommandersList.Select(c => c.CommanderType), dice, origin, target);
 
     public static (int d8, int d6) DefenseDice(Territory target, int dice) =>
         DiceRules.DefenseDice(dice, target.containsSpaceStation, target.CommandersList.Count);

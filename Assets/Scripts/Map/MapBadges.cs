@@ -168,7 +168,7 @@ namespace Map
             _tooltipPanel = panel.rectTransform;
             _tooltipPanel.anchorMin = _tooltipPanel.anchorMax = new Vector2(0.5f, 0.5f);
             _tooltipPanel.pivot = new Vector2(0.5f, 0f);
-            _tooltipPanel.sizeDelta = new Vector2(300, 120);
+            _tooltipPanel.sizeDelta = new Vector2(460, 160);
             panel.raycastTarget = false;
             var fill = TurnHud.FramePopup(panel, new Color(0.08f, 0.08f, 0.12f, 0.94f));
             fill.raycastTarget = false;
@@ -177,7 +177,7 @@ namespace Map
             content.SetParent(_tooltipPanel, false);
             TurnHud.Place(content, Vector2.zero, Vector2.one, new Vector2(12, 10), new Vector2(-12, -10));
             var v = content.gameObject.AddComponent<VerticalLayoutGroup>();
-            v.spacing = 6;
+            v.spacing = 8;
             v.childAlignment = TextAnchor.UpperLeft;
             v.childControlWidth = true;
             v.childControlHeight = true;
@@ -185,13 +185,13 @@ namespace Map
             v.childForceExpandHeight = false;
             content.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            _tooltipHeader = TurnHud.NewText("Header", content, 20, FontStyles.Bold, TextAlignmentOptions.Left);
-            _tooltipHeader.gameObject.AddComponent<LayoutElement>().preferredHeight = 24;
+            _tooltipHeader = TurnHud.NewText("Header", content, 24, FontStyles.Bold, TextAlignmentOptions.Left);
+            _tooltipHeader.gameObject.AddComponent<LayoutElement>().preferredHeight = 32;
 
             _tooltipRows = new GameObject("Legend", typeof(RectTransform)).GetComponent<RectTransform>();
             _tooltipRows.SetParent(content, false);
             var rowsLayout = _tooltipRows.gameObject.AddComponent<VerticalLayoutGroup>();
-            rowsLayout.spacing = 4;
+            rowsLayout.spacing = 8;
             rowsLayout.childAlignment = TextAnchor.UpperLeft;
             rowsLayout.childControlWidth = true;
             rowsLayout.childControlHeight = true;
@@ -199,9 +199,12 @@ namespace Map
             rowsLayout.childForceExpandHeight = false;
             _tooltipRows.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            _tooltipNote = TurnHud.NewText("Note", content, 15, FontStyles.Normal, TextAlignmentOptions.Left);
+            _tooltipNote = TurnHud.NewText("Note", content, 18, FontStyles.Normal, TextAlignmentOptions.Left);
             _tooltipNote.color = new Color(0.80f, 0.82f, 0.88f, 1f);
             _tooltipNote.textWrappingMode = TextWrappingModes.Normal;
+            var noteLe = _tooltipNote.gameObject.AddComponent<LayoutElement>();
+            noteLe.preferredHeight = 64f;
+            noteLe.minHeight = 48f;
 
             _tooltipPanel.SetAsLastSibling();
             SetTooltip(null);
@@ -237,7 +240,14 @@ namespace Map
             foreach (var c in t.CommandersList)
             {
                 var type = c.CommanderType;
-                var die = BattleSimulator.AttacksWithD8(type) ? " · attacks & defends d8" : " · defends d8, attacks d6";
+                var die = type switch
+                {
+                    CommanderType.NuclearCommander => " · attacks and defends d8",
+                    CommanderType.LandCommander => " · defends d8; attacks d8 from or into land",
+                    CommanderType.NavalCommander => " · defends d8; attacks d8 from or into water",
+                    CommanderType.SpaceCommander => " · defends d8; attacks d8 from or into the Moon",
+                    _ => " · defends d8, attacks d6",
+                };
                 AddLegendRow(IconFor(type), TypeColor(type), FullName(type) + die, Circle());
                 plain.Add(FullName(type));
             }
@@ -248,17 +258,16 @@ namespace Map
                 plain.Add("Space Station: all defenders roll 8-sided dice");
             }
 
-            var attackers = t.CommandersList.Count(c => BattleSimulator.AttacksWithD8(c.CommanderType));
             _tooltipNote.text = t.CommandersList.Count > 0
-                ? $"Commanders defend with d8{(attackers > 0 ? $"; {attackers} attack with d8" : "")}."
+                ? "Every commander defends with d8. The attack die depends on the two territories."
                 : "";
             _tooltipNote.gameObject.SetActive(!string.IsNullOrEmpty(_tooltipNote.text));
             _tooltipPlain = string.Join("\n", plain);
 
             Canvas.ForceUpdateCanvases();
             var rows = t.CommandersList.Count + (t.containsSpaceStation ? 1 : 0);
-            var h = 36 + rows * 36 + (string.IsNullOrEmpty(_tooltipNote.text) ? 0 : 28);
-            _tooltipPanel.sizeDelta = new Vector2(320, Mathf.Clamp(h, 72, 220));
+            var h = 64 + rows * 64 + (string.IsNullOrEmpty(_tooltipNote.text) ? 0 : 72);
+            _tooltipPanel.sizeDelta = new Vector2(500, Mathf.Clamp(h, 120, 420));
             _tooltipPanel.SetAsLastSibling();
             PositionTooltip(t);
         }
@@ -268,13 +277,13 @@ namespace Map
             var row = new GameObject("Row", typeof(RectTransform)).GetComponent<RectTransform>();
             row.SetParent(_tooltipRows, false);
             var h = row.gameObject.AddComponent<HorizontalLayoutGroup>();
-            h.spacing = 10;
+            h.spacing = 12;
             h.childAlignment = TextAnchor.MiddleLeft;
-            h.childControlWidth = false;
+            h.childControlWidth = true;
             h.childControlHeight = true;
             h.childForceExpandWidth = false;
             h.childForceExpandHeight = true;
-            row.gameObject.AddComponent<LayoutElement>().preferredHeight = 32;
+            row.gameObject.AddComponent<LayoutElement>().preferredHeight = 56;
 
             var badge = TurnHud.NewImage("Badge", row, Color.white);
             badge.sprite = badgeShape;
@@ -282,7 +291,7 @@ namespace Map
             badge.preserveAspect = true;
             badge.raycastTarget = false;
             var badgeLe = badge.gameObject.AddComponent<LayoutElement>();
-            badgeLe.preferredWidth = badgeLe.preferredHeight = 28;
+            badgeLe.preferredWidth = badgeLe.preferredHeight = 36;
 
             var glyph = TurnHud.NewImage("Icon", badge.rectTransform, Color.white);
             glyph.sprite = icon;
@@ -290,12 +299,14 @@ namespace Map
             glyph.raycastTarget = false;
             TurnHud.Place(glyph.rectTransform, new Vector2(0.15f, 0.15f), new Vector2(0.85f, 0.85f), Vector2.zero, Vector2.zero);
 
-            var text = TurnHud.NewText("Label", row, 16, FontStyles.Normal, TextAlignmentOptions.Left);
+            var text = TurnHud.NewText("Label", row, 18, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
             text.text = label;
             text.textWrappingMode = TextWrappingModes.Normal;
+            text.overflowMode = TextOverflowModes.Overflow;
             var textLe = text.gameObject.AddComponent<LayoutElement>();
+            textLe.preferredWidth = 420;
             textLe.flexibleWidth = 1;
-            textLe.minWidth = 200;
+            textLe.minHeight = 48;
         }
 
         private void PositionTooltip(Territory t)
@@ -303,7 +314,7 @@ namespace Map
             if (_tooltipPanel == null || _canvas == null || t == null) return;
             if (_cam == null) _cam = Camera.main;
             if (_cam == null) return;
-            var world = AnchorOf(t) + new Vector3(0, 0.85f, 0);
+            var world = AnchorOf(t) + new Vector3(-1.4f, -0.2f, 0);
             var screen = _cam.WorldToScreenPoint(world);
             if (screen.z < 0) { _tooltipPanel.gameObject.SetActive(false); return; }
             RectTransformUtility.ScreenPointToLocalPointInRectangle(

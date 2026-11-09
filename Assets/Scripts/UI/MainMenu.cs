@@ -15,7 +15,7 @@ namespace UI
         public static MainMenu Instance { get; private set; }
         public static bool IsRunning => Instance != null;
 
-        enum Page { Root, Play, Online, Room, Options, Credits, Licenses, Rules }
+        enum Page { Root, Play, Online, Room, Options, Credits, Licenses, Rules, Mail, MailRoom, Account, Live }
 
         static readonly Color Bg = new(0.045f, 0.05f, 0.075f, 1f);
         static readonly Color Column = new(0.07f, 0.08f, 0.11f, 1f);
@@ -39,6 +39,12 @@ namespace UI
         GameObject _quitModal;
         UIPlayerCreationManager _lobby;
         TMP_InputField _joinCode;
+        TMP_InputField _mailCode;
+        TMP_InputField _nameField;
+        TMP_InputField _userField;
+        TMP_InputField _emailField;
+        TMP_InputField _passField;
+        float _mailPoll;
 
         public string PageName => _lobbyOpen ? "Lobby" : _page.ToString();
         public bool LobbyOpen => _lobbyOpen;
@@ -141,6 +147,7 @@ namespace UI
             BuildQuitModal();
             OnlineRoom.Changed += OnRoomChanged;
             OnlineRoom.MatchStarted += OnMatchStarted;
+            Correspondence.Changed += OnMailChanged;
             // Back from an online match: this device's own rules again, not the last host's.
             MatchSession.Options = MatchOptions.Saved();
             Show(OnlineRoom.InRoom ? Page.Room : Page.Root);
@@ -202,6 +209,7 @@ namespace UI
 
             Clear(_content);
             _joinCode = null;
+            _mailCode = null;
 
             switch (page)
             {
@@ -216,13 +224,18 @@ namespace UI
                     break;
                 case Page.Play:
                     _kicker.text = "PLAY";
-                    _hint.text = "Single player is you against bots. Pass and Play shares this device.";
-                    Stack(
-                        Row("Single Player", () => OpenLobby(MatchKind.SinglePlayer), true),
-                        Row("Multiplayer", () => Show(Page.Online), false),
-                        Row("Pass and Play", () => OpenLobby(MatchKind.HotSeat), false),
-                        Row("Match rules", () => Show(Page.Rules), false),
-                        Row("Back", () => Show(Page.Root), false));
+                    var saved = MatchSave.HasSave;
+                    _hint.text = saved
+                        ? "Saved game: " + MatchSave.ContinueSummary + ". Starting a new one replaces it."
+                        : "Single player is you against bots. Pass and Play shares this device.";
+                    var playRows = new System.Collections.Generic.List<RowSpec>();
+                    if (saved) playRows.Add(Row("Continue", ResumeSaved, true));
+                    playRows.Add(Row("Single Player", () => OpenLobby(MatchKind.SinglePlayer), !saved));
+                    playRows.Add(Row("Multiplayer", () => Show(Page.Online), false));
+                    playRows.Add(Row("Pass and Play", () => OpenLobby(MatchKind.HotSeat), false));
+                    playRows.Add(Row("Match rules", () => Show(Page.Rules), false));
+                    playRows.Add(Row("Back", () => Show(Page.Root), false));
+                    Stack(playRows.ToArray());
                     break;
                 case Page.Rules:
                     _kicker.text = "MATCH RULES";
@@ -231,7 +244,32 @@ namespace UI
                     break;
                 case Page.Online:
                     _kicker.text = "MULTIPLAYER";
-                    _hint.text = "Host a private room, or join with a code.";
+                    _hint.text = "Play at your own pace across days, or sit down together live.";
+                    Stack(
+                        Row("Play at your own pace", () => Show(Page.Mail), true),
+                        Row("Play live", () => Show(Page.Live), false),
+                        Row("Account", () => Show(Page.Account), false),
+                        Row("Back", () => Show(Page.Play), false));
+                    SignIn();
+                    break;
+                case Page.Mail:
+                    _kicker.text = "YOUR GAMES";
+                    _hint.text = "Take your turn whenever you're free. The match waits.";
+                    BuildMail();
+                    break;
+                case Page.MailRoom:
+                    _kicker.text = "TURN-BASED MATCH";
+                    _hint.text = "";
+                    BuildMailRoom();
+                    break;
+                case Page.Account:
+                    _kicker.text = "ACCOUNT";
+                    _hint.text = "A username lets you keep your games on another device.";
+                    BuildAccount();
+                    break;
+                case Page.Live:
+                    _kicker.text = "PLAY LIVE";
+                    _hint.text = "Everyone plays at the same time. Host a private room, or join with a code.";
                     BuildOnline();
                     break;
                 case Page.Room:
@@ -270,7 +308,7 @@ namespace UI
                 if (code.Length == 0) SetStatus("Enter a room code.");
                 else RunRoomTask("Joining " + code.ToUpperInvariant() + "…", OnlineRoom.JoinAsync(code));
             }, false);
-            var back = MakeRow(_content, "Back", () => Show(Page.Play), false);
+            var back = MakeRow(_content, "Back", () => Show(Page.Online), false);
             LayoutRows(new[] { fieldRow, host, join, back });
             WireNav(new[] { host.GetComponent<Button>(), join.GetComponent<Button>(), back.GetComponent<Button>() });
             SignIn();
@@ -306,7 +344,7 @@ namespace UI
             var message = e.Message ?? "";
             if (message.Contains("project", System.StringComparison.OrdinalIgnoreCase)
                 && message.Contains("id", System.StringComparison.OrdinalIgnoreCase))
-                return "This build isn't linked to the InvadeEarth cloud project yet (Project Settings → Services).";
+                return "This build isn't linked to the InvadeEarth cloud project yet (Project Settings > Services).";
             if (message.Contains("not found", System.StringComparison.OrdinalIgnoreCase))
                 return "No room with that code.";
             if (message.Contains("full", System.StringComparison.OrdinalIgnoreCase))
@@ -445,6 +483,204 @@ namespace UI
             SceneManager.LoadScene("Main");
         }
 
+        void OnMailChanged()
+        {
+            if (this == null) return;
+            if (_page == Page.MailRoom) Show(Page.MailRoom);
+        }
+
+        bool _mailBusy;
+
+        async void RunMail(string working, System.Threading.Tasks.Task task, Page stay)
+        {
+            if (_mailBusy) return;
+            _mailBusy = true;
+            SetStatus(working);
+            try
+            {
+                await task;
+                if (this == null) return;
+                if (Correspondence.InLobby) Show(Page.MailRoom);
+                else Show(stay);
+            }
+            catch (System.Exception e)
+            {
+                if (this == null) return;
+                SetStatus(e.Message);
+                Debug.LogWarning("Correspondence: " + e);
+            }
+            finally { _mailBusy = false; }
+        }
+
+        void BuildMail()
+        {
+            _mailCode = NewCodeField(_content);
+            var placeholder = _mailCode.placeholder as TMP_Text;
+            if (placeholder != null) placeholder.text = "Match code";
+            var fieldRow = _mailCode.GetComponent<RectTransform>();
+            var rows = new List<RectTransform> { fieldRow };
+            var buttons = new List<Button>();
+            var host = MakeRow(_content, "New match", () => RunMail("Creating…", Correspondence.HostAsync(), Page.Mail), true);
+            var join = MakeRow(_content, "Join", () =>
+            {
+                var code = _mailCode != null ? _mailCode.text.Trim() : "";
+                if (code.Length == 0) SetStatus("Enter a match code.");
+                else RunMail("Joining…", Correspondence.JoinAsync(code), Page.Mail);
+            }, false);
+            rows.Add(host); buttons.Add(host.GetComponent<Button>());
+            rows.Add(join); buttons.Add(join.GetComponent<Button>());
+            var back = MakeRow(_content, "Back", () => Show(Page.Online), false);
+            rows.Add(back); buttons.Add(back.GetComponent<Button>());
+            LayoutRows(rows.ToArray());
+            WireNav(buttons.ToArray());
+            SignIn();
+            LoadMailList();
+        }
+
+        async void LoadMailList()
+        {
+            try
+            {
+                var games = await Correspondence.ListAsync();
+                if (this == null || _page != Page.Mail) return;
+                if (games.Count == 0)
+                {
+                    SetStatus(PlayFabLogin.LoggedIn ? "No matches yet." : "Signing in…");
+                    return;
+                }
+                var extras = new List<RectTransform>();
+                var extraButtons = new List<Button>();
+                foreach (var g in games)
+                {
+                    var code = g.Code;
+                    var row = MakeRow(_content, g.Line, () => RunMail("Opening…", Correspondence.OpenAsync(code), Page.Mail), g.YourTurn);
+                    extras.Add(row);
+                    extraButtons.Add(row.GetComponent<Button>());
+                }
+                // Rebuild: code field, new, join, games, back.
+                var existing = new List<RectTransform>();
+                for (var i = 0; i < _content.childCount; i++)
+                    existing.Add((RectTransform)_content.GetChild(i));
+                var back = existing[existing.Count - 1];
+                existing.RemoveAt(existing.Count - 1);
+                existing.AddRange(extras);
+                existing.Add(back);
+                LayoutRows(existing.ToArray());
+            }
+            catch (System.Exception e)
+            {
+                if (this == null || _page != Page.Mail) return;
+                SetStatus(e.Message);
+            }
+        }
+
+        void BuildMailRoom()
+        {
+            if (!Correspondence.InLobby)
+            {
+                Show(Page.Mail);
+                return;
+            }
+            var meta = Correspondence.Lobby;
+            _hint.text = $"Match code  <b><color=#FFD866>{Correspondence.Code}</color></b>   ·   share it, they can join later";
+            var rows = new List<RectTransform>();
+            var buttons = new List<Button>();
+            var people = meta?.peopleNames ?? System.Array.Empty<string>();
+            for (var i = 0; i < people.Length; i++)
+            {
+                var label = people[i] + (meta.peopleIds != null && i < meta.peopleIds.Length && meta.peopleIds[i] == PlayFabLogin.PlayFabId ? "  ·  you" : "");
+                if (i == 0) label += "  ·  host";
+                var line = TurnHud.NewText(people[i], _content, 22, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
+                line.text = label;
+                line.color = Color.white;
+                line.rectTransform.sizeDelta = new Vector2(0f, 40f);
+                rows.Add(line.rectTransform);
+            }
+            if (meta != null && meta.bots > 0)
+            {
+                var bots = TurnHud.NewText("Bots", _content, 22, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
+                bots.text = meta.bots + (meta.bots == 1 ? " bot (played when a human ends their turn)" : " bots (played when a human ends their turn)");
+                bots.color = Muted;
+                bots.rectTransform.sizeDelta = new Vector2(0f, 40f);
+                rows.Add(bots.rectTransform);
+            }
+            if (Correspondence.IsHost)
+            {
+                var add = MakeRow(_content, "Add a bot", () => RunMail("Adding a bot…", Correspondence.SetBotsAsync((meta?.bots ?? 0) + 1), Page.MailRoom), false);
+                var remove = MakeRow(_content, "Remove a bot", () => RunMail("Removing a bot…", Correspondence.SetBotsAsync(Mathf.Max(0, (meta?.bots ?? 0) - 1)), Page.MailRoom), false);
+                var start = MakeRow(_content, "Start match", () => RunMail("Starting…", Correspondence.StartAsync(), Page.MailRoom), true);
+                rows.Add(add); buttons.Add(add.GetComponent<Button>());
+                rows.Add(remove); buttons.Add(remove.GetComponent<Button>());
+                rows.Add(start); buttons.Add(start.GetComponent<Button>());
+                SetStatus(WhyCantStartMail(meta) ?? "Admit anyone who joins, then Start.");
+            }
+            else
+                SetStatus("Waiting for the host to let you in and start.");
+            var leave = MakeRow(_content, "Leave", () => RunMail("Leaving…", Correspondence.LeaveLobbyAsync(), Page.Mail), false);
+            rows.Add(leave); buttons.Add(leave.GetComponent<Button>());
+            LayoutRows(rows.ToArray());
+            WireNav(buttons.ToArray());
+        }
+
+        static string WhyCantStartMail(Correspondence.Meta meta)
+        {
+            if (meta == null) return "No match.";
+            var n = (meta.peopleIds?.Length ?? 0) + meta.bots;
+            if (n < Correspondence.MinPlayers) return "Need at least two players.";
+            if (n > Correspondence.MaxPlayers) return "Too many players.";
+            return null;
+        }
+
+        void BuildAccount()
+        {
+            var rows = new List<RectTransform>();
+            var buttons = new List<Button>();
+            _nameField = NewTextField(_content, "Display name", PlayFabLogin.DisplayName, 25, false);
+            _userField = NewTextField(_content, "Username", PlayFabLogin.Username ?? "", 20, false);
+            _emailField = NewTextField(_content, "Email", "", 64, false);
+            _passField = NewTextField(_content, "Password", "", 32, true);
+            rows.Add(_nameField.GetComponent<RectTransform>());
+            rows.Add(_userField.GetComponent<RectTransform>());
+            rows.Add(_emailField.GetComponent<RectTransform>());
+            rows.Add(_passField.GetComponent<RectTransform>());
+            var saveName = MakeRow(_content, "Save display name", () =>
+            {
+                PlayFabLogin.DisplayName = _nameField.text;
+                SetStatus("Saving…");
+                PlayFabLogin.PushDisplayName().ContinueWith(_ =>
+                {
+                    if (this != null) SetStatus("Display name saved.");
+                }, System.Threading.Tasks.TaskScheduler.FromCurrentSynchronizationContext());
+            }, true);
+            var register = MakeRow(_content, "Create username", () =>
+            {
+                SetStatus("Creating…");
+                PlayFabLogin.RegisterUsername(_userField.text.Trim(), _emailField.text.Trim(), _passField.text, (ok, err) =>
+                    SetStatus(ok ? "Username saved. Use it on another device." : err));
+            }, false);
+            var signin = MakeRow(_content, "Sign in with username", () =>
+            {
+                SetStatus("Signing in…");
+                PlayFabLogin.SignInWithUsername(_userField.text.Trim(), _passField.text, (ok, err) =>
+                    SetStatus(ok ? "Signed in." : err));
+            }, false);
+            var back = MakeRow(_content, "Back", () => Show(Page.Online), false);
+            rows.Add(saveName); buttons.Add(saveName.GetComponent<Button>());
+            rows.Add(register); buttons.Add(register.GetComponent<Button>());
+            rows.Add(signin); buttons.Add(signin.GetComponent<Button>());
+            rows.Add(back); buttons.Add(back.GetComponent<Button>());
+            LayoutRows(rows.ToArray());
+            WireNav(buttons.ToArray());
+            SignIn();
+            PlayFabLogin.RefreshAccount((ok, err) =>
+            {
+                if (this == null || _page != Page.Account) return;
+                if (ok && _userField != null && !string.IsNullOrEmpty(PlayFabLogin.Username))
+                    _userField.text = PlayFabLogin.Username;
+                if (ok && _nameField != null) _nameField.text = PlayFabLogin.DisplayName;
+            });
+        }
+
         void SignIn()
         {
             if (PlayFabLogin.LoggedIn)
@@ -563,6 +799,18 @@ namespace UI
             placeButton = placeRow.GetComponent<Button>();
             rows.Add(placeRow);
             buttons.Add(placeButton);
+
+            Button seaButton = null;
+            var seaRow = MakeValueRow(_content, "Seas and Moon", o.FrontiersLabel, () =>
+            {
+                o.Frontiers = !o.Frontiers;
+                o.Save();
+                SetRowValue(seaButton, o.FrontiersLabel);
+                onChanged?.Invoke();
+            });
+            seaButton = seaRow.GetComponent<Button>();
+            rows.Add(seaRow);
+            buttons.Add(seaButton);
         }
 
         void BuildRules()
@@ -577,7 +825,8 @@ namespace UI
             text.textWrappingMode = TextWrappingModes.Normal;
             text.color = new Color(0.75f, 0.78f, 0.85f, 1f);
             text.text = "Devastated territories are out of the game: nobody owns them and no one can move through them. " +
-                        "Take turns: players claim empty territories one at a time, then place their army 3 MODs at a time.";
+                        "Take turns: players claim empty territories one at a time, then place their army 3 MODs at a time. " +
+                        "Seas and Moon adds ocean zones, left empty at the start, and a moon west of the Americas. Click the moon to open its board. A space station can attack the three landing sites.";
             rows.Add(note);
             var back = MakeRow(_content, "Back", () => Show(Page.Play), false);
             rows.Add(back);
@@ -593,11 +842,11 @@ namespace UI
             body.textWrappingMode = TextWrappingModes.Normal;
             body.text =
                 "A territory game for 2 to 5 players.\n\n" +
-                "Includes RiskASP by Farfi55, MIT License.\n" +
-                "Command cards and commanders by Nikolas Krecu.\n" +
+                "Nikolas Krecu — command cards and commanders.\n" +
+                "Includes RiskASP by Farfi55 (Alessio Farfaglia), MIT License.\n" +
                 "Developed by George.\n\n" +
                 "Development build " + Application.version + ".";
-            body.rectTransform.sizeDelta = new Vector2(0f, 240f);
+            body.rectTransform.sizeDelta = new Vector2(0f, 280f);
             var licenses = MakeRow(_content, "Licenses", () => Show(Page.Licenses), false);
             var back = MakeRow(_content, "Back", () => Show(Page.Root), false);
             LayoutRows(new RectTransform[] { body.rectTransform, licenses, back });
@@ -621,6 +870,7 @@ namespace UI
             "EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER " +
             "IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR " +
             "THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n\n" +
+            "<b>Command cards and commanders</b>: Nikolas Krecu.\n\n" +
             "<b>PlayFab SDK</b>: Copyright (c) Microsoft Corporation, Apache License 2.0 " +
             "(apache.org/licenses/LICENSE-2.0). Includes SimpleJson, Copyright (c) 2011 The Outercurve Foundation, MIT License.";
 
@@ -659,6 +909,29 @@ namespace UI
             WireNav(buttons);
         }
 
+        void ResumeSaved()
+        {
+            if (!MatchSave.TryLoad(out var file))
+            {
+                SetStatus("No saved game.");
+                Show(Page.Play);
+                return;
+            }
+            if (_lobby == null)
+            {
+                SetStatus("The seat picker is missing from the Menu scene.");
+                return;
+            }
+            if (!_lobby.ApplySavedSeats(file.Seats))
+            {
+                SetStatus("Couldn't restore the saved seats.");
+                return;
+            }
+            MatchSave.ArmResume(file);
+            SetStatus("Loading…");
+            SceneManager.LoadScene("Main");
+        }
+
         void OpenLobby(MatchKind kind)
         {
             if (_lobby == null)
@@ -673,9 +946,10 @@ namespace UI
             _shell.gameObject.SetActive(false);
             _quitModal.SetActive(false);
             _lobbyBar.SetActive(true);
+            var replace = MatchSave.HasSave ? "  ·  this replaces the saved game" : "";
             _lobbyTitle.text = kind == MatchKind.HotSeat
-                ? "Pass and Play  ·  add everyone on this device, then Start"
-                : "Single Player  ·  you, plus bots in the other seats, then Start";
+                ? "Pass and Play  ·  add everyone on this device, then Start" + replace
+                : "Single Player  ·  you, plus bots in the other seats, then Start" + replace;
             _lobby.gameObject.SetActive(true);
             _lobby.Prepare(kind);
         }
@@ -708,6 +982,11 @@ namespace UI
 
         void Update()
         {
+            if (_page == Page.MailRoom && Correspondence.InLobby && Time.unscaledTime >= _mailPoll)
+            {
+                _mailPoll = Time.unscaledTime + 2.5f;
+                _ = Correspondence.RefreshLobbyAsync();
+            }
             if (!Input.GetKeyDown(KeyCode.Escape)) return;
             if (_quitModal != null && _quitModal.activeSelf)
             {
@@ -717,6 +996,10 @@ namespace UI
             if (_lobbyOpen) CloseLobby();
             else if (_page == Page.Root) _quitModal.SetActive(true);
             else if (_page == Page.Online) Show(Page.Play);
+            else if (_page == Page.Live) Show(Page.Online);
+            else if (_page == Page.Mail) Show(Page.Online);
+            else if (_page == Page.MailRoom) RunMail("Leaving…", Correspondence.LeaveLobbyAsync(), Page.Mail);
+            else if (_page == Page.Account) Show(Page.Online);
             else if (_page == Page.Licenses) Show(Page.Credits);
             else if (_page == Page.Rules) Show(Page.Play);
             else if (_page == Page.Room) RunRoomTask("Leaving…", LeaveRoom());
@@ -737,6 +1020,7 @@ namespace UI
             if (Instance == this) Instance = null;
             OnlineRoom.Changed -= OnRoomChanged;
             OnlineRoom.MatchStarted -= OnMatchStarted;
+            Correspondence.Changed -= OnMailChanged;
         }
 
         // ---------------- rows ----------------
@@ -888,6 +1172,19 @@ namespace UI
             slider.value = value;
             slider.onValueChanged.AddListener(onChanged);
             return row;
+        }
+
+        static TMP_InputField NewTextField(Transform parent, string placeholder, string value, int limit, bool password)
+        {
+            var field = NewCodeField(parent);
+            field.gameObject.name = placeholder;
+            field.characterLimit = limit;
+            field.characterValidation = TMP_InputField.CharacterValidation.None;
+            field.contentType = password ? TMP_InputField.ContentType.Password : TMP_InputField.ContentType.Standard;
+            var ph = field.placeholder as TMP_Text;
+            if (ph != null) ph.text = placeholder;
+            field.text = value ?? "";
+            return field;
         }
 
         static TMP_InputField NewCodeField(Transform parent)

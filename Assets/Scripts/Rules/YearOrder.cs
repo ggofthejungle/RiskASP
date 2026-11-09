@@ -10,6 +10,8 @@ namespace InvadeEarth.Rules
         public bool Alive;
         public int Energy;
         public int Bid = -1;
+        // 0 when this bid was unique. Otherwise the d6 that ordered this tie. High roll chooses first.
+        public int TieRoll;
     }
 
     // Bidding, then the highest bidder downward choosing a turn position.
@@ -63,17 +65,34 @@ namespace InvadeEarth.Rules
                 return true;
             }
 
-            var alive = next.Seats.Where(s => s.Alive).ToArray();
-            var keys = alive.ToDictionary(s => s.PlayerId, _ => random.Range(0, int.MaxValue));
-            var ordered = alive.OrderByDescending(s => s.Bid).ThenBy(s => keys[s.PlayerId]).ToArray();
-            foreach (var seat in ordered)
+            var alive = next.Seats.Where(s => s.Alive).ToList();
+            foreach (var seat in alive)
                 seat.Energy -= seat.Bid;
+            // Highest bid chooses first. A shared bid is a d6 each; the high roll goes first.
+            // A tied roll is thrown again, and only for the players who tied.
+            var ordered = new System.Collections.Generic.List<YearSeat>();
+            foreach (var group in alive.GroupBy(s => s.Bid).OrderByDescending(g => g.Key))
+            {
+                var members = group.ToList();
+                if (members.Count == 1)
+                {
+                    members[0].TieRoll = 0;
+                    ordered.Add(members[0]);
+                    continue;
+                }
+                foreach (var member in members)
+                    member.TieRoll = random.Range(1, 7);
+                while (members.GroupBy(m => m.TieRoll).Any(g => g.Count() > 1))
+                    foreach (var tied in members.GroupBy(m => m.TieRoll).Where(g => g.Count() > 1).SelectMany(g => g).ToList())
+                        tied.TieRoll = random.Range(1, 7);
+                ordered.AddRange(members.OrderByDescending(m => m.TieRoll));
+            }
 
             next.Bidding = false;
             next.Choosing = true;
             next.ChooserIds = ordered.Select(s => s.PlayerId).ToArray();
             next.NextChooser = 0;
-            next.SeatOwner = Enumerable.Repeat(-1, ordered.Length).ToArray();
+            next.SeatOwner = Enumerable.Repeat(-1, ordered.Count).ToArray();
             next.DeadIds = next.Seats.Where(s => !s.Alive).Select(s => s.PlayerId).ToArray();
             next.ActorId = next.ChooserIds[0];
             return true;
@@ -124,6 +143,7 @@ namespace InvadeEarth.Rules
             Alive = seat.Alive,
             Energy = seat.Energy,
             Bid = seat.Bid,
+            TieRoll = seat.TieRoll,
         };
     }
 }

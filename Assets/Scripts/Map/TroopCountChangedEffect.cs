@@ -42,7 +42,7 @@ namespace Map
 
         public void SetTroopText(int amount)
         {
-            _troopsCountText.text = amount.ToString();
+            _troopsCountText.text = amount > 0 ? "+" + amount : amount.ToString();
         }
 
         public void SetTerritory(Territory territory)

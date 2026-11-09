@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using Map;
 using player;
@@ -17,6 +18,31 @@ namespace Expansions
         public static readonly CommanderType[] HireableCommanders =
             { CommanderType.Diplomat, CommanderType.LandCommander, CommanderType.NuclearCommander };
 
+        // Naval and Space join the list once the match actually has seas or a moon.
+        public static IEnumerable<CommanderType> ForThisMap()
+        {
+            foreach (var type in HireableCommanders) yield return type;
+            if (Cards.CommandCards.IsDeckInPlay(CommanderType.NavalCommander)) yield return CommanderType.NavalCommander;
+            if (Cards.CommandCards.IsDeckInPlay(CommanderType.SpaceCommander)) yield return CommanderType.SpaceCommander;
+        }
+
+        // Any commander may stand on any territory you occupy. Terrain gates cover invasions, not where he sits.
+        public static bool CanStand(CommanderType type, Territory where) => where != null;
+
+        // Invade into or out of water needs a Naval Commander in play, anywhere. The Moon needs a Space Commander.
+        // Those units can still defend, and they can still fortify, with no commander.
+        public static string WhyCantEnterBattle(Player p, Territory from, Territory to)
+        {
+            if (p == null || from == null || to == null) return null;
+            if ((from.Kind == TerrainKind.Sea || to.Kind == TerrainKind.Sea)
+                && !p.HasCommanderInPlay(CommanderType.NavalCommander))
+                return "You need a Naval Commander in play to invade into or out of the water. Those MODs can still defend and fortify.";
+            if ((from.Kind == TerrainKind.Moon || to.Kind == TerrainKind.Moon)
+                && !p.HasCommanderInPlay(CommanderType.SpaceCommander))
+                return "You need a Space Commander in play to invade into or out of the Moon. Those MODs can still defend and fortify.";
+            return null;
+        }
+
         private readonly GameManager _gm;
 
         public System.Action<Player, Commander, Territory> OnCommanderHired;
@@ -33,8 +59,9 @@ namespace Expansions
 
         public string WhyCantHire(Player p, CommanderType type, Territory where)
         {
-            if (!HireableCommanders.Contains(type)) return $"{type} isn't used: this map has no water or Moon territories.";
+            if (!ForThisMap().Contains(type)) return $"{type} isn't used: this map has no water or Moon territories.";
             if (!_gm.IsCommandStep(p)) return "You can only hire commanders on your turn, before your first invasion.";
+            if (_gm.ShopClosed) return "You've finished hiring and buying for this turn.";
             if (where == null || where.Owner != p) return "Place the commander on a territory you occupy.";
             if (p.HasCommanderInPlay(type)) return $"You already have a {type}.";
             if (p.GetEnergy() < CommanderCost) return $"A commander costs {CommanderCost} energy.";
@@ -55,7 +82,9 @@ namespace Expansions
         public string WhyCantBuild(Player p, Territory where)
         {
             if (!_gm.IsCommandStep(p)) return "You can only build space stations on your turn, before your first invasion.";
+            if (_gm.ShopClosed) return "You've finished hiring and buying for this turn.";
             if (where == null || where.Owner != p) return "Build the station on a territory you occupy.";
+            if (where.Kind != TerrainKind.Land) return "Space stations are built on land. One there can launch to the Moon.";
             if (where.containsSpaceStation) return $"{where.Name} already has a space station.";
             if (StationsOf(p) >= MaxStations) return $"You can have at most {MaxStations} space stations.";
             if (p.GetEnergy() < StationCost) return $"A space station costs {StationCost} energy.";

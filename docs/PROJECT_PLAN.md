@@ -57,10 +57,11 @@ Every item below has PlayMode tests; the last run was **118/118**.
    - It asks the defender only, never every player.
    - It opens before every roll.
    - There's no card-vs-card stack.
-   - The AI answers instantly. Online, the defender's device answers, with a 15–20 s timer that auto-passes.
+   - The AI answers instantly. Live online, the defender's device answers, with a 15–20 s timer that auto-passes.
+     Correspondence (OL-6) has no timer: the game waits until that player opens it.
 3. The space station gives +1 MOD (unit), not energy.
 4. After bidding, the highest bidder chooses their position.
-5. The map is land-only. Naval and Space commanders and decks are out.
+5. Seas and a moon are a match option (on by default from the menu). Naval stands on sea, Space on the moon, and a land station links to the moon's near side. Tests and a scene opened with no menu stay land-only.
 6. Commander battle rules are as in section 2. The player always picks how many units move and which commanders go.
 7. Card effects never empty a territory. Evacuation is the exception: the attacker takes the emptied territory.
 8. **Online = PlayFab + UGS. No Photon.** The server is the authority (UGS Cloud Code or PlayFab CloudScript runs the C# rules). The "pass the device" screens are for testing only (`PassTheDeviceScreens`, off by default).
@@ -74,10 +75,10 @@ Every item below has PlayMode tests; the last run was **118/118**.
 | 1 | End condition: 5 years + most points? | **Implemented that way.** Trello card "Game end condition change?" is still open, so ask George before changing it. |
 | 2 | Bid input: free number or 4 fixed options? | **Done:** one button per amount, 0 to the player's energy (PT-2); the typed box is gone. |
 | 3 | New map: data-driven adjacency JSON? Mobile collider size? | **Open.** Recommendation: JSON adjacency + artwork, generous colliders. Needed before sale. |
-| 4 | Remove moon–earth links? | Not relevant while the map is land-only. Revisit with the new map. |
+| 4 | Remove moon–earth links? | **Kept, as a launch.** A land space station links to `landing` and `south_ridge`. No station, no route. |
 | 5 | Map first or cards first? | **Decided in practice:** cards first, on the existing map (done). |
 | 6 | Classic Risk cards: hide or delete? | **Decided:** deleted (set-trading removed). |
-| 7 | How to do interrupt cards? | **Decided:** live defender-only window plus timer. The "pre-set/armed reaction cards" idea (Trello Research card 5) is parked and worth revisiting if async play-by-turn is built. |
+| 7 | How to do interrupt cards? | **Decided:** live defender-only window plus timer. Correspondence (OL-6) waits with no timer instead of armed reactions; revisit armed cards if that feels too slow. |
 | 8 | Devastation: how does it break paths? | **Decided (George, Nov 7):** like removing a node from the graph: all its links go, as if it was never there, for the whole game. Built (DEV-1). |
 | 9 | Initial placement: random or alternating picks? | **Decided (George, Nov 7):** a match option the host picks: Random, or Take turns (2210 setup). Commanders and the station are still picked after (CC-5). Built (PLACE-1). |
 | 10 | Backend split? | **Decided:** PlayFab + UGS, no Photon. |
@@ -151,7 +152,18 @@ Task IDs match `CLAUDE.md`. Sizes: S = under 1 hour of agent work, M = a session
   title, or share the DT Games one.
 - **OL-2 Lobby (M):** UGS Lobby join codes (`UGS/LobbyUGSManager.cs`, `UI/Private Lobby/*`), widened from 2 to 2–5
   players, with AI fill, host options and ready-up.
-- **OL-6 Later (L):** friend invites, then async play-by-turn (the action log stored server-side, push "your turn").
+- **SAVE-1 (M):** local save/resume for single player and pass-and-play — built Nov 7. Seed + action log
+  in `Application.persistentDataPath/saves/local.json`. Continue on the Play page. Auto-saves after each
+  move. Game over deletes it. Live online still uses the host's log in RAM (rejoin while the room is up).
+- **OL-6 (L, started Nov 7):** correspondence play. Menu: Multiplayer → Play at your own pace.
+  PlayFab Shared Group holds the gzipped action log; PlayFab Groups is join-by-code (apply, host
+  admits while the lobby is open). After Start there is no live room and no 20 s timer. Your games
+  lists matches; the current player uploads after each move (action-count check). Username/password
+  on Account recovers the same PlayFab user on another device. Bots are played by whichever device
+  just handed off to them. Cloud Code authority is still later. Do not add Firebase: the Your games
+  list is the "your turn" notice (free). Lock-screen push is optional; FCM is free if we ever want
+  Android alerts, and we don't need any paid Firebase product.
+  Probed: created match Y4ZZEU, started with 1 bot, bid, left, list showed "Your turn · Year 1".
 - **OL-7 Builds (M):** Windows/Steam, Android, iOS and WebGL smoke tests: log in, join by code, play one turn with a reaction prompt.
 
 ### Phase D: make it sellable (legal + content)

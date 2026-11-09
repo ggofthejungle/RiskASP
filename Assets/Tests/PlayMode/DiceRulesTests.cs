@@ -5,13 +5,18 @@ using NUnit.Framework;
 public class DiceRulesTests
 {
     [Test]
-    public void OnlyLandAndNuclear_AttackWithD8()
+        public void TerrainCommanders_AttackWithD8_DiplomatDoesNot()
     {
-        Assert.IsTrue(DiceRules.AttacksWithD8("LandCommander"));
-        Assert.IsTrue(DiceRules.AttacksWithD8("NuclearCommander"));
-        Assert.IsFalse(DiceRules.AttacksWithD8("Diplomat"));
-        Assert.IsFalse(DiceRules.AttacksWithD8("NavalCommander"));
-        Assert.IsFalse(DiceRules.AttacksWithD8("SpaceCommander"));
+        Assert.IsTrue(DiceRules.AttacksWithD8("LandCommander", "Land", "Land"));
+        Assert.IsTrue(DiceRules.AttacksWithD8("LandCommander", "Land", "Sea"));
+        Assert.IsFalse(DiceRules.AttacksWithD8("LandCommander", "Sea", "Sea"));
+        Assert.IsTrue(DiceRules.AttacksWithD8("NuclearCommander", "Sea", "Moon"));
+        Assert.IsFalse(DiceRules.AttacksWithD8("Diplomat", "Land", "Land"));
+        Assert.IsTrue(DiceRules.AttacksWithD8("NavalCommander", "Land", "Sea"));
+        Assert.IsTrue(DiceRules.AttacksWithD8("NavalCommander", "Sea", "Land"));
+        Assert.IsFalse(DiceRules.AttacksWithD8("NavalCommander", "Land", "Land"));
+        Assert.IsTrue(DiceRules.AttacksWithD8("SpaceCommander", "Moon", "Land"));
+        Assert.IsFalse(DiceRules.AttacksWithD8("SpaceCommander", "Land", "Land"));
     }
 
     [Test]

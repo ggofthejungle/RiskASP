@@ -7,7 +7,8 @@ namespace Cards
     // The command-card decks (Risk 2210 A.D.: one deck per commander, with copies). Copy counts and
     // power-up costs follow the 2210 decks as modelled in the reference Java version (avioane/InvadeEarth,
     // read for rules only). Our map is land-only, so the Naval and Space decks and the water/Moon variants
-    // of Nuclear cards are left out. Card names/texts will be rewritten before release (legal).
+    // of Nuclear cards are added only when the match builds seas and a moon (AddFrontierDecks).
+    // Card names/texts will be rewritten before release (legal).
     public static class DeckLists
     {
         public static readonly IReadOnlyList<(CardType Type, int Copies)> Diplomat = new[]
@@ -44,16 +45,67 @@ namespace Cards
             (CardType.AssassinBomb, 3),
         };
 
+        public static readonly IReadOnlyList<(CardType Type, int Copies)> Naval = new[]
+        {
+            (CardType.AssembleModsNa, 3),
+            (CardType.ReinforcementsNa, 3),
+            (CardType.WaterDeathTrap, 1),
+            (CardType.StealthModsNa, 5),
+            (CardType.FrequencyJamNa, 2),
+            (CardType.ColonyInfluenceNa, 2),
+            (CardType.HiddenEnergy, 2),
+        };
+
+        public static readonly IReadOnlyList<(CardType Type, int Copies)> Space = new[]
+        {
+            (CardType.AssembleModsS, 3),
+            (CardType.ReinforcementsS, 3),
+            (CardType.OrbitalMines, 1),
+            (CardType.StealthModsS, 5),
+            (CardType.FrequencyJamS, 2),
+            (CardType.ColonyInfluenceS, 2),
+            (CardType.EnergyExtraction, 2),
+            (CardType.InvadeSurface, 2),
+        };
+
+        // Added to the Nuclear deck only when the match has seas and a moon.
+        public static readonly IReadOnlyList<(CardType Type, int Copies)> FrontierNuclear = new[]
+        {
+            (CardType.RocketStrikeWater, 2),
+            (CardType.RocketStrikeMoon, 2),
+            (CardType.ScatterBombWater, 3),
+            (CardType.ScatterBombMoon, 3),
+            (CardType.AquaBrother, 1),
+            (CardType.NickyBoy, 1),
+        };
+
         public static IReadOnlyList<(CardType Type, int Copies)> For(CommanderType deck) => deck switch
         {
             CommanderType.Diplomat => Diplomat,
             CommanderType.LandCommander => Land,
+            CommanderType.NavalCommander => Naval,
+            CommanderType.SpaceCommander => Space,
             CommanderType.NuclearCommander => Nuclear,
             _ => System.Array.Empty<(CardType, int)>(),
         };
 
-        public static IEnumerable<CommanderType> DecksInPlay => new[]
-            { CommanderType.Diplomat, CommanderType.LandCommander, CommanderType.NuclearCommander };
+        public static IEnumerable<CommanderType> DecksInPlay
+        {
+            get
+            {
+                yield return CommanderType.Diplomat;
+                yield return CommanderType.LandCommander;
+                yield return CommanderType.NuclearCommander;
+                if (MapHas(Map.TerrainKind.Sea)) yield return CommanderType.NavalCommander;
+                if (MapHas(Map.TerrainKind.Moon)) yield return CommanderType.SpaceCommander;
+            }
+        }
+
+        static bool MapHas(Map.TerrainKind kind)
+        {
+            var map = Map.TerritoryRepository.Instance;
+            return map != null && map.Territories.Any(t => t.Kind == kind);
+        }
 
         // Power-up cost (energy paid when the card is played).
         public static int CostOf(CardType type) => type switch

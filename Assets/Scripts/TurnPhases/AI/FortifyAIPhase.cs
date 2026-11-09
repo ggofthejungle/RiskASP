@@ -37,21 +37,28 @@ namespace TurnPhases.AI
 
         public void OnResponse(Player player, AnswerSet answerSet)
         {
+            var queued = false;
             foreach (var atom in answerSet.Atoms)
             {
                 PlayerAction action = null;
                 if (atom is FortifyPredicate move)
                 {
-                    action = new FortifyAction(player, move.Turn, _tr.FromName(move.From.StripQuotes()),
-                        _tr.FromName(move.To.StripQuotes()), move.Troops);
+                    var from = _tr.FromName(move.From.StripQuotes());
+                    var to = _tr.FromName(move.To.StripQuotes());
+                    action = new FortifyAction(player, move.Turn, from, to, move.Troops);
                 }
 
                 if (atom is EndFortifyPredicate endFortify)
                     action = new EndPhaseAction(player, endFortify.Turn);
 
                 if (action != null)
+                {
                     _ar.AddAction(action);
+                    queued = true;
+                }
             }
+            if (!queued)
+                _ar.AddAction(new EndPhaseAction(player, _gm.Turn));
         }
 
         public void OnFailure(Player player)

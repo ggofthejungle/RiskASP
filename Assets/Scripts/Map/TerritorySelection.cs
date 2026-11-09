@@ -11,6 +11,9 @@ namespace Map
         public Territory Territory => _territory;
         [SerializeField] private Territory _territory;
 
+        // Sea and moon zones are built in code, so the click handler is wired there.
+        public void Bind(Territory territory) => _territory = territory;
+
         public bool IsHovered => _isHovered;
         public bool IsSelected => _isSelected;
         public bool IsDisabled => _isDisabled;
@@ -39,8 +42,13 @@ namespace Map
             if(EventSystem.current.IsPointerOverGameObject())
                 return;
             
-            if (!_isDisabled)
-                OnClicked?.Invoke(this);
+            if (_isDisabled)
+            {
+                if (SelectionManager.Instance != null && SelectionManager.Instance.IsTargeting)
+                    SelectionManager.Instance.Reject(_territory);
+                return;
+            }
+            OnClicked?.Invoke(this);
         }
 
 
@@ -74,5 +82,17 @@ namespace Map
 
         public void Disable() => SetDisabled(true);
         public void Enable() => SetDisabled(false);
+
+        // The moon board calls this. A grey territory does not answer, same as a click on the map.
+        public void ClickFromUi()
+        {
+            if (_isDisabled)
+            {
+                if (SelectionManager.Instance != null && SelectionManager.Instance.IsTargeting)
+                    SelectionManager.Instance.Reject(_territory);
+                return;
+            }
+            OnClicked?.Invoke(this);
+        }
     }
 }

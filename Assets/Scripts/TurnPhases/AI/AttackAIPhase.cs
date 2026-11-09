@@ -72,10 +72,12 @@ namespace TurnPhases.AI
                 if (atom is AttackPredicate attack)
                 {
                     var from = _tr.FromName(attack.From.StripQuotes());
-                    var commanders = AttackAction.D8Commanders(from)
+                    var to = _tr.FromName(attack.To.StripQuotes());
+                    if (Expansions.Purchases.WhyCantEnterBattle(player, from, to) != null) continue;
+                    var commanders = AttackAction.D8Commanders(from, to)
                         .Take(System.Math.Max(0, BattleSimulator.MaxAttackDice - attack.Troops));
                     var action = new AttackAction(player, attack.Turn, attack.AttackTurn,
-                        from, _tr.FromName(attack.To.StripQuotes()), attack.Troops, commanders);
+                        from, to, attack.Troops, commanders);
                     attackPhaseActions.Add(action);
                 }
                 else if (atom is AttackReinforcePredicate afterAttackMove)
@@ -90,6 +92,9 @@ namespace TurnPhases.AI
                     endPhaseAction = new EndPhaseAction(player, stopAttacking.Turn);
                 }
             }
+
+            if (attackPhaseActions.Count == 0 && endPhaseAction == null)
+                endPhaseAction = new EndPhaseAction(player, _gm.Turn);
 
             SortActions(attackPhaseActions);
 

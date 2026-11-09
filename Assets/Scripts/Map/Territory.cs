@@ -15,6 +15,10 @@ namespace Map
     {
         public string Name;
         public Continent Continent;
+        // Land is the drawn map. Sea and Moon are added in code when the match uses frontiers.
+        public TerrainKind Kind;
+        // A moon territory a space station can launch to.
+        public bool LaunchPoint;
 
         public List<Territory> NeighbourTerritories = new();
         public Player Owner;
@@ -164,11 +168,14 @@ namespace Map
         {
             //check if the owner has 4, then have to remove a space station
             containsSpaceStation = true;
-            OnSpaceStationChanged?.Invoke(containsSpaceStation); }
+            Frontiers.NoteStation(this, true);
+            OnSpaceStationChanged?.Invoke(containsSpaceStation);
+        }
 
         public void RemoveSpaceStation()
         {
             containsSpaceStation = false;
+            Frontiers.NoteStation(this, false);
             OnSpaceStationChanged?.Invoke(containsSpaceStation);
         }
 
@@ -203,15 +210,18 @@ namespace Map
             return NeighbourTerritories.Any(neighbour => neighbour.Owner == Owner);
         }
 
+        // A unit is a MOD or a commander. One unit must stay behind, so every MOD can leave when a commander stays.
         public int GetAvailableTroops()
         {
-            return Troops - 1;
+            if (CommandersList != null && CommandersList.Count > 0) return Troops;
+            return Troops > 0 ? Troops - 1 : 0;
         }
 
 
         public override string ToString()
         {
-            return $"Territory {Name},  ({Troops} troops) owned by {Owner.Name}";
+            var who = Owner != null ? Owner.Name : "nobody";
+            return $"Territory {Name},  ({Troops} troops) owned by {who}";
         }
 
 

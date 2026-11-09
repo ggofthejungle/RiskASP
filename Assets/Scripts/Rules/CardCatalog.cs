@@ -51,6 +51,18 @@ namespace InvadeEarth.Rules
             "AssassinBomb" => new CardRule(1, RuleTiming.BeforeFirstInvasion),
             "LandDeathTrap" => new CardRule(3, RuleTiming.OpponentInvades),
             "StealthStation" => new CardRule(0, RuleTiming.OpponentInvades),
+            "AssembleModsNa" or "AssembleModsS" => new CardRule(1, RuleTiming.BeforeFirstInvasion),
+            "ReinforcementsNa" or "ReinforcementsS" => new CardRule(0, RuleTiming.BeforeFirstInvasion),
+            "FrequencyJamNa" or "FrequencyJamS" => new CardRule(0, RuleTiming.BeforeFirstInvasion),
+            "ColonyInfluenceNa" or "ColonyInfluenceS" => new CardRule(0, RuleTiming.EndOfGame),
+            "StealthModsNa" or "StealthModsS" => new CardRule(0, RuleTiming.OpponentInvades),
+            "WaterDeathTrap" or "OrbitalMines" => new CardRule(3, RuleTiming.OpponentInvades),
+            "RocketStrikeWater" or "RocketStrikeMoon" => new CardRule(2, RuleTiming.BeforeFirstInvasion),
+            "ScatterBombWater" or "ScatterBombMoon" => new CardRule(1, RuleTiming.BeforeFirstInvasion),
+            "AquaBrother" or "NickyBoy" => new CardRule(3, RuleTiming.BeforeFirstInvasion),
+            "HiddenEnergy" => new CardRule(0, RuleTiming.BeforeFirstInvasion),
+            "EnergyExtraction" => new CardRule(1, RuleTiming.BeforeFirstInvasion),
+            "InvadeSurface" => new CardRule(0, RuleTiming.BeforeFirstInvasion),
             _ => new CardRule(0, RuleTiming.NotImplemented),
         };
     }

@@ -36,13 +36,21 @@ namespace Map
             if (repo.Territories.Any(t => t.Kind != TerrainKind.Land)) return;
             ClearLines();
             var byName = repo.Territories.ToDictionary(t => t.Name);
-            var oceans = ContinentOf(repo, "oceans", 2, new Color(0.15f, 0.35f, 0.55f));
-            var moon = ContinentOf(repo, "moon", 3, new Color(0.45f, 0.45f, 0.5f));
+            // Five water colonies. The bonus numbers are not printed in the manual, so a pair is +2
+            // and the three-territory Pacific is +3, the same kind of placeholder as the moon colonies.
+            var gulfStream = ContinentOf(repo, "gulf_stream", 2, new Color(0.12f, 0.32f, 0.48f));
+            var capeWaters = ContinentOf(repo, "cape_waters", 2, new Color(0.10f, 0.28f, 0.42f));
+            var monsoonSea = ContinentOf(repo, "monsoon_sea", 2, new Color(0.12f, 0.36f, 0.40f));
+            var pacificPassage = ContinentOf(repo, "pacific_passage", 3, new Color(0.16f, 0.34f, 0.55f));
+            var highIce = ContinentOf(repo, "high_ice", 2, new Color(0.45f, 0.58f, 0.68f));
+            var ash = ContinentOf(repo, "ash_belt", 2, new Color(0.42f, 0.40f, 0.38f));
+            var bright = ContinentOf(repo, "bright_sea", 2, new Color(0.55f, 0.55f, 0.62f));
+            var scar = ContinentOf(repo, "south_scar", 3, new Color(0.48f, 0.42f, 0.40f));
 
             var seas = new Dictionary<string, Territory>();
-            Territory Sea(string name, float x, float y, params string[] coasts)
+            Territory Sea(Continent colony, string name, float x, float y, params string[] coasts)
             {
-                var t = Spawn(repo, oceans, name, new Vector3(x, y, 0f), TerrainKind.Sea, false, 0.76f);
+                var t = Spawn(repo, colony, name, new Vector3(x, y, 0f), TerrainKind.Sea, false, 0.76f);
                 foreach (var coast in coasts)
                     if (byName.TryGetValue(coast, out var land)) Link(t, land);
                 seas[name] = t;
@@ -51,61 +59,139 @@ namespace Map
 
             // Groups of 2 or 3, sitting in water that does not cover a country.
             // A coast is kept only when the line reaches that shore without entering another territory.
-            Sea("gulf", -11.15f, 3.05f, "central_america", "venezuela", "eastern_us");
-            Sea("north_atlantic", -9.35f, 3.45f, "eastern_us", "western_europe", "great_britain", "quebec");
+            Sea(gulfStream, "gulf", -11.15f, 3.05f, "central_america", "venezuela", "eastern_us");
+            Sea(gulfStream, "north_atlantic", -9.35f, 3.45f, "eastern_us", "western_europe", "great_britain", "quebec");
             Link(seas["gulf"], seas["north_atlantic"]);
 
-            Sea("south_atlantic", -8.85f, -1.9f, "argentina", "brazil");
-            Sea("cape_basin", -7.15f, -1.9f, "south_africa", "north_africa");
+            Sea(capeWaters, "south_atlantic", -8.85f, -1.9f, "argentina", "brazil");
+            Sea(capeWaters, "cape_basin", -7.15f, -1.9f, "south_africa", "north_africa");
             Link(seas["south_atlantic"], seas["cape_basin"]);
 
-            Sea("indian_ocean", -2.35f, -1f, "madagascar", "east_africa", "india");
-            Sea("monsoon_reach", -0.95f, -1f, "indonesia", "india", "western_australia");
+            Sea(monsoonSea, "indian_ocean", -2.35f, -1f, "madagascar", "east_africa", "india");
+            Sea(monsoonSea, "monsoon_reach", -0.95f, -1f, "indonesia", "india", "western_australia");
             Link(seas["indian_ocean"], seas["monsoon_reach"]);
 
-            Sea("south_pacific", 3.55f, 1.2f, "new_guinea", "eastern_australia");
-            Sea("east_passage", 3.62f, 3.2f);
-            Sea("north_pacific", 3.7f, 5.2f, "japan", "kamchatka");
+            Sea(pacificPassage, "south_pacific", 3.55f, 1.2f, "new_guinea", "eastern_australia");
+            Sea(pacificPassage, "east_passage", 3.62f, 3.2f);
+            Sea(pacificPassage, "north_pacific", 3.7f, 5.2f, "japan", "kamchatka");
             Link(seas["south_pacific"], seas["east_passage"]);
             Link(seas["east_passage"], seas["north_pacific"]);
 
-            Sea("arctic_ocean", -13.7f, 8.75f, "northwest_territory");
-            Sea("high_north", -12.25f, 8.75f, "northwest_territory", "greenland");
+            Sea(highIce, "arctic_ocean", -13.7f, 8.75f, "northwest_territory");
+            Sea(highIce, "high_north", -12.25f, 8.75f, "northwest_territory", "greenland");
             Link(seas["arctic_ocean"], seas["high_north"]);
 
-            // One row under South America, below the land so the row does not cross a country.
-            Territory Moon(string name, float x, float y, bool approach) =>
-                Spawn(repo, moon, name, new Vector3(x, y, 0f), TerrainKind.Moon, approach, 0.8f);
+            // 14 moon territories, three colonies (4, 4 and 6). They live on their own board.
+            // The picture that opens that board sits in the open water west of the Americas.
+            // Three landing sites, one in each colony, are the only places a space station can reach.
+            var off = 0;
+            Territory Moon(Continent colony, string name, bool approach)
+            {
+                var t = Spawn(repo, colony, name, new Vector3(40f + off * 1.2f, 40f, 0f), TerrainKind.Moon, approach, 0.72f);
+                off++;
+                return t;
+            }
 
-            const float moonX = -13.5f, moonY = -4.55f, moonStep = 1.22f;
-            var highlands = Moon("highlands", moonX, moonY, false);
-            var crater = Moon("crater_chain", moonX + moonStep, moonY, false);
-            var landing = Moon("landing", moonX + moonStep * 2f, moonY, true);
-            var basin = Moon("basin", moonX + moonStep * 3f, moonY, false);
-            var ridge = Moon("south_ridge", moonX + moonStep * 4f, moonY, true);
-            var ice = Moon("polar_ice", moonX + moonStep * 5f, moonY, false);
-            Caption(moon.transform, "MOON", new Vector3(moonX - 1.15f, moonY, 0f));
-            // Neighbours in the row only. A skip would draw through the disc in between.
-            Link(highlands, crater);
-            Link(crater, landing);
-            Link(landing, basin);
-            Link(basin, ridge);
-            Link(ridge, ice);
+            var pale = Moon(ash, "pale_crater", false);
+            var rain = Moon(ash, "rain_plain", false);
+            var storm = Moon(ash, "storm_ocean", false);
+            var cinder = Moon(ash, "cinder_reach", true);
+            Link(pale, rain, false);
+            Link(pale, storm, false);
+            Link(rain, storm, false);
+            Link(rain, cinder, false);
+            Link(storm, cinder, false);
+
+            var ridge = Moon(bright, "high_ridge", false);
+            var serenity = Moon(bright, "serenity_shelf", false);
+            var nectar = Moon(bright, "nectar_gulf", false);
+            var quiet = Moon(bright, "quiet_basin", true);
+            Link(ridge, serenity, false);
+            Link(serenity, nectar, false);
+            Link(serenity, quiet, false);
+            Link(nectar, quiet, false);
+            Link(ridge, quiet, false);
+
+            var dust = Moon(scar, "dust_field", false);
+            var cloud = Moon(scar, "cloud_sea", false);
+            var wall = Moon(scar, "long_wall", false);
+            var marsh = Moon(scar, "fever_marsh", false);
+            var ray = Moon(scar, "ray_crater", false);
+            var impact = Moon(scar, "impact_basin", true);
+            Link(dust, cloud, false);
+            Link(cloud, wall, false);
+            Link(wall, marsh, false);
+            Link(marsh, ray, false);
+            Link(ray, impact, false);
+            Link(impact, cloud, false);
+            Link(dust, impact, false);
+            Link(wall, impact, false);
+
+            Link(rain, serenity, false);
+            Link(cinder, quiet, false);
+            Link(quiet, impact, false);
+            Link(storm, dust, false);
 
             Approaches.Clear();
-            Approaches.Add(landing);
-            Approaches.Add(ridge);
+            Approaches.Add(cinder);
+            Approaches.Add(quiet);
+            Approaches.Add(impact);
+
+            SpawnMoonPicture();
 
             var cam = Camera.main;
             if (cam != null)
             {
+                // Close enough that the sea discs stay readable. The moon column is inside this frame.
                 cam.orthographicSize = 7.8f;
-                cam.transform.position = new Vector3(-4.8f, 2.85f, cam.transform.position.z);
+                cam.transform.position = new Vector3(-5.6f, 2.4f, cam.transform.position.z);
             }
             Debug.Log($"Frontiers: {seas.Count} seas, {Approaches.Count} moon approaches, {repo.Territories.Count} territories.");
         }
 
-        // A land space station can attack and move to the moon's near side, and back.
+        // One moon picture in the water west of the Americas. It is not a territory. Clicking it opens the moon board.
+        static void SpawnMoonPicture()
+        {
+            var go = new GameObject("Moon");
+            go.transform.position = new Vector3(-17.7f, 4.3f, 0f);
+            go.transform.localScale = Vector3.one * 1.15f;
+            var sprite = go.AddComponent<SpriteRenderer>();
+            sprite.sprite = MoonDisc();
+            sprite.color = Color.white;
+            sprite.sortingOrder = 3;
+            var body = go.AddComponent<CircleCollider2D>();
+            body.radius = 0.48f;
+            go.AddComponent<MoonGate>();
+            Caption(go.transform, "MOON", new Vector3(-17.7f, 3.45f, 0f));
+            var word = go.transform.Find("MOON");
+            if (word != null) word.localScale = Vector3.one / go.transform.localScale.x;
+        }
+
+        static Sprite _moonDisc;
+        static Sprite MoonDisc()
+        {
+            if (_moonDisc != null) return _moonDisc;
+            const int n = 64;
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, false);
+            var c = n / 2f;
+            var craters = new[] { new Vector2(0.35f, 0.62f), new Vector2(0.62f, 0.4f), new Vector2(0.48f, 0.28f) };
+            for (var y = 0; y < n; y++)
+                for (var x = 0; x < n; x++)
+                {
+                    var p = new Vector2(x / (n - 1f), y / (n - 1f));
+                    var d = Vector2.Distance(new Vector2(x, y), new Vector2(c, c)) / c;
+                    if (d > 0.92f) { tex.SetPixel(x, y, new Color(1, 1, 1, 0)); continue; }
+                    var shade = 0.78f;
+                    foreach (var crater in craters)
+                        if (Vector2.Distance(p, crater) < 0.12f) shade = 0.55f;
+                    tex.SetPixel(x, y, new Color(shade, shade, shade * 1.02f, 1f));
+                }
+            tex.Apply();
+            _moonDisc = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(0.5f, 0.5f), n);
+            return _moonDisc;
+        }
+
+        // A land space station can attack the three landing sites, and fortify back. The line is not drawn.
         public static void NoteStation(Territory land, bool present)
         {
             if (land == null || land.Kind != TerrainKind.Land) return;
@@ -142,11 +228,23 @@ namespace Map
             var sprite = go.AddComponent<SpriteRenderer>();
             sprite.sprite = Disc();
             sprite.color = kind == TerrainKind.Sea
-                ? new Color(0.22f, 0.42f, 0.62f, 1f)
+                ? new Color(0.45f, 0.72f, 0.9f, 1f)
                 : new Color(0.55f, 0.55f, 0.58f, 1f);
-            sprite.sortingOrder = kind == TerrainKind.Sea ? -2 : 1;
+            sprite.sortingOrder = 2;
+            if (kind == TerrainKind.Sea)
+            {
+                var ring = new GameObject("Border");
+                ring.transform.SetParent(go.transform, false);
+                ring.transform.localScale = Vector3.one * 1.28f;
+                var edge = ring.AddComponent<SpriteRenderer>();
+                edge.sprite = Disc();
+                edge.color = new Color(0.02f, 0.07f, 0.14f, 1f);
+                edge.sortingOrder = 1;
+            }
+            if (kind == TerrainKind.Moon) sprite.enabled = false;
 
             var body = go.AddComponent<CircleCollider2D>();
+            if (kind == TerrainKind.Moon) body.enabled = false;
             body.radius = 0.45f;
 
             var territory = go.AddComponent<Territory>();
@@ -358,6 +456,7 @@ namespace Map
         Territory _territory;
         SpriteRenderer _sprite;
         TMP_Text _count;
+        TMP_Text _name;
         Color _base;
 
         public void Bind(Territory territory, SpriteRenderer sprite)
@@ -366,11 +465,15 @@ namespace Map
             _sprite = sprite;
             _base = sprite.color;
             var font = Object.FindObjectsByType<TMP_Text>(FindObjectsInactive.Include).FirstOrDefault()?.font;
-            _count = MakeText("Count", font, 4.2f, new Vector3(0f, -0.02f, 0f));
-            var name = MakeText("Name", font, 1.65f, new Vector3(0f, 0.22f, 0f));
-            name.text = territory.Name.Replace('_', ' ');
-            name.enableWordWrapping = true;
-            name.rectTransform.sizeDelta = new Vector2(1.05f, 0.62f);
+            _count = MakeText("Count", font, 4.6f, new Vector3(0f, -0.02f, 0f));
+            _name = MakeText("Name", font, 2.8f, Vector3.zero);
+            _name.text = territory.Name.Replace('_', ' ');
+            _name.enableWordWrapping = false;
+            _name.overflowMode = TextOverflowModes.Overflow;
+            _name.fontStyle = FontStyles.Bold;
+            _name.outlineWidth = 0.28f;
+            _name.rectTransform.sizeDelta = new Vector2(6.2f, 0.85f);
+            PlaceName();
             territory.OnTroopsChanged += (_, _) => Refresh();
             territory.OnOwnerChanged += (_, _) => Refresh();
             Refresh();
@@ -393,11 +496,60 @@ namespace Map
             return text;
         }
 
+        void LateUpdate() => PlaceName();
+
+        // Sit the name in the open water, away from land and from the neighbouring disc, so it does not cover a country.
+        void PlaceName()
+        {
+            if (_name == null) return;
+            var scale = Mathf.Max(0.2f, transform.localScale.x);
+            var away = Vector3.zero;
+            foreach (var n in _territory.NeighbourTerritories)
+            {
+                if (n == null) continue;
+                var d = transform.position - n.transform.position;
+                if (d.sqrMagnitude < 0.01f) continue;
+                away += d.normalized * (n.Kind == TerrainKind.Land ? 1.6f : 0.45f);
+            }
+            if (away.sqrMagnitude < 0.04f)
+                away = transform.position.x >= 0f ? Vector3.right : Vector3.left;
+            away = away.normalized * 1.65f;
+            _name.transform.localScale = Vector3.one / scale;
+            _name.transform.localPosition = new Vector3(away.x / scale, away.y / scale, 0f);
+        }
+
         void Refresh()
         {
             if (_count != null) _count.text = _territory.Troops > 0 ? _territory.Troops.ToString() : "";
             var owner = _territory.Owner;
             _sprite.color = owner != null && owner.Color != null ? owner.Color.Normal : _base;
+        }
+    }
+
+    // The Pacific moon picture. Clicking it opens or closes the moon board.
+    public class MoonGate : MonoBehaviour
+    {
+        SpriteRenderer _sprite;
+        bool _lit;
+
+        void Awake()
+        {
+            _sprite = GetComponent<SpriteRenderer>();
+        }
+
+        void OnMouseDown()
+        {
+            if (UnityEngine.EventSystems.EventSystem.current != null
+                && UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
+                return;
+            UI.MoonBoard.Instance?.Toggle();
+        }
+
+        public void SetLit(bool lit)
+        {
+            if (_sprite == null || _lit == lit) return;
+            _lit = lit;
+            _sprite.color = lit ? new Color(1f, 0.86f, 0.45f) : Color.white;
         }
     }
 }

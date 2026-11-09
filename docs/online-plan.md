@@ -137,3 +137,21 @@ For now one player's device is the host (`OnlineMatch`); a Cloud Code server is 
     same entry. If the host had to deal a player's cards again, that player's hand changes; this is rare.
 - Still public: Scout Forces' chosen territory (picked with the recorded dice, so every device knows it). A device's
   memory still holds the face-down count and the deck of each card.
+
+## Save / resume (Nov 7)
+
+**SAVE-1, local.** Single player and pass-and-play write `Application.persistentDataPath/saves/local.json`:
+seed, match options, seats (name / color / config), and every top-level accepted action. Nested bot bids
+and defender AI answers are not stored; they replay from the seed. The Play page shows Continue. Game over
+deletes the file. Tests and a scene loaded without the menu do not write a save.
+
+**OL-6, correspondence (started Nov 7).** PlayFab, not a live UGS room.
+- Shared Group Data: public meta + private gzipped `MatchSave.File` (chunked). Groups: join by code.
+- Host lobby admits applicants. Start writes seats (name|color|config|PlayFabId) and seed.
+- Each device downloads, replays, `ReactionTimeoutSeconds = 0`. The player to move uploads.
+- Inbox: Groups membership + private user data `ie.matches`.
+- Account: display name, optional username/email/password (`AddUsernamePassword` / `LoginWithPlayFab`).
+- Live rooms (UGS lockstep) stay on Multiplayer → Play live.
+- "Your turn" today: open the game, Your games list. No Firebase.
+- Lock-screen push is optional later. Android would use FCM (free message quota). iOS uses APNs (Apple, free). Windows/Steam would not use FCM. Do not add Firebase Auth/Firestore or a paid plan.
+- Still later: Cloud Code as the only writer (CAS).

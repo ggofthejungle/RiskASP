@@ -97,7 +97,7 @@ public class MainMenuTests
         Assert.AreEqual("You", _config.PlayersConfiguration[0].PlayerName);
         Assert.AreEqual("Human", _config.PlayersConfiguration[0].PlayerConfiguration.Name);
         Assert.AreEqual("Bot", _config.PlayersConfiguration[1].PlayerName);
-        Assert.AreEqual("Dumb BOT", _config.PlayersConfiguration[1].PlayerConfiguration.Name);
+        Assert.AreEqual(UIPlayerCreationManager.StandardBotName, _config.PlayersConfiguration[1].PlayerConfiguration.Name);
 
         Click("Back");
         Assert.IsFalse(MainMenu.Instance.LobbyOpen);
@@ -123,6 +123,8 @@ public class MainMenuTests
     {
         Click("Play");
         Click("Multiplayer");
+        Assert.IsNotNull(GameObject.Find("Play at your own pace"));
+        Click("Play live");
         Assert.IsNotNull(GameObject.Find("Host private room"));
         Assert.IsNotNull(GameObject.Find("Join code"));
         Click("Host private room");

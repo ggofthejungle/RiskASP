@@ -238,10 +238,10 @@ namespace Expansions
 
         public void Reinforcements(Territory a, Territory b, Territory c)
         {
-            // Before First Invasion: place 3 MODs, one each on 3 different land territories you occupy.
-            a.AddTroops(1);
-            b.AddTroops(1);
-            c.AddTroops(1);
+            // One unit on each chosen territory. A player who holds fewer than 3 passes only those.
+            if (a != null) a.AddTroops(1);
+            if (b != null) b.AddTroops(1);
+            if (c != null) c.AddTroops(1);
         }
 
         public void ScoutForces()
@@ -348,12 +348,12 @@ namespace Expansions
 
         public void NickyBoy() => StrikeZones(new[]
         {
-            new[] { "highlands" },
-            new[] { "crater_chain" },
-            new[] { "landing" },
-            new[] { "basin" },
-            new[] { "south_ridge" },
-            new[] { "polar_ice" },
+            new[] { "pale_crater", "rain_plain" },
+            new[] { "storm_ocean", "cinder_reach" },
+            new[] { "high_ridge", "serenity_shelf" },
+            new[] { "nectar_gulf", "quiet_basin" },
+            new[] { "dust_field", "cloud_sea", "impact_basin" },
+            new[] { "long_wall", "fever_marsh", "ray_crater" },
         });
 
         // A d6 picks one of our own sea or moon groups. Each territory there loses 1 unit and keeps at least 1.

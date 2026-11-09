@@ -34,8 +34,20 @@ namespace UI
 
         private void Awake()
         {
+            Grow(_nameText, 26f);
+            Grow(_troopsText, 22f);
+            Grow(_territoriesText, 22f);
+            Grow(_cardsText, 22f);
+            Grow(_energyText, 22f);
             if (_player != null)
                 SetPlayer(_player);
+        }
+
+        static void Grow(TMP_Text text, float size)
+        {
+            if (text == null) return;
+            text.enableAutoSizing = false;
+            if (text.fontSize < size) text.fontSize = size;
         }
 
         private void SetPlayer(Player value)
@@ -81,11 +93,21 @@ namespace UI
                 _colorImage.color = _player.Color.Disabled;
         }
 
+        // Cards, hires and energy change units and energy outside the events above.
+        private (int troops, int territories, int energy, int cards) _shown = (-1, -1, -1, -1);
+        private void LateUpdate()
+        {
+            if (_player == null) return;
+            var now = (_player.GetTroopsCountInTerritories(), _player.GetTerritoryCount(), _player.GetEnergy(), _player.Cards.Count);
+            if (now != _shown) UpdatePlayerData();
+        }
+
         private void UpdatePlayerData()
         {
-            _troopsText.text = _player.GetTroopsCountInTerritories().ToString();
-            _territoriesText.text = _player.GetTerritoryCount().ToString();
-            _energyText.text = _player.GetEnergy().ToString();
+            _shown = (_player.GetTroopsCountInTerritories(), _player.GetTerritoryCount(), _player.GetEnergy(), _player.Cards.Count);
+            _troopsText.text = _shown.troops.ToString();
+            _territoriesText.text = _shown.territories.ToString();
+            _energyText.text = _shown.energy.ToString();
             UpdateCardsData();
         }
 

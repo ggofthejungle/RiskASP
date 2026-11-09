@@ -9,7 +9,7 @@ namespace InvadeEarth.Rules
     {
         public static int TroopsForPlayerCount(int players) => players switch
         {
-            2 => 40,
+            2 => 30,
             3 => 35,
             4 => 30,
             5 => 25,

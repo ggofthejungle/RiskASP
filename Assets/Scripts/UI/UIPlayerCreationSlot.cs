@@ -52,6 +52,7 @@ namespace UI
 
         private void GenerateDropdownItems()
         {
+            _uiPlayerCreationManager.AddStandardBot();
             var playerConfigurations = _uiPlayerCreationManager.PlayerConfigurations;
             var playerColors = _uiPlayerCreationManager.PlayerColors;
             

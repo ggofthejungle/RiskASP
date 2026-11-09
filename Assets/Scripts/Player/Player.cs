@@ -49,6 +49,9 @@ namespace player
             // OnCardsChanged += () => BestCardExchangeCombinations = CardRepository.Instance.GetBestExchanges(this);
         }
 
+        // The 2-player neutral army. It defends and never takes a turn.
+        public bool Neutral { get; set; }
+
         public bool IsHuman() => GetComponent<HumanPlayer>() != null;
         public bool IsBot() => GetComponent<BotPlayer>() != null;
 
@@ -78,7 +81,7 @@ namespace player
         {
             _name = newName;
             gameObject.name = $"Player {newName}";
-            if (IsBot())
+            if (IsBot() && !newName.Contains("Bot"))
             {
                 _name += " (Bot)";
                 gameObject.name += " (Bot)";

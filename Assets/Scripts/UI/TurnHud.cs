@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using Map;
 using player;
 using TMPro;
@@ -51,11 +52,22 @@ namespace UI
         private const float SplashDuration = 1.8f;
         private int _lastSplashYear;
 
+        // Draft "your turn / Bot claimed X" sits in the open water west of South America.
+        private Canvas _canvas;
+        private CanvasGroup _side;
+        private RectTransform _sideCard;
+        private Image _sideFill;
+        private TMP_Text _sideTitle;
+        private TMP_Text _sideSub;
+        private float _sideTime = -1f;
+        private const float SideDuration = 2.6f;
+
         // For tests / other UI.
         public string TitleText => _title != null ? _title.text : "";
         public string InstructionText => _instruction != null ? _instruction.text : "";
-        public string SplashTitleText => _splashTitle != null ? _splashTitle.text : "";
-        public bool IsSplashVisible => _splashTime >= 0f;
+        public string SplashTitleText => _sideTime >= 0f && _sideTitle != null ? _sideTitle.text
+            : _splashTitle != null ? _splashTitle.text : "";
+        public bool IsSplashVisible => _sideTime >= 0f || _splashTime >= 0f;
 
         public static TurnHud Create(GameManager gm, Canvas canvas)
         {
@@ -64,6 +76,7 @@ namespace UI
             Stretch((RectTransform)go.transform);
             var hud = go.AddComponent<TurnHud>();
             hud._gm = gm;
+            hud._canvas = canvas;
             hud.Build();
             gm.OnPlayerTurnChanged += hud.OnPlayerTurnChanged; // now, so the first year's splash isn't missed
             gm.OnCommanderKilled += hud.OnCommanderKilled;
@@ -74,7 +87,12 @@ namespace UI
         private void Start()
         {
             _sm = SelectionManager.Instance;
-            if (_gm.CommandCards != null) _gm.CommandCards.OnConquestBonus += OnConquestBonus;
+            if (_gm.CommandCards != null)
+            {
+                _gm.CommandCards.OnConquestBonus += OnConquestBonus;
+                _gm.CommandCards.OnCardReport += OnCardReport;
+                _gm.CommandCards.OnNotice += ToastNotice;
+            }
             Refresh();
         }
 
@@ -84,15 +102,20 @@ namespace UI
             {
                 _gm.OnPlayerTurnChanged -= OnPlayerTurnChanged;
                 _gm.OnCommanderKilled -= OnCommanderKilled;
-                if (_gm.CommandCards != null) _gm.CommandCards.OnConquestBonus -= OnConquestBonus;
+                if (_gm.CommandCards != null)
+                {
+                    _gm.CommandCards.OnConquestBonus -= OnConquestBonus;
+                    _gm.CommandCards.OnCardReport -= OnCardReport;
+                    _gm.CommandCards.OnNotice -= ToastNotice;
+                }
             }
         }
 
         private void OnConquestBonus(Player p, Cards.Card card)
         {
             var reward = card == null ? "" : _gm.IsLocal(p) ? $" and <b>{card.Name}</b>" : " and a command card";
-            Flash($"{p.Name} conquered {InvadeEarth.Rules.IncomeRules.ConquestBonusTerritories} territories this turn: " +
-                  $"+{InvadeEarth.Rules.IncomeRules.ConquestBonusEnergy} energy{reward}.");
+            Toast($"{p.Name} conquered {InvadeEarth.Rules.IncomeRules.ConquestBonusTerritories} territories this turn: " +
+                  $"+{InvadeEarth.Rules.IncomeRules.ConquestBonusEnergy} energy{reward}.", 8f);
         }
 
         // ---------------- Commander killed: red toast ----------------
@@ -118,12 +141,74 @@ namespace UI
                        (deck != null ? $"\n<size=80%>No {deck} cards can be bought or played until you hire a new one.</size>" : "");
             else
                 line = $"{owner?.Name}'s {name} was killed in {Nice(where?.Name)} ({how}).";
+            Toast(line);
+        }
+
+        private void ToastNotice(string line) => Toast(line, 8f);
+
+        private void Toast(string line, float seconds = 6f)
+        {
             LastToast = line;
             _toastLines.Add(line);
-            if (_toastLines.Count > 3) _toastLines.RemoveAt(0);
+            if (_toastLines.Count > 4) _toastLines.RemoveAt(0);
             _toastText.text = string.Join("\n", _toastLines);
+            _toast.rectTransform.sizeDelta = new Vector2(360f, Mathf.Clamp(28f + _toastLines.Count * 48f, 80f, 280f));
             _toast.gameObject.SetActive(true);
-            _toastUntil = Time.unscaledTime + 6f;
+            _toastUntil = Mathf.Max(_toastUntil, Time.unscaledTime + seconds);
+            RestackOcean();
+        }
+
+        private void OnCardReport(Cards.CardPlayReport r)
+        {
+            // MOD Reduction and Armageddon ask everyone; the prompts and the follow-up cards say what happens.
+            if (r.Card.CardType == Cards.CardType.Armageddon) r.Changes.Clear();
+            Toast(DescribePlay(r, _gm.IsLocal(r.Player)), 8f);
+        }
+
+        public static string DescribePlay(Cards.CardPlayReport r, bool mine)
+        {
+            var who = mine ? "You" : r.Player?.Name;
+            var targets = r.Targets ?? System.Array.Empty<object>();
+            var on = r.Card.CardType switch
+            {
+                Cards.CardType.DecoyRevealed => "",
+                Cards.CardType.ReinforcementsL => " on " + string.Join(", ", targets.OfType<Map.Territory>().Select(t => Nice(t.Name))),
+                _ => targets.FirstOrDefault() switch
+                {
+                    Map.Territory t => $" on {Nice(t.Name)}",
+                    Player p => $" on {p.Name}",
+                    _ => "",
+                },
+            };
+            var what = !string.IsNullOrEmpty(r.Note) ? r.Note : r.Card.CardType switch
+            {
+                Cards.CardType.AssassinBomb => r.Roll >= 3 ? $"rolled {r.Roll}: hit" : $"rolled {r.Roll}: missed",
+                Cards.CardType.RocketStrikeLand or Cards.CardType.RocketStrikeWater or Cards.CardType.RocketStrikeMoon => $"rolled {r.Roll}",
+                Cards.CardType.TheMother => $"rolled {r.Roll}: {Nice(r.Continent)} loses 1 unit everywhere",
+                Cards.CardType.AquaBrother or Cards.CardType.NickyBoy => $"rolled {r.Roll}: 1 unit off " + string.Join(", ", (r.Drawn ?? new List<Map.Territory>()).Select(t => Nice(t.Name))),
+                Cards.CardType.ScatterBombLand or Cards.CardType.ScatterBombWater or Cards.CardType.ScatterBombMoon => "drew " + string.Join(", ", (r.Drawn ?? new List<Map.Territory>()).Select(t => Nice(t.Name))),
+                Cards.CardType.FrequencyJamL => "no command cards from them this turn",
+                Cards.CardType.EnergyCrisis => "1 energy from each opponent",
+                Cards.CardType.ScoutForces => "a secret territory: 5 MODs when it's taken",
+                Cards.CardType.Redeployment => "one extra move this turn",
+                Cards.CardType.DecoyRevealed => $"moved {targets.Length / 3} commander{(targets.Length / 3 == 1 ? "" : "s")}",
+                Cards.CardType.CeaseFire => "the invasion is called off",
+                Cards.CardType.StealthStation => "a space station: its defenders roll 8-sided dice",
+                Cards.CardType.StealthModsL or Cards.CardType.StealthModsNa or Cards.CardType.StealthModsS => "3 more defenders",
+                Cards.CardType.Evacuation => "everyone moved out, the attacker takes it",
+                Cards.CardType.ModReduction => "everyone removes MODs",
+                Cards.CardType.Armageddon => "everyone may fire nuclear cards for free",
+                _ => "",
+            };
+            var changes = r.Card.CardType == Cards.CardType.TheMother && r.Changes.Count > 3
+                ? ""
+                : string.Join(", ", r.Changes.Select(c => $"{Nice(c.Territory.Name)} {c.Before} to {c.After}"));
+            if (changes.Length == 0 && r.Card.CardType is Cards.CardType.RocketStrikeLand or Cards.CardType.RocketStrikeWater
+                    or Cards.CardType.RocketStrikeMoon or Cards.CardType.ScatterBombLand or Cards.CardType.ScatterBombWater
+                    or Cards.CardType.ScatterBombMoon)
+                changes = "nothing destroyed";
+            var detail = string.Join("; ", new[] { what, changes }.Where(s => s.Length > 0));
+            return $"{who} played <b>{r.Card.Name}</b>{on}" + (detail.Length > 0 ? $": {detail}." : ".");
         }
 
         private void AnimateToast()
@@ -138,7 +223,19 @@ namespace UI
         {
             Refresh();
             AnimateSplash();
+            AnimateSideNote();
             AnimateToast();
+            RestackOcean();
+        }
+
+        // How tall a CommandHud card sitting in the same water is, so the turn note stacks above it.
+        public float OceanStack { get; set; }
+
+        // "You" is the person holding the device, so the banner says YOU PLACE. Anyone else is "Bot places".
+        static string PlaceTitle(player.Player p)
+        {
+            var name = p.Name.ToUpperInvariant();
+            return name == "YOU" ? "YOU PLACE" : $"{name} PLACES";
         }
 
         // ---------------- Banner ----------------
@@ -154,7 +251,7 @@ namespace UI
             _colorBar.color = color;
             SetText(_title, _gm.GameState == GameState.Over ? "GAME OVER"
                 : _gm.IsChoosingOrder && p != null ? $"{p.Name.ToUpperInvariant()} CHOOSES"
-                : _gm.IsPlacingStartingUnits && p != null ? $"{p.Name.ToUpperInvariant()} PLACES"
+                : _gm.IsPlacingStartingUnits && p != null ? PlaceTitle(p)
                 : TurnTitle(p));
             SetText(_sub, $"Year {_gm.Year}/{GameManager.MaxYears}  ·  Turn {Mathf.Max(_gm.Turn, 1)}");
 
@@ -188,6 +285,24 @@ namespace UI
             RefreshInstructionIcon();
             RefreshOrderPicker(color);
             RefreshBidPicker(color);
+            RefreshAutoPlace();
+        }
+
+        private GameObject _autoPlace;
+
+        private void RefreshAutoPlace()
+        {
+            if (_autoPlace == null) return;
+            var d = _gm.PendingDecision;
+            var show = _gm.IsDrafting && !_gm.AutoDraft && d != null && _gm.IsLocal(_gm.InputPlayer)
+                && d.Kind is Decisions.DecisionKind.ClaimTerritory or Decisions.DecisionKind.PlaceStartingTroops;
+            _autoPlace.SetActive(show);
+            if (!show) return;
+            var label = _autoPlace.GetComponentInChildren<TMP_Text>();
+            if (label != null)
+                label.text = d.Kind == Decisions.DecisionKind.ClaimTerritory
+                    ? "Pick territories for me"
+                    : "Place armies for me";
         }
 
         private void RefreshInstructionIcon()
@@ -212,12 +327,12 @@ namespace UI
             _instructionBadge.gameObject.SetActive(show);
             if (!show)
             {
-                Place(_instruction.rectTransform, new Vector2(0, 0), new Vector2(1, 1), new Vector2(28, 8), new Vector2(-12, -106));
+                Place(_instruction.rectTransform, new Vector2(0, 0), new Vector2(1, 1), new Vector2(22, 14), new Vector2(-16, -128));
                 return;
             }
             _instructionBadge.color = fill;
             _instructionGlyph.sprite = icon;
-            Place(_instruction.rectTransform, new Vector2(0, 0), new Vector2(1, 1), new Vector2(66, 8), new Vector2(-12, -106));
+            Place(_instruction.rectTransform, new Vector2(0, 0), new Vector2(1, 1), new Vector2(64, 14), new Vector2(-16, -128));
         }
 
         // Buttons 0..energy while a human bids for turn order.
@@ -279,6 +394,9 @@ namespace UI
                 label.color = ReadableOn(color);
                 label.text = $"Play {GameManager.Ordinal(pos)}";
                 Stretch(label.rectTransform);
+                var le = img.gameObject.AddComponent<LayoutElement>();
+                le.preferredWidth = 128f;
+                le.minWidth = 96f;
             }
         }
 
@@ -325,16 +443,17 @@ namespace UI
                     : $"Waiting for <b>{_gm.InputPlayer?.Name}</b> to claim a territory…";
             if (_gm.IsDrafting && _gm.PendingDecision is { Kind: Decisions.DecisionKind.PlaceStartingTroops })
                 return _gm.IsLocal(_gm.InputPlayer)
-                    ? $"<b>{_gm.InputPlayer.Name}</b>, click your territories to place MODs: <b>{_gm.DraftBatchLeft}</b> more now " +
-                      $"({_gm.DraftUnitsLeft(_gm.InputPlayer)} left in your army)."
+                    ? $"<b>{_gm.InputPlayer.Name}</b>, place <b>{_gm.DraftBatchLeft}</b> MOD{( _gm.DraftBatchLeft == 1 ? "" : "s")} now. " +
+                      $"<b>{_gm.DraftUnitsLeft(_gm.InputPlayer)}</b> left of your starting army " +
+                      $"(the 1 on each territory you claimed already counts)."
                     : $"Waiting for <b>{_gm.InputPlayer?.Name}</b> to place MODs…";
 
             if (_gm.IsBidding)
-                return $"<b>{p.Name}</b>: tap a bid from <b>0</b> to <b>{p.GetEnergy()}</b> energy. " +
-                       "Highest bid chooses turn order first this year.";
+                return $"<b>{p.Name}</b>: tap a secret bid from <b>0</b> to <b>{p.GetEnergy()}</b> energy. " +
+                       "Everyone bids before the amounts are shown. A tie rolls a die.";
 
             if (_gm.IsChoosingOrder)
-                return $"<b>{p.Name}</b>, you bid highest: choose when you play this year " +
+                return $"<b>{p.Name}</b>, choose when you play this year " +
                        $"({string.Join(", ", _gm.AvailableTurnPositions.ConvertAll(GameManager.Ordinal))}).";
 
             if (_gm.PendingDecision is { Kind: Decisions.DecisionKind.RemoveUnits })
@@ -357,6 +476,10 @@ namespace UI
                     return _gm.IsLocal(_gm.InputPlayer)
                         ? $"<b>{_gm.InputPlayer.Name}</b>, Armageddon: click the target for <b>{_gm.PendingDecision.Subject}</b>.{clock}"
                         : $"Waiting for <b>{_gm.InputPlayer?.Name}</b> to aim {_gm.PendingDecision.Subject} (Armageddon)…{clock}";
+                if (_gm.PendingDecision.Kind == Decisions.DecisionKind.DefenseDice)
+                    return _gm.IsLocal(_gm.InputPlayer)
+                        ? $"<b>{_gm.InputPlayer.Name}</b>, choose <b>1</b> or <b>2</b> defense dice.{clock}"
+                        : $"Waiting for <b>{_gm.InputPlayer?.Name}</b> to choose defense dice…{clock}";
                 if (_gm.PendingDecision.Kind == Decisions.DecisionKind.ArmageddonCard)
                     return $"<b>ARMAGEDDON</b>: waiting for <b>{_gm.InputPlayer?.Name}</b> to play nuclear cards for free…{clock}";
                 return $"Waiting for <b>{_gm.InputPlayer?.Name}</b> to respond to the attack…{clock}";
@@ -369,8 +492,10 @@ namespace UI
             {
                 case ReinforcePhase rp:
                     return rp.RemainingTroopsToPlace > 0
-                        ? $"Click your territories to place troops (1 per click). <b>{rp.RemainingTroopsToPlace}</b> left. Buy cards / hire below."
-                        : "All troops placed. Press <b>Skip phase</b> to start attacking.";
+                        ? $"Click your territories to place troops (1 per click). <b>{rp.RemainingTroopsToPlace}</b> left. Hire and buy below, then press <b>Done hiring</b>."
+                        : _gm.ShopClosed
+                            ? "Hiring is finished. Play cards, then press <b>Skip phase</b> to attack."
+                            : "All troops placed. Hire and buy, then press <b>Done hiring</b> before you play cards.";
 
                 case AttackPhase ap:
                 {
@@ -384,12 +509,17 @@ namespace UI
                                $"all spare troops, or <b>{Nice(last.Origin.Name)}</b> to move the minimum.";
                     }
                     if (from == null)
+                    {
+                        var raid = _gm.CommandCards == null ? ""
+                            : string.Join(", ", _gm.CommandCards.SurfaceLands(p).Select(t => "<b>" + Nice(t.Name) + "</b>"));
+                        var extra = raid.Length > 0 ? $" Invade Surface: attack {raid} from the Moon." : "";
                         return "Click one of your territories (2+ troops) to attack <b>from</b>. " +
-                               "Press <b>Skip phase</b> when you're done attacking.";
+                               "Press <b>Skip phase</b> when you're done attacking." + extra;
+                    }
                     if (to == null)
                     {
-                        var (d8, _) = BattleSimulator.AttackDice(from, Mathf.Min(3, from.GetAvailableTroops()));
                         var aim = _gm.SelectionArrow != null ? _gm.SelectionArrow.ShownTo : null;
+                        var (d8, _) = BattleSimulator.AttackDice(from, Mathf.Min(3, from.GetAvailableTroops()), aim);
                         var defD8 = aim != null ? BattleSimulator.DefenseDice(aim, Mathf.Min(BattleSimulator.MaxDefenseDice, aim.Troops)).d8 : 0;
                         var dice = (d8 > 0 ? $" Your commander{(d8 > 1 ? "s" : "")} here: <b>{d8} × d8</b>." : "")
                                    + (defD8 > 0 ? $" {Nice(aim.Name)} defends with <b>{defD8} × d8</b>." : "");
@@ -430,6 +560,12 @@ namespace UI
 
             if (newPlayer.IsBot() || _gm.IsChoosingOrder || _gm.IsPlacingStartingUnits) return;
 
+            if (!string.IsNullOrEmpty(_gm.DraftHandOff))
+            {
+                ShowSideNote(TurnTitle(newPlayer), _gm.DraftHandOff, PlayerColor(newPlayer));
+                return;
+            }
+
             var handOff = oldPlayer != null && !oldPlayer.IsBot() && oldPlayer != newPlayer
                 ? $"Pass the device to {newPlayer.Name}"
                 : $"Year {_gm.Year}";
@@ -437,17 +573,94 @@ namespace UI
                 PlayerColor(newPlayer));
         }
 
-        private void ShowSplash(string title, string sub, Color color)
+        // A small card, not the full-width band. It sits in the Pacific, left of South America.
+        private void ShowSideNote(string title, string sub, Color color)
         {
-            _splashBand.color = PopupBorder;
-            var fill = _splashBand.transform.Find("Fill")?.GetComponent<Image>();
-            if (fill != null) fill.color = new Color(color.r, color.g, color.b, 0.92f);
-            _splashTitle.color = ReadableOn(color);
-            _splashSub.color = ReadableOn(color);
-            _splashTitle.text = title;
-            _splashSub.text = sub;
-            _splashTime = 0f;
-            _splash.gameObject.SetActive(true);
+            _sideCard.GetComponent<Image>().color = PopupBorder;
+            if (_sideFill != null) _sideFill.color = new Color(color.r, color.g, color.b, 0.94f);
+            _sideTitle.color = ReadableOn(color);
+            _sideSub.color = ReadableOn(color);
+            _sideTitle.text = title;
+            _sideSub.text = sub;
+            _sideTime = 0f;
+            _side.gameObject.SetActive(true);
+            RestackOcean();
+        }
+
+        private void ShowSplash(string title, string sub, Color color) => ShowSideNote(title, sub, color);
+
+        // Turn notices, bids, and the defender question share the open water west of South America.
+        private void RestackOcean()
+        {
+            var block = OceanStack;
+            if (_bidPicker != null && _bidPicker.gameObject.activeSelf)
+            {
+                ParkBySouthAmerica(_bidPicker, 0f);
+                block = Mathf.Max(block, _bidPicker.sizeDelta.y);
+            }
+            if (_orderPicker != null && _orderPicker.gameObject.activeSelf)
+            {
+                ParkBySouthAmerica(_orderPicker, 0f);
+                block = Mathf.Max(block, _orderPicker.sizeDelta.y);
+            }
+            var noteLift = 0f;
+            if (block > 0f && _sideCard != null)
+                noteLift = block * 0.5f + _sideCard.sizeDelta.y * 0.5f + 10f;
+            PlaceInOcean(_sideCard, noteLift);
+            if (_toast != null && _toast.gameObject.activeSelf)
+            {
+                var toastLift = noteLift + (_sideTime >= 0f
+                    ? _sideCard.sizeDelta.y * 0.5f + _toast.rectTransform.sizeDelta.y * 0.5f + 8f
+                    : 0f);
+                PlaceInOcean(_toast.rectTransform, toastLift);
+            }
+        }
+
+        private void PlaceInOcean(RectTransform card, float lift) => ParkBySouthAmerica(card, lift);
+
+        // A card in the Pacific, left of South America. lift is pixels above that spot.
+        public static void ParkBySouthAmerica(RectTransform card, float lift = 0f)
+        {
+            if (card == null) return;
+            var world = new Vector3(-15.2f, -1.7f, 0f);
+            var peru = TerritoryRepository.Instance != null ? TerritoryRepository.Instance.FromName("peru") : null;
+            if (peru != null)
+                world = peru.transform.position + new Vector3(-3.6f, 0.15f, 0f);
+            var parent = card.parent as RectTransform;
+            if (parent == null) return;
+            var cam = Camera.main;
+            var canvas = card.GetComponentInParent<Canvas>();
+            card.anchorMin = card.anchorMax = new Vector2(0.5f, 0.5f);
+            card.pivot = new Vector2(0.5f, 0.5f);
+            if (cam == null)
+            {
+                card.anchoredPosition = new Vector2(-parent.rect.width * 0.38f, -parent.rect.height * 0.18f + lift);
+                return;
+            }
+            var screen = cam.WorldToScreenPoint(world);
+            var eventCam = canvas != null && canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas != null ? canvas.worldCamera : null;
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, screen, eventCam, out var local))
+                return;
+            local.y += lift;
+            var half = parent.rect.size * 0.5f;
+            var size = card.sizeDelta;
+            local.x = Mathf.Clamp(local.x, -half.x + size.x * 0.5f + 12f, half.x - size.x * 0.5f - 12f);
+            local.y = Mathf.Clamp(local.y, -half.y + size.y * 0.5f + 12f, half.y - size.y * 0.5f - 12f);
+            card.anchoredPosition = local;
+        }
+
+        private void AnimateSideNote()
+        {
+            if (_sideTime < 0f) return;
+            _sideTime += Time.unscaledDeltaTime;
+            var t = _sideTime;
+            _side.alpha = t < 0.15f ? t / 0.15f : t > SideDuration - 0.35f ? Mathf.Clamp01((SideDuration - t) / 0.35f) : 1f;
+            if (t >= SideDuration)
+            {
+                _sideTime = -1f;
+                _side.gameObject.SetActive(false);
+                RestackOcean();
+            }
         }
 
         private void AnimateSplash()
@@ -470,7 +683,7 @@ namespace UI
             // Banner panel in the empty top-right area, above the player panels.
             var panel = NewImage("TurnBanner", transform, PanelColor);
             var prt = panel.rectTransform;
-            prt.anchorMin = new Vector2(0.725f, 0.805f);
+            prt.anchorMin = new Vector2(0.68f, 0.70f);
             prt.anchorMax = new Vector2(0.995f, 0.99f);
             prt.offsetMin = prt.offsetMax = Vector2.zero;
             panel.raycastTarget = false;
@@ -481,16 +694,16 @@ namespace UI
             _colorBar = NewImage("PlayerColor", prt, Color.white);
             Place(_colorBar.rectTransform, new Vector2(0, 0), new Vector2(0, 1), new Vector2(0, 0), new Vector2(14, 0));
 
-            _title = NewText("Title", prt, 34, FontStyles.Bold, TextAlignmentOptions.Left);
-            Place(_title.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(28, -54), new Vector2(-150, -6));
+            _title = NewText("Title", prt, 40, FontStyles.Bold, TextAlignmentOptions.Left);
+            Place(_title.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(28, -62), new Vector2(-170, -8));
 
-            _sub = NewText("YearTurn", prt, 18, FontStyles.Normal, TextAlignmentOptions.Right);
+            _sub = NewText("YearTurn", prt, 20, FontStyles.Normal, TextAlignmentOptions.Right);
             _sub.color = TextDim;
-            Place(_sub.rectTransform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-150, -40), new Vector2(-12, -10));
+            Place(_sub.rectTransform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-168, -46), new Vector2(-14, -10));
 
             var row = new GameObject("PhaseStepper", typeof(RectTransform)).GetComponent<RectTransform>();
             row.SetParent(prt, false);
-            Place(row, new Vector2(0, 1), new Vector2(1, 1), new Vector2(28, -98), new Vector2(-12, -60));
+            Place(row, new Vector2(0, 1), new Vector2(1, 1), new Vector2(28, -118), new Vector2(-14, -70));
             var layout = row.gameObject.AddComponent<HorizontalLayoutGroup>();
             layout.spacing = 6;
             layout.childControlWidth = layout.childControlHeight = true;
@@ -498,7 +711,7 @@ namespace UI
             for (int i = 0; i < 3; i++)
             {
                 _chips[i] = NewImage($"Phase{i + 1}", row, ChipIdle);
-                _chipTexts[i] = NewText("Label", _chips[i].rectTransform, 20, FontStyles.Normal, TextAlignmentOptions.Center);
+                _chipTexts[i] = NewText("Label", _chips[i].rectTransform, 22, FontStyles.Normal, TextAlignmentOptions.Center);
                 Stretch(_chipTexts[i].rectTransform);
                 _chipTexts[i].textWrappingMode = TextWrappingModes.NoWrap;
                 _chipTexts[i].overflowMode = TextOverflowModes.Ellipsis;
@@ -512,24 +725,29 @@ namespace UI
             Place(_instructionGlyph.rectTransform, new Vector2(0.15f, 0.15f), new Vector2(0.85f, 0.85f), Vector2.zero, Vector2.zero);
             _instructionBadge.gameObject.SetActive(false);
 
-            _instruction = NewText("Instruction", prt, 21, FontStyles.Normal, TextAlignmentOptions.TopLeft);
-            Place(_instruction.rectTransform, new Vector2(0, 0), new Vector2(1, 1), new Vector2(28, 8), new Vector2(-12, -106));
+            _instruction = NewText("Instruction", prt, 24, FontStyles.Normal, TextAlignmentOptions.TopLeft);
+            Place(_instruction.rectTransform, new Vector2(0, 0), new Vector2(1, 1), new Vector2(22, 14), new Vector2(-16, -128));
             _instruction.textWrappingMode = TextWrappingModes.Normal;
             _instruction.overflowMode = TextOverflowModes.Ellipsis;
 
-            // Commander-killed toast (upper middle, doesn't block clicks).
+            // Card plays and commander deaths. Same ocean as the turn note, just above it.
             _toast = NewImage("CommanderKilled", transform, PopupBorder);
-            Place(_toast.rectTransform, new Vector2(0.24f, 0.64f), new Vector2(0.76f, 0.79f), Vector2.zero, Vector2.zero);
+            _toast.rectTransform.anchorMin = _toast.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+            _toast.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+            _toast.rectTransform.sizeDelta = new Vector2(360f, 100f);
             FramePopup(_toast, new Color(0.62f, 0.08f, 0.08f, 0.95f));
-            _toastText = NewText("Text", _toast.rectTransform, 22, FontStyles.Normal, TextAlignmentOptions.Center);
-            Place(_toastText.rectTransform, Vector2.zero, Vector2.one, new Vector2(14, 6), new Vector2(-14, -6));
+            _toastText = NewText("Text", _toast.rectTransform, 20, FontStyles.Normal, TextAlignmentOptions.TopLeft);
+            Place(_toastText.rectTransform, Vector2.zero, Vector2.one, new Vector2(12, 8), new Vector2(-12, -8));
             _toastText.textWrappingMode = TextWrappingModes.Normal;
+            _toastText.overflowMode = TextOverflowModes.Ellipsis;
             _toast.gameObject.SetActive(false);
 
-            // Bid picker (top-centre): framed panel, one button per affordable amount.
+            // Bid picker: a card in the water west of South America, one button per affordable amount.
             var bidImg = NewImage("BidPicker", transform, PopupBorder);
             _bidPicker = bidImg.rectTransform;
-            Place(_bidPicker, new Vector2(0.26f, 0.68f), new Vector2(0.74f, 0.84f), Vector2.zero, Vector2.zero);
+            _bidPicker.anchorMin = _bidPicker.anchorMax = new Vector2(0.5f, 0.5f);
+            _bidPicker.pivot = new Vector2(0.5f, 0.5f);
+            _bidPicker.sizeDelta = new Vector2(460f, 120f);
             bidImg.raycastTarget = true;
             var bidFill = FramePopup(bidImg, PopupFill);
             bidFill.raycastTarget = true;
@@ -545,10 +763,12 @@ namespace UI
             bidLayout.childForceExpandHeight = true;
             _bidPicker.gameObject.SetActive(false);
 
-            // Turn-position picker (top-centre).
+            // Turn-position picker, same water as the bid card.
             var orderImg = NewImage("TurnOrderPicker", transform, PopupBorder);
             _orderPicker = orderImg.rectTransform;
-            Place(_orderPicker, new Vector2(0.34f, 0.70f), new Vector2(0.66f, 0.82f), Vector2.zero, Vector2.zero);
+            _orderPicker.anchorMin = _orderPicker.anchorMax = new Vector2(0.5f, 0.5f);
+            _orderPicker.pivot = new Vector2(0.5f, 0.5f);
+            _orderPicker.sizeDelta = new Vector2(460f, 110f);
             orderImg.raycastTarget = true;
             var orderFill = FramePopup(orderImg, PopupFill);
             orderFill.raycastTarget = true;
@@ -578,6 +798,39 @@ namespace UI
             _splashSub = NewText("Sub", _splashBand.rectTransform, 28, FontStyles.Normal, TextAlignmentOptions.Center);
             Place(_splashSub.rectTransform, new Vector2(0, 0), new Vector2(1, 0.4f), Vector2.zero, Vector2.zero);
             splashGo.SetActive(false);
+
+            var auto = NewImage("AutoPlace", transform, PopupBorder);
+            auto.raycastTarget = true;
+            Place(auto.rectTransform, new Vector2(0.012f, 0.02f), new Vector2(0.22f, 0.09f), Vector2.zero, Vector2.zero);
+            var autoFill = FramePopup(auto, new Color(0.12f, 0.35f, 0.22f, 0.96f));
+            autoFill.raycastTarget = true;
+            var autoLabel = NewText("Label", auto.rectTransform, 22, FontStyles.Bold, TextAlignmentOptions.Center);
+            Stretch(autoLabel.rectTransform);
+            autoLabel.text = "Pick territories for me";
+            var autoButton = auto.gameObject.AddComponent<Button>();
+            autoButton.targetGraphic = autoFill;
+            autoButton.onClick.AddListener(() => { if (_gm != null) _gm.FinishMyDraft(); });
+            _autoPlace = auto.gameObject;
+            _autoPlace.SetActive(false);
+
+            var sideGo = new GameObject("DraftNote", typeof(RectTransform), typeof(CanvasGroup));
+            sideGo.transform.SetParent(transform, false);
+            _side = sideGo.GetComponent<CanvasGroup>();
+            _side.blocksRaycasts = false;
+            _side.interactable = false;
+            _sideCard = NewImage("Card", sideGo.transform, PopupBorder).rectTransform;
+            _sideCard.anchorMin = _sideCard.anchorMax = new Vector2(0.5f, 0.5f);
+            _sideCard.pivot = new Vector2(0.5f, 0.5f);
+            _sideCard.sizeDelta = new Vector2(360f, 140f);
+            _sideFill = FramePopup(_sideCard.GetComponent<Image>(), PopupFill);
+            _sideFill.raycastTarget = false;
+            _sideTitle = NewText("Title", _sideCard, 26, FontStyles.Bold, TextAlignmentOptions.Center);
+            Place(_sideTitle.rectTransform, new Vector2(0, 0.46f), new Vector2(1, 1), new Vector2(10, 0), new Vector2(-10, -4));
+            _sideSub = NewText("Sub", _sideCard, 20, FontStyles.Normal, TextAlignmentOptions.Center);
+            Place(_sideSub.rectTransform, new Vector2(0, 0), new Vector2(1, 0.52f), new Vector2(10, 6), new Vector2(-10, 0));
+            _sideSub.textWrappingMode = TextWrappingModes.Normal;
+            _sideSub.overflowMode = TextOverflowModes.Ellipsis;
+            sideGo.SetActive(false);
         }
 
         // ---------------- Helpers ----------------
@@ -589,7 +842,9 @@ namespace UI
         }
 
         public static string Nice(string territoryName) =>
-            CultureInfo.InvariantCulture.TextInfo.ToTitleCase(territoryName ?? "");
+            CultureInfo.InvariantCulture.TextInfo.ToTitleCase((territoryName ?? "").Replace('_', ' '));
+
+        public static string Units(int n) => n == 1 ? "1 unit" : $"{n} units";
 
         public static Color PlayerColor(Player p) =>
             p != null && p.Color != null ? WithAlpha(p.Color.Normal, 1f) : new Color(0.45f, 0.50f, 0.62f, 1f);

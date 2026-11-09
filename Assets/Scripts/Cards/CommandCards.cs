@@ -60,6 +60,54 @@ namespace Cards
                 ? null
                 : "Choose an opponent.";
 
+        static string OwnOfTerrain(Player p, object[] targets)
+        {
+            if (OwnTerritory(p, targets) is { } why) return why;
+            return TerrainOk((Map.Territory)targets[0]) ? null : "That territory is the wrong kind for this card.";
+        }
+
+        static string ThreeOfTerrain(Player p, object[] targets)
+        {
+            if (ThreeDifferentOwnTerritories(p, targets) is { } why) return why;
+            return targets.All(x => TerrainOk((Map.Territory)x)) ? null : "All three have to be the right kind of territory.";
+        }
+
+        // Hold 3 or more: pick 3. Hold 1 or 2: the card places 1 unit on each of those.
+        static string ReinforcementsTargets(Player p, object[] targets)
+        {
+            var need = Map.Frontiers.CardTerrain(_checking);
+            var held = p.Territories.Where(t => need == null || t.Kind == need).ToList();
+            if (held.Count == 0) return "You don't hold any territories of that kind.";
+            var want = System.Math.Min(3, held.Count);
+            if (targets == null || targets.Length != want)
+                return want == 3
+                    ? "Choose three different territories you occupy."
+                    : $"You hold {want}. Place 1 unit on each.";
+            if (targets.Distinct().Count() != want) return "Choose different territories.";
+            foreach (var x in targets)
+            {
+                if (x is not Map.Territory t || t.Owner != p) return "Choose territories you occupy.";
+                if (!TerrainOk(t)) return "That territory is the wrong kind for this card.";
+            }
+            return null;
+        }
+
+        static string OpponentOfTerrain(Player p, object[] targets)
+        {
+            if (OpponentTerritory(p, targets) is { } why) return why;
+            return TerrainOk((Map.Territory)targets[0]) ? null : "That territory is the wrong kind for this card.";
+        }
+
+        // The card being checked is not in scope here, so the caller passes it by closing over CardSpec.For.
+        // TerrainOk is set for the duration of one check.
+        static CardType _checking;
+
+        static bool TerrainOk(Map.Territory t)
+        {
+            var need = Map.Frontiers.CardTerrain(_checking);
+            return need == null || t.Kind == need;
+        }
+
         private static string OpponentTerritory(Player p, object[] targets) =>
             targets is { Length: 1 } && targets[0] is Map.Territory t && t.Owner != p
                 ? null
@@ -88,6 +136,7 @@ namespace Cards
                 if (!(targets[i] is Map.Territory from && targets[i + 1] is CommanderType type && targets[i + 2] is Map.Territory to))
                     return "Each move is a territory, a commander and a territory.";
                 if (from.Owner != p || to.Owner != p) return "Commanders can only move between territories you occupy.";
+                if (!Expansions.Purchases.CanStand(type, to)) return "That commander can't move onto that territory.";
                 if (from == to) return "Pick a different territory to move it to.";
                 if (!In(from).Remove(type)) return $"There is no {type} of yours in {from.Name}.";
                 In(to).Add(type);
@@ -100,19 +149,23 @@ namespace Cards
         {
             var rule = CardCatalog.For(type.ToString());
             var timing = (CardTiming)Enum.Parse(typeof(CardTiming), rule.Timing.ToString());
-            return new CardSpec(rule.PowerUpCost, timing, OwnerGoesFirst(type), CheckFor(type));
+            var inner = CheckFor(type);
+            Func<Player, object[], string> check = inner == null ? null
+                : (p, targets) => { _checking = type; return inner(p, targets); };
+            return new CardSpec(rule.PowerUpCost, timing, OwnerGoesFirst(type), check);
         }
 
         static bool OwnerGoesFirst(CardType type) =>
-            type is CardType.EnergyCrisis or CardType.ModReduction or CardType.ScatterBombLand;
+            type is CardType.EnergyCrisis or CardType.ModReduction
+                or CardType.ScatterBombLand or CardType.ScatterBombWater or CardType.ScatterBombMoon;
 
         static Func<Player, object[], string> CheckFor(CardType type) => type switch
         {
             CardType.TerritorialStation => OwnTerritoryForStation,
-            CardType.AssembleModsL => OwnTerritory,
-            CardType.ReinforcementsL => ThreeDifferentOwnTerritories,
-            CardType.FrequencyJamL => AnOpponent,
-            CardType.RocketStrikeLand => OpponentTerritory,
+            CardType.AssembleModsL or CardType.AssembleModsNa or CardType.AssembleModsS => OwnOfTerrain,
+            CardType.ReinforcementsL or CardType.ReinforcementsNa or CardType.ReinforcementsS => ReinforcementsTargets,
+            CardType.FrequencyJamL or CardType.FrequencyJamNa or CardType.FrequencyJamS => AnOpponent,
+            CardType.RocketStrikeLand or CardType.RocketStrikeWater or CardType.RocketStrikeMoon => OpponentOfTerrain,
             CardType.AssassinBomb => OpponentCommander,
             CardType.DecoyRevealed => DecoyMoves,
             _ => null,
@@ -134,10 +187,60 @@ namespace Cards
 
         public int BuysThisTurn { get; private set; }
         public IReadOnlyList<Card> DiscardPile => _discard;
+
+        // An eliminated player's cards are discarded. They are not given to the player who took the last territory.
+        public void Discard(System.Collections.Generic.IEnumerable<Card> cards)
+        {
+            if (cards == null) return;
+            foreach (var card in cards)
+                if (card != null) _discard.Add(card);
+        }
         private readonly List<Card> _discard = new();
 
         public Action<Player, Card> OnCardBought;
         public Action<Player, Card> OnCardPlayed;
+        public Action<CardPlayReport> OnCardReport;
+        public CardPlayReport LastReport { get; private set; }
+
+        private static Dictionary<Map.Territory, int> UnitsNow() =>
+            Map.TerritoryRepository.Instance != null
+                ? Map.TerritoryRepository.Instance.Territories.ToDictionary(t => t, t => t.Troops)
+                : new Dictionary<Map.Territory, int>();
+
+        private void Report(Player p, Card card, object[] targets, Dictionary<Map.Territory, int> before, bool reaction)
+        {
+            var ab = _cr.Abilities;
+            var report = new CardPlayReport { Player = p, Card = card, Targets = targets, Reaction = reaction, Note = _note };
+            _note = null;
+            switch (card.CardType)
+            {
+                case CardType.RocketStrikeLand:
+                case CardType.RocketStrikeWater:
+                case CardType.RocketStrikeMoon:
+                case CardType.AssassinBomb:
+                    report.Roll = ab.LastRoll;
+                    break;
+                case CardType.TheMother:
+                    report.Roll = ab.LastRoll;
+                    report.Continent = ab.LastContinentHit?.Name;
+                    break;
+                case CardType.ScatterBombLand:
+                case CardType.ScatterBombWater:
+                case CardType.ScatterBombMoon:
+                    report.Drawn = ab.LastScatterTargets.ToList();
+                    break;
+                case CardType.AquaBrother:
+                case CardType.NickyBoy:
+                    report.Roll = ab.LastRoll;
+                    report.Drawn = ab.LastScatterTargets.ToList();
+                    break;
+            }
+            foreach (var (t, units) in before)
+                if (t.Troops != units)
+                    report.Changes.Add((t, units, t.Troops));
+            LastReport = report;
+            OnCardReport?.Invoke(report);
+        }
 
         public CommandCards(GameManager gm, CardRepository cr)
         {
@@ -145,7 +248,97 @@ namespace Cards
             _cr = cr;
         }
 
-        public void OnTurnStarted() => BuysThisTurn = 0;
+        public bool BuysClosed { get; private set; }
+
+        public void OnTurnStarted()
+        {
+            BuysThisTurn = 0;
+            BuysClosed = false;
+            _surface.Clear();
+        }
+
+        public bool HasUnseen(Player p) => p != null && p.Cards.Any(c => c.Sealed);
+
+        // Looking ends the buy. Every card bought this turn is shown at once.
+        public void RevealBought(Player p)
+        {
+            if (p == null) return;
+            foreach (var card in p.Cards)
+                if (card != null && card.Sealed) card.Unseal();
+            BuysClosed = true;
+        }
+
+        // ---------------- Naval: Hidden Energy, Space: Energy Extraction and Invade Surface ----------------
+        // Hidden Energy draws a sea. Hold it when your turn ends and you gain 4 energy.
+        // Energy Extraction pays 7 at the end of the turn for each copy, if you hold every moon territory.
+        // Invade Surface draws a land you don't hold. This turn, any of your moon territories may attack it.
+        public const int HiddenEnergyReward = 4;
+        public const int EnergyExtractionReward = 7;
+
+        readonly List<(Player Player, Map.Territory Sea)> _hiddenEnergy = new();
+        readonly Dictionary<Player, int> _extractions = new();
+        readonly List<(Player Player, Map.Territory Land)> _surface = new();
+        string _note;
+
+        public bool AllowsSurfaceAttack(Player p, Map.Territory from, Map.Territory to) =>
+            from != null && to != null && from.Owner == p && from.Kind == Map.TerrainKind.Moon
+            && _surface.Any(s => s.Player == p && s.Land == to);
+
+        public IEnumerable<Map.Territory> SurfaceLands(Player p) =>
+            _surface.Where(s => s.Player == p).Select(s => s.Land);
+
+        public Action<string> OnNotice;
+
+        public void SettleEndOfTurn(Player p)
+        {
+            if (p == null) return;
+            foreach (var bet in _hiddenEnergy.Where(h => h.Player == p).ToList())
+            {
+                _hiddenEnergy.Remove(bet);
+                if (bet.Sea == null || bet.Sea.Owner != p) continue;
+                p.SetEnergy(p.GetEnergy() + HiddenEnergyReward);
+                OnNotice?.Invoke($"{p.Name} still holds {Nice(bet.Sea.Name)}: +{HiddenEnergyReward} energy (Hidden Energy).");
+            }
+            if (!_extractions.TryGetValue(p, out var copies)) return;
+            _extractions.Remove(p);
+            var moons = Map.TerritoryRepository.Instance != null
+                ? Map.TerritoryRepository.Instance.Territories.Where(t => t.Kind == Map.TerrainKind.Moon).ToList()
+                : null;
+            if (moons == null || moons.Count == 0 || moons.Any(t => t.Owner != p)) return;
+            var gain = copies * EnergyExtractionReward;
+            p.SetEnergy(p.GetEnergy() + gain);
+            OnNotice?.Invoke($"{p.Name} holds the Moon: +{gain} energy (Energy Extraction).");
+        }
+
+        static string Nice(string territoryName) => (territoryName ?? "").Replace('_', ' ');
+
+        void PlayHiddenEnergy(Player p)
+        {
+            var sea = Pick(Map.TerritoryRepository.Instance.Territories.Where(t => t.Kind == Map.TerrainKind.Sea));
+            if (sea == null) return;
+            _hiddenEnergy.Add((p, sea));
+            _note = $"drew {Nice(sea.Name)}: +{HiddenEnergyReward} energy if you still hold it when the turn ends";
+        }
+
+        void PlayEnergyExtraction(Player p)
+        {
+            _extractions[p] = _extractions.TryGetValue(p, out var n) ? n + 1 : 1;
+            _note = $"hold every moon territory when the turn ends for +{EnergyExtractionReward} energy";
+        }
+
+        void PlayInvadeSurface(Player p)
+        {
+            var land = Pick(Map.TerritoryRepository.Instance.Territories.Where(t => t.Kind == Map.TerrainKind.Land && t.Owner != p));
+            if (land == null) return;
+            _surface.Add((p, land));
+            _note = $"this turn you can attack {Nice(land.Name)} from any moon territory";
+        }
+
+        static Map.Territory Pick(IEnumerable<Map.Territory> pool)
+        {
+            var list = pool.OrderBy(t => t.Name).ToList();
+            return list.Count == 0 ? null : list[GameRandom.Current.Range(0, list.Count)];
+        }
 
         // ---------------- MOD Reduction ----------------
         // "All of your opponents must remove 4 MODs in turn order. Then you remove 2 MODs."
@@ -250,7 +443,7 @@ namespace Cards
             Debug.Log($"Scout Forces: {newOwner.Name} occupied {t.Name} and placed {ScoutForcesUnits} MODs.");
         }
 
-        // Our map has only land territories, so the Naval and Space decks (water / Moon cards) are out of play.
+        // Naval and Space come in when the match built seas and a moon (MatchOptions.Frontiers).
         public static bool IsDeckInPlay(CommanderType deck) => DeckLists.DecksInPlay.Contains(deck);
 
         public int CardsLeftInDeck(CommanderType deck) => _cr.DeckCount(deck);
@@ -343,7 +536,9 @@ namespace Cards
         {
             if (!IsDeckInPlay(deck)) return $"The {deck} deck isn't used: this map has no water or Moon territories.";
             if (!IsOwnTurnBeforeFirstInvasion(p)) return "You can only buy cards on your turn, before your first invasion.";
+            if (_gm.ShopClosed) return "You've finished hiring and buying for this turn.";
             if (!p.HasCommanderInPlay(deck)) return $"You need your {deck} in play to buy from its deck.";
+            if (BuysClosed) return "You already looked at the cards you bought. Buy them all before you look.";
             if (BuysThisTurn >= MaxBuysPerTurn) return $"You can buy at most {MaxBuysPerTurn} cards per turn.";
             if (p.GetEnergy() < BuyCost) return $"Buying a card costs {BuyCost} energy.";
             if (CardsLeftInDeck(deck) == 0) return $"The {deck} deck is empty.";
@@ -354,14 +549,43 @@ namespace Cards
         {
             if (card == null) return "No card.";
             if (!p.Cards.Contains(card)) return $"{p.Name} doesn't hold {card.Name}.";
+            if (p.Cards.Any(c => c.Sealed)) return "Look at the cards you just bought before you play one.";
             if (card.Timing == CardTiming.NotImplemented) return $"{card.Name} can't be played yet (not implemented).";
             if (!p.canPlayCommandCards) return "You are jammed (Frequency Jam) and can't play command cards this turn.";
             if (!p.HasCommanderInPlay(card.Commander)) return $"You need your {card.Commander} in play to play {card.Name}.";
             if (p.GetEnergy() < card.PowerUpCost) return $"{card.Name} costs {card.PowerUpCost} energy to play.";
+            var map = Map.TerritoryRepository.Instance;
+            switch (card.CardType)
+            {
+                case CardType.HiddenEnergy:
+                    if (map == null || !map.Territories.Any(t => t.Kind == Map.TerrainKind.Sea))
+                        return "There are no seas on this map.";
+                    break;
+                case CardType.EnergyExtraction:
+                    if (map == null || !map.Territories.Any(t => t.Kind == Map.TerrainKind.Moon))
+                        return "There is no moon on this map.";
+                    break;
+                case CardType.AquaBrother:
+                    if (map == null || !map.Territories.Any(t => t.Kind == Map.TerrainKind.Sea))
+                        return "There are no seas on this map.";
+                    break;
+                case CardType.NickyBoy:
+                    if (map == null || !map.Territories.Any(t => t.Kind == Map.TerrainKind.Moon))
+                        return "There is no moon on this map.";
+                    break;
+                case CardType.InvadeSurface:
+                    if (map == null || !p.Territories.Any(t => t.Kind == Map.TerrainKind.Moon && t.Troops > 0))
+                        return "You need units on the Moon.";
+                    if (map.Territories.All(t => t.Kind != Map.TerrainKind.Land || t.Owner == p))
+                        return "You already occupy every land territory.";
+                    break;
+            }
             switch (card.Timing)
             {
                 case CardTiming.BeforeFirstInvasion:
                     if (!IsOwnTurnBeforeFirstInvasion(p)) return $"{card.Name} can only be played on your turn, before your first invasion.";
+                    if (!_gm.ShopClosed && !_gm.AllowCardsBeforeShop)
+                        return "Finish hiring and buying before you play a command card.";
                     return null;
                 case CardTiming.EndOfTurn:
                     if (_gm.CurrentPlayer != p || !(_gm.CurrentPhase is FortifyPhase))
@@ -404,9 +628,13 @@ namespace Cards
             if (!p.canPlayCommandCards) return "You are jammed (Frequency Jam) and can't play command cards this turn.";
             if (!p.HasCommanderInPlay(card.Commander)) return $"You need your {card.Commander} in play to play {card.Name}.";
             if (p.GetEnergy() < card.PowerUpCost) return $"{card.Name} costs {card.PowerUpCost} energy to play.";
+            var ground = Map.Frontiers.CardTerrain(card.CardType);
+            if (ground != null && attack.Target.Kind != ground)
+                return $"{card.Name} is only played when a {ground.ToString().ToLowerInvariant()} territory is invaded.";
             switch (card.CardType)
             {
                 case CardType.StealthStation:
+                    if (attack.Target.Kind != Map.TerrainKind.Land) return "A space station is built on land.";
                     if (attack.Target.containsSpaceStation) return $"{attack.Target.Name} already has a space station.";
                     if (Purchases.StationsOf(p) >= Purchases.MaxStations) return $"You already have {Purchases.MaxStations} space stations.";
                     break;
@@ -435,14 +663,19 @@ namespace Cards
             _discard.Add(card);
             Debug.Log($"{p.Name} plays {card.Name} against {attack.Player.Name}'s invasion of {attack.Target.Name}.");
 
+            var before = UnitsNow();
             var cancelled = false;
             switch (card.CardType)
             {
                 case CardType.StealthModsL:
+                case CardType.StealthModsNa:
+                case CardType.StealthModsS:
                 case CardType.StealthStation:
                     card.UseAbility(attack.Target);
                     break;
                 case CardType.LandDeathTrap:
+                case CardType.WaterDeathTrap:
+                case CardType.OrbitalMines:
                     card.UseAbility(attack.Origin);
                     break;
                 case CardType.Evacuation:
@@ -453,6 +686,7 @@ namespace Cards
                     break;
             }
             OnCardPlayed?.Invoke(p, card);
+            Report(p, card, new object[] { attack.Target }, before, true);
             return cancelled;
         }
 
@@ -464,7 +698,8 @@ namespace Cards
             var card = Draw(p, c => c.Commander == deck);
             p.SetEnergy(p.GetEnergy() - BuyCost);
             BuysThisTurn++;
-            Debug.Log($"{p.Name} bought a {deck} card ({BuysThisTurn}/{MaxBuysPerTurn} this turn).");
+            if (card != null && !card.IsHidden) card.Seal();
+            Debug.Log($"{p.Name} bought a {deck} card face-down ({BuysThisTurn}/{MaxBuysPerTurn} this turn).");
             OnCardBought?.Invoke(p, card);
             return card;
         }
@@ -502,8 +737,19 @@ namespace Cards
                 ? new object[] { p }.Concat(targets ?? Array.Empty<object>()).ToArray()
                 : targets ?? Array.Empty<object>();
             Debug.Log($"{p.Name} played {card.Name} (cost {card.PowerUpCost}).");
+            var before = UnitsNow();
+            _note = null;
             switch (card.CardType)
             {
+                case CardType.HiddenEnergy:
+                    PlayHiddenEnergy(p);
+                    break;
+                case CardType.EnergyExtraction:
+                    PlayEnergyExtraction(p);
+                    break;
+                case CardType.InvadeSurface:
+                    PlayInvadeSurface(p);
+                    break;
                 case CardType.ScoutForces:
                     Scout(p);
                     break;
@@ -516,6 +762,13 @@ namespace Cards
                 case CardType.Armageddon:
                     StartArmageddon(p);
                     break;
+                case CardType.ReinforcementsL:
+                case CardType.ReinforcementsNa:
+                case CardType.ReinforcementsS:
+                    var padded = new object[] { null, null, null };
+                    for (var i = 0; i < targets.Length && i < 3; i++) padded[i] = targets[i];
+                    card.UseAbility(padded);
+                    break;
                 case CardType.DecoyRevealed:
                     for (var i = 0; i + 2 < targets.Length; i += 3)
                         Actions.FortifyAction.MoveCommanders((Map.Territory)targets[i], (Map.Territory)targets[i + 2],
@@ -526,6 +779,7 @@ namespace Cards
                     break;
             }
             OnCardPlayed?.Invoke(p, card);
+            Report(p, card, targets, before, false);
         }
 
         private bool IsOwnTurnBeforeFirstInvasion(Player p) => _gm.IsCommandStep(p);
@@ -555,8 +809,10 @@ namespace Cards
         // Territory names the card can target, or null if it takes no target.
         public static List<string> ArmageddonTargets(Player p, Card card) => card.CardType switch
         {
-            CardType.RocketStrikeLand => Map.TerritoryRepository.Instance.Territories
-                .Where(t => t.Owner != p).Select(t => t.Name).ToList(),
+            CardType.RocketStrikeLand or CardType.RocketStrikeWater or CardType.RocketStrikeMoon =>
+                Map.TerritoryRepository.Instance.Territories
+                .Where(t => t.Owner != p && (Map.Frontiers.CardTerrain(card.CardType) == null || t.Kind == Map.Frontiers.CardTerrain(card.CardType)))
+                .Select(t => t.Name).ToList(),
             CardType.AssassinBomb => Map.TerritoryRepository.Instance.Territories
                 .Where(t => t.Owner != p && t.CommandersList.Count > 0).Select(t => t.Name).ToList(),
             _ => null,

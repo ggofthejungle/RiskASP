@@ -39,6 +39,16 @@ namespace Map
                 Debug.LogWarning("TerritorySelection is null");
 
             _territoryNameText.text = _territory.Name.Replace('_', ' ');
+            _territoryNameText.enableAutoSizing = false;
+            _territoryNameText.fontSize = 2.55f;
+            var nameRt = _territoryNameText.rectTransform;
+            nameRt.sizeDelta = new Vector2(2.2f, 0.55f);
+            nameRt.anchoredPosition = new Vector2(nameRt.anchoredPosition.x, -0.62f);
+            if (_troopsCountText != null)
+            {
+                _troopsCountText.enableAutoSizing = false;
+                _troopsCountText.fontSize = 3.5f;
+            }
 
 
             _territory.OnTroopsChanged += OnTroopsChanged;
@@ -80,10 +90,12 @@ namespace Map
 
         private void OnTroopsChanged(int oldTroops, int newTroops)
         {
-            if(GameManager.Instance.GameState == GameState.Setup)
+            // The opening deal is silent. Take-turns claims and placements show a +1, including the bot's.
+            if (GameManager.Instance.GameState == GameState.Setup && !GameManager.Instance.IsDrafting)
                 return;
             
             var difference = newTroops - oldTroops;
+            if (difference == 0) return; // e.g. a card that would empty it: the territory keeps its last unit
             var troopCountChangedEffect = InstantiateTroopCountChangedEffect();
             troopCountChangedEffect.SetTroopText(difference);
         }
@@ -156,6 +168,9 @@ namespace Map
 
         private void UpdateColor()
         {
+            // Take-turns claims disable territories during GameManager.Start, before this
+            // component's own Start has stored a colour. An unowned territory still has one.
+            if (_playerColor == null) _playerColor = ColorOfOwner();
             if (_isSelected)
                 SetColor(_playerColor.Selected);
             else if(_isDisabled)
@@ -164,7 +179,8 @@ namespace Map
                 SetColor(_playerColor.Highlight);
             else
                 SetColor(_playerColor.Normal);
-            _troopsCountBackgroundSpriteRenderer.color = _playerColor.Normal;
+            if (_troopsCountBackgroundSpriteRenderer != null)
+                _troopsCountBackgroundSpriteRenderer.color = _playerColor.Normal;
         }
 
         private void SetTroopsCount(int territoryTroops)

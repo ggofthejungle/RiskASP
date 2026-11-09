@@ -140,6 +140,7 @@ namespace Map
             Territories.Remove(territory);
             Devastated.Add(territory);
             territory.MarkDevastated();
+            Frontiers.DropLinks(territory);
             var collider = territory.GetComponent<Collider2D>();
             if (collider != null) collider.enabled = false;
             CalculateTerritoryReachability();
@@ -150,9 +151,25 @@ namespace Map
             return TerritoriesMap[territoryName];
         }
 
+        // One fortify may cross any path of your own territories. An enemy or empty territory breaks the path.
+        // A space station linked to a landing site is already a neighbour, so Moon and Earth connect that way.
         public bool CanFortifyTerritory(Territory from, Territory to)
         {
-            return from.NeighbourTerritories.Contains(to) && from.Owner == to.Owner;
+            if (from == null || to == null || from == to || from.Owner == null || from.Owner != to.Owner) return false;
+            var seen = new System.Collections.Generic.HashSet<Territory> { from };
+            var queue = new System.Collections.Generic.Queue<Territory>();
+            queue.Enqueue(from);
+            while (queue.Count > 0)
+            {
+                var here = queue.Dequeue();
+                foreach (var next in here.NeighbourTerritories)
+                {
+                    if (next == to) return true;
+                    if (next.Owner != from.Owner || !seen.Add(next)) continue;
+                    queue.Enqueue(next);
+                }
+            }
+            return false;
         }
     }
 }

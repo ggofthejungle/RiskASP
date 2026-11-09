@@ -26,8 +26,28 @@ namespace Actions
             MovingCommanders = System.Linq.Enumerable.ToList(movingCommanders ?? System.Array.Empty<Expansions.CommanderType>());
         }
 
-        public static int MinToMove(AttackAction attack) =>
-            TroopMovement.MinMoveIn(attack.Troops, attack.Origin.Troops);
+        // Contested capture: move in at least as many units as the dice you rolled. The commanders who
+        // rolled a d8 have already moved. An empty territory has no roll, so one unit is enough.
+        public static int MinToMove(AttackAction attack, bool contested = true)
+        {
+            var forced = 0;
+            foreach (var type in attack.Commanders)
+                if (BattleSimulator.AttacksWithD8(type, attack.Origin, attack.Target)) forced++;
+            var quota = contested ? attack.Dice : 1;
+            var still = System.Math.Max(0, quota - forced);
+            var room = attack.Origin.GetAvailableTroops();
+            return System.Math.Min(still, System.Math.Max(0, room));
+        }
+
+        // MODs that can leave while `movingCommanders` also leave. One unit stays. A commander counts.
+        public static int MaxMods(Territory from, int movingCommanders)
+        {
+            if (from == null) return 0;
+            var commanders = from.CommandersList != null ? from.CommandersList.Count : 0;
+            var spare = from.Troops + commanders - 1 - System.Math.Max(0, movingCommanders);
+            if (spare < 0) spare = 0;
+            return System.Math.Min(from.Troops, spare);
+        }
 
         public override bool IsValid()
         {
@@ -45,23 +65,30 @@ namespace Actions
                 return false;
             }
 
-            if (ReinforcingTroops > From.GetAvailableTroops())
+            var leaving = ReinforcingTroops + MovingCommanders.Count;
+            var stillThere = From.Troops + From.CommandersList.Count;
+            if (ReinforcingTroops > From.Troops || leaving > stillThere - 1)
             {
-                LogError(
-                    $"Reinforcing troops ({ReinforcingTroops}) is greater than available troops ({From.GetAvailableTroops()})");
+                Reject($"Leave 1 unit in {From.Name.Replace('_', ' ')}. A commander counts. You can move {System.Math.Max(0, stillThere - 1)} of {stillThere}.");
                 return false;
             }
 
-            var minReinforcing = MinToMove(AttackAction);
+            var last = gm.AttackPhase.LastAttackResult;
+            var minUnits = MinToMove(AttackAction, last != null && last.DefendingTroops > 0);
             foreach (var type in MovingCommanders)
                 if (!System.Linq.Enumerable.Any(From.CommandersList, c => c.CommanderType == type))
                 {
                     LogWarning($"There is no {type} in {From.Name} to move");
                     return false;
                 }
-            if (ReinforcingTroops < minReinforcing)
+                else if (!Expansions.Purchases.CanStand(type, To))
+                {
+                    Reject($"A {type} can't enter {To.Name.Replace('_', ' ')}.");
+                    return false;
+                }
+            if (ReinforcingTroops + MovingCommanders.Count < minUnits)
             {
-                LogError($"Reinforcing troops ({ReinforcingTroops}) is less than the minimum ({minReinforcing})");
+                Reject($"Move at least {minUnits} into {To.Name.Replace('_', ' ')}. MODs and commanders both count.");
                 return false;
             }
 

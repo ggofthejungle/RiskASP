@@ -42,8 +42,8 @@ public class GameManager : MonoBehaviour
     // Before any seats are chosen, or while some are still free, it is the player list.
     public IReadOnlyList<Player> SeatOrder =>
         _chosenPositions.Length > 0 && _chosenPositions.All(p => p != null)
-            ? _chosenPositions.Concat(Players.Where(p => !_chosenPositions.Contains(p))).ToList()
-            : Players;
+            ? _chosenPositions.Concat(Players.Where(p => !p.Neutral && !_chosenPositions.Contains(p))).ToList()
+            : Players.Where(p => !p.Neutral).ToList();
 
     // Turn owner: whose turn it is.
     public Player CurrentPlayer => _currentPlayer;
@@ -79,7 +79,10 @@ public class GameManager : MonoBehaviour
     public Purchases Purchases { get; private set; }
 
     // 2210 "command step": the current player's turn, from Reinforce until their first invasion.
-    // Buying/playing "before first invasion" cards, hiring commanders and building stations happen here.
+    // Hiring and buying come first. ShopClosed opens the "before your first invasion" cards.
+    public bool ShopClosed { get; private set; }
+    // Set while a bot is planning, so it can line the cards up before the CloseShop action runs.
+    public bool AllowCardsBeforeShop { get; set; }
     public bool IsCommandStep(Player p)
     {
         if (_isBidding || _isChoosingOrder || _gameState != GameState.Playing || _currentPlayer != p || p == null)
@@ -152,11 +155,30 @@ public class GameManager : MonoBehaviour
             ReactionTimeoutSeconds = (float)DecisionClock.OnlineReactionSeconds;
             return;
         }
+        if (kind == MatchKind.Correspondence)
+        {
+            PassTheDeviceScreens = false;
+            ReactionTimeoutSeconds = 0;
+            MatchSave.Attach(this, kind);
+            Correspondence.Bind(this);
+            var mine = PlayFabLogin.PlayFabId;
+            var seats = MatchSave.Current?.Seats;
+            for (var i = 0; i < Players.Count && seats != null && i < seats.Length; i++)
+            {
+                if (Players[i].IsBot()) continue;
+                if (!string.IsNullOrEmpty(mine) && MatchSave.SeatPlayFab(seats[i]) == mine)
+                    LocalPlayer = Players[i];
+            }
+            if (LocalPlayer == null)
+                LocalPlayer = Players.Find(p => p != null && !p.IsBot());
+            return;
+        }
         if (kind != MatchKind.SinglePlayer && kind != MatchKind.HotSeat) return;
         var humans = Players.Where(p => p != null && !p.IsBot()).ToList();
         PassTheDeviceScreens = humans.Count > 1;
         if (humans.Count == 1)
             LocalPlayer = humans[0];
+        MatchSave.Attach(this, kind);
     }
 
     private void SubscribeToEvents()
@@ -170,15 +192,10 @@ public class GameManager : MonoBehaviour
     private void OnPlayerEliminated(Player eliminatedBy, Player eliminated)
     {
         var cards = new List<Card>(eliminated.Cards);
-        eliminatedBy.AddCards(cards);
         eliminated.RemoveCards(cards);
-        // Online: the winner's device now sees the cards it took.
-        var ids = Secrets.Private(eliminatedBy, () => string.Join(",", cards.Select(c => c.Id)));
-        if (!Secrets.Decides && !string.IsNullOrEmpty(ids))
-            foreach (var id in ids.Split(','))
-                CommandCards.Reveal(eliminatedBy, _cr.CardById(int.Parse(id)));
+        CommandCards?.Discard(cards);
 
-        if (Players.Count(player => player.IsAlive()) == 1)
+        if (Players.Count(player => player.IsAlive() && !player.Neutral) == 1)
             GameOver();
     }
 
@@ -213,7 +230,10 @@ public class GameManager : MonoBehaviour
 
     // The solver bots take their turns on one device only (the host online); the others replay the moves.
     // Bids, seat choices and AI answers to decisions are not solver moves: they run everywhere, inside ApplyAgreed.
-    public bool RunsBotAI => Relay == null || Relay.DecidesTimeouts;
+    public bool RunsBotAI => !MatchSave.IsReplaying && (
+        Relay != null ? Relay.DecidesTimeouts
+        : Correspondence.IsPlaying ? Correspondence.PlaysBots
+        : true);
 
     public void ResumeBots()
     {
@@ -240,6 +260,8 @@ public class GameManager : MonoBehaviour
     private void OnDestroy()
     {
         Relay?.Unbind();
+        Correspondence.Unbind();
+        MatchSave.Detach();
         if (Instance == this) Instance = null;
     }
 
@@ -249,6 +271,7 @@ public class GameManager : MonoBehaviour
         try { StartMatch(); }
         finally { _agreedDepth--; }
         Relay?.Bind(this);
+        MatchSave.ReplayPending(this);
     }
 
     private void StartMatch()
@@ -275,7 +298,7 @@ public class GameManager : MonoBehaviour
         if (AutoPlaceStartingUnits)
         {
             foreach (var player in Players)
-                Purchases.PlaceStartingUnits(player);
+                if (!player.Neutral) Purchases.PlaceStartingUnits(player);
             _startingUnitsPlaced = true;
         }
         StartYear();
@@ -286,6 +309,22 @@ public class GameManager : MonoBehaviour
     // map is full. Then, in the same order, everyone places the rest of their starting army 3 MODs at a time.
     public const int DraftBatch = 3;
     public bool IsDrafting { get; private set; }
+    // Claim and placing are separate. Picking territories must not spend the rest of the army.
+    enum DraftHelp { None, Claim, Place }
+    DraftHelp _draftHelp;
+    public bool AutoDraft => _draftHelp != DraftHelp.None;
+
+    public void FinishMyDraft()
+    {
+        if (!IsDrafting || AutoDraft) return;
+        var who = InputPlayer;
+        var d = PendingDecision;
+        if (who == null || !IsLocal(who) || d == null) return;
+        if (d.Kind == DecisionKind.ClaimTerritory) _draftHelp = DraftHelp.Claim;
+        else if (d.Kind == DecisionKind.PlaceStartingTroops) _draftHelp = DraftHelp.Place;
+        else return;
+        HandlePlayerAction(new DecisionResponseAction(who, Turn, DefenderAI.Choose(this, d)));
+    }
     // MODs the current player may still place in this batch of 3.
     public int DraftBatchLeft { get; private set; }
     public int DraftUnitsLeft(Player p) => _draftLeft != null && _draftLeft.TryGetValue(p, out var n) ? n : 0;
@@ -297,11 +336,12 @@ public class GameManager : MonoBehaviour
     private void StartDraft()
     {
         IsDrafting = true;
-        var order = Enumerable.Range(0, Players.Count).ToArray();
+        var people = Players.Where(p => !p.Neutral).ToList();
+        var order = Enumerable.Range(0, people.Count).ToArray();
         OpeningDeal.Shuffle(order, GameRandom.Current);
-        _draftOrder = order.Select(i => Players[i]).ToList();
-        var army = OpeningDeal.TroopsForPlayerCount(Players.Count);
-        _draftLeft = Players.ToDictionary(p => p, _ => army);
+        _draftOrder = order.Select(i => people[i]).ToList();
+        var army = OpeningDeal.TroopsForPlayerCount(people.Count);
+        _draftLeft = people.ToDictionary(p => p, _ => army);
         _draftTurn = 0;
         DraftBatchLeft = 0;
         Debug.Log("Take-turns setup, order: " + string.Join(", ", _draftOrder.Select(p => p.Name)));
@@ -323,7 +363,7 @@ public class GameManager : MonoBehaviour
 
     private void DraftStep()
     {
-        var empty = _tr.Territories.Where(t => t.Owner == null).ToList();
+        var empty = _tr.Territories.Where(t => t.Owner == null && t.Kind == Map.TerrainKind.Land).ToList();
         if (empty.Count > 0)
         {
             var claimer = _draftOrder[_draftTurn % _draftOrder.Count];
@@ -333,6 +373,10 @@ public class GameManager : MonoBehaviour
                 empty.Select(t => t.Name).ToList()), OnClaimed);
             return;
         }
+
+        // The claim button stops here. Placing the rest of the army is a second, separate button.
+        if (_draftHelp == DraftHelp.Claim)
+            _draftHelp = DraftHelp.None;
 
         if (DraftBatchLeft <= 0 || DraftUnitsLeft(_currentPlayer) <= 0)
         {
@@ -366,6 +410,12 @@ public class GameManager : MonoBehaviour
         var old = _currentPlayer;
         _currentPlayer = p;
         OnPlayerTurnChanged?.Invoke(old, _currentPlayer);
+        if (!p.IsBot())
+        {
+            DraftHandOff = null;
+            _botDraftNames.Clear();
+            _botDraftWho = null;
+        }
     }
 
     private void OnClaimed(DecisionResponseAction response)
@@ -373,21 +423,91 @@ public class GameManager : MonoBehaviour
         var territory = _tr.FromName(response.Option);
         territory.SetOwner(response.Player, 1);
         _draftLeft[response.Player]--;
-        NextDraftStep();
+        ContinueDraft(response.Player, territory, true);
     }
 
     private void OnDraftPlaced(DecisionResponseAction response)
     {
-        _tr.FromName(response.Option).AddTroops(1);
+        var territory = _tr.FromName(response.Option);
+        territory.AddTroops(1);
         _draftLeft[response.Player]--;
         DraftBatchLeft--;
+        ContinueDraft(response.Player, territory, false);
+    }
+
+    // Shown on the YOUR TURN splash: where the computer just placed, so the banner explains itself.
+    public string DraftHandOff { get; private set; }
+    readonly List<string> _botDraftNames = new();
+    string _botDraftWho;
+
+    // A bot answers in the same moment as the click. Hold that territory, with a +1, just long enough
+    // to see it, then continue. The YOUR TURN note still plays when the player comes back.
+    const float BotDraftPause = 0.3f;
+    private void ContinueDraft(Player who, Territory where, bool claimed)
+    {
+        if (who != null && who.IsBot() && Players.Any(p => !p.Neutral && IsLocal(p)))
+        {
+            NoteBotDraft(who, where, claimed);
+            MarkDraftTerritory(where);
+            StartCoroutine(PauseForBotDraft());
+            return;
+        }
+        ClearDraftMarks();
+        _botDraftNames.Clear();
+        _botDraftWho = null;
+        DraftHandOff = null;
+        NextDraftStep();
+    }
+
+    private void NoteBotDraft(Player who, Territory where, bool claimed)
+    {
+        var nice = where.Name.Replace('_', ' ');
+        if (_botDraftWho != who.Name)
+        {
+            _botDraftNames.Clear();
+            _botDraftWho = who.Name;
+        }
+        _botDraftNames.Add(nice);
+        var list = _botDraftNames.Count == 1
+            ? nice
+            : string.Join(", ", _botDraftNames.Take(_botDraftNames.Count - 1)) + " and " + _botDraftNames[^1];
+        DraftHandOff = claimed && _botDraftNames.Count == 1
+            ? $"{who.Name} claimed {nice}"
+            : $"{who.Name} placed on {list}";
+        TurnHud?.Flash(DraftHandOff, 2.5f);
+    }
+
+    private void MarkDraftTerritory(Territory where)
+    {
+        var map = SelectionManager.Instance;
+        if (map == null || where == null) return;
+        if (map.TerritoryToSelectionMap.TryGetValue(where, out var selection))
+            selection.Select();
+    }
+
+    private void ClearDraftMarks()
+    {
+        var map = SelectionManager.Instance;
+        if (map == null) return;
+        foreach (var selection in map.TerritoryToSelectionMap.Values)
+            if (selection.IsSelected) selection.Unselect();
+    }
+
+    private IEnumerator PauseForBotDraft()
+    {
+        yield return new WaitForSecondsRealtime(BotDraftPause);
         NextDraftStep();
     }
 
     private void FinishDraft()
     {
         IsDrafting = false;
+        _draftHelp = DraftHelp.None;
         DraftBatchLeft = 0;
+        ClearDraftMarks();
+        DraftHandOff = null;
+        _botDraftNames.Clear();
+        _botDraftWho = null;
         Debug.Log("Take-turns setup done.");
         BeginFirstYear();
     }
@@ -475,6 +595,8 @@ public class GameManager : MonoBehaviour
             CommandHud = UI.CommandHud.Create(this, canvas);
             Scoreboard = UI.Scoreboard.Create(this, canvas);
             PauseMenu = UI.PauseMenu.Create(this, canvas);
+            UI.MoonBoard.Create(canvas);
+            UI.BonusLegend.Create(canvas);
         }
         SelectionArrow = Map.SelectionArrow.Create(this);
         MapBadges = Map.MapBadges.Create(this, canvas);
@@ -597,6 +719,7 @@ public class GameManager : MonoBehaviour
 
         _isBidding = false;
         SetBidUIActive(false);
+        TurnHud?.Flash(BidReveal(next), 8f);
         if (UIGameInfo != null)
             UIGameInfo.CloseInstructionWindow();
 
@@ -604,6 +727,17 @@ public class GameManager : MonoBehaviour
         _isChoosingOrder = true;
         SyncChoosing(next);
         PromptNextChooser();
+    }
+
+    string BidReveal(YearTable table)
+    {
+        var parts = table.ChooserIds.Select(id =>
+        {
+            var seat = table.Seats.First(s => s.PlayerId == id);
+            var roll = seat.TieRoll > 0 ? $", rolled {seat.TieRoll}" : "";
+            return $"{GetPlayerById(id).Name} bid {seat.Bid}{roll}";
+        });
+        return "Bids revealed. " + string.Join(". ", parts) + ".";
     }
 
     void SyncChoosing(YearTable next)
@@ -653,10 +787,17 @@ public class GameManager : MonoBehaviour
             _currentPlayer = player;
             OnPlayerTurnChanged?.Invoke(old, _currentPlayer);
         }
-        var options = player.Territories
-            .Where(t => unit != "SpaceStation" || !t.containsSpaceStation)
-            .Select(t => t.Name).ToList();
+        var options = player.Territories.Where(t => CanPlaceStartingUnit(unit, t)).Select(t => t.Name).ToList();
         OpenDecision(new PendingDecision(GetPlayerId(player), DecisionKind.PlaceStartingUnit, options, unit), OnPlaced);
+    }
+
+    static bool CanPlaceStartingUnit(string unit, Territory t)
+    {
+        if (t == null) return false;
+        if (unit == "SpaceStation") return t.Kind == TerrainKind.Land && !t.containsSpaceStation;
+        if (unit == "LandCommander") return Purchases.CanStand(CommanderType.LandCommander, t);
+        if (unit == "Diplomat") return Purchases.CanStand(CommanderType.Diplomat, t);
+        return true;
     }
 
     private void OnPlaced(DecisionResponseAction response)
@@ -778,6 +919,7 @@ public class GameManager : MonoBehaviour
         } while (_currentPlayer.IsDead());
 
         _turn++;
+        ShopClosed = false;
         // Frequency Jam only lasts for the jamming player's turn.
         foreach (var player in Players)
             player.canPlayCommandCards = true;
@@ -794,10 +936,13 @@ public class GameManager : MonoBehaviour
             return;
 
         if (_currentPlayer != null)
+        {
+            CommandCards?.SettleEndOfTurn(_currentPlayer);
             OnPlayerTurnEnded?.Invoke(_currentPlayer);
+        }
 
         _turnsTakenThisYear++;
-        if (_turnsTakenThisYear >= Players.Count(p => !p.IsDead()))
+        if (_turnsTakenThisYear >= Players.Count(p => !p.Neutral && !p.IsDead()))
         {
             _year++;
             StartYear();
@@ -827,23 +972,66 @@ public class GameManager : MonoBehaviour
     }
     private void SetupGame()
     {
+        if (Options.Frontiers)
+        {
+            Map.Frontiers.Build(_tr);
+            if (CardRepository.Instance != null) CardRepository.Instance.AddFrontierDecks();
+        }
         DevastateTerritories(Options.Devastated);
+        if (Players.Count(p => !p.Neutral) == 2)
+            PlaceNeutral();
         if (Options.Placement == TerritorySetup.TakeTurns)
         {
             AssignEnergy();
             EnqueuePlayers();
             return; // territories are claimed in StartDraft
         }
-        var deal = OpeningDeal.Deal(_tr.Territories.Count, Players.Count, GameRandom.Current);
-        for (var i = 0; i < deal.OwnerOf.Length; i++)
-        {
-            var territory = _tr.Territories[i];
-            territory.SetOwner(Players[deal.OwnerOf[i]], deal.Troops[i]);
-        }
+        // Water and the Moon start empty. Only land that nobody holds yet is dealt.
+        // The neutral army, in a 2-player game, is not one of the players being dealt to.
+        var people = Players.Where(p => !p.Neutral).ToList();
+        var land = _tr.Territories.Where(t => t.Kind == Map.TerrainKind.Land && t.Owner == null).ToList();
+        var deal = OpeningDeal.Deal(land.Count, people.Count, GameRandom.Current);
+        for (var i = 0; i < land.Count; i++)
+            land[i].SetOwner(people[deal.OwnerOf[i]], deal.Troops[i]);
         AssignEnergy();
         EnqueuePlayers();
     }
 
+
+    // Two players: after devastation, a neutral army occupies 16 lands (and 6 seas and 6 moon
+    // territories when the map has them), with 3 MODs in each. It defends and never takes a turn.
+    private void PlaceNeutral()
+    {
+        var go = new GameObject("Neutral");
+        var neutral = go.AddComponent<Player>();
+        neutral.Neutral = true;
+        neutral.SetName("Neutral");
+        var color = ScriptableObject.CreateInstance<PlayerColor>();
+        color.Normal = new Color(0.62f, 0.62f, 0.66f);
+        color.Highlight = new Color(0.75f, 0.75f, 0.78f);
+        color.Selected = Color.white;
+        color.Disabled = new Color(0.4f, 0.4f, 0.42f);
+        neutral.Color = color;
+        Players.Add(neutral);
+        neutral.OnEliminated += tuple => OnPlayerEliminated(tuple.eliminatedBy, tuple.eliminated);
+
+        void Plant(IEnumerable<Map.Territory> pool, int count)
+        {
+            var list = pool.Where(t => t.Owner == null).ToList();
+            var order = Enumerable.Range(0, list.Count).ToArray();
+            OpeningDeal.Shuffle(order, GameRandom.Current);
+            for (var i = 0; i < count && i < order.Length; i++)
+                list[order[i]].SetOwner(neutral, 3);
+        }
+
+        Plant(_tr.Territories.Where(t => t.Kind == Map.TerrainKind.Land), 16);
+        if (Options.Frontiers)
+        {
+            Plant(_tr.Territories.Where(t => t.Kind == Map.TerrainKind.Sea), 6);
+            Plant(_tr.Territories.Where(t => t.Kind == Map.TerrainKind.Moon), 6);
+        }
+        Debug.Log($"Neutral holds {neutral.GetTerritoryCount()} territories.");
+    }
 
     // Random territories become wasteland before anything is dealt. A pick that would cut a territory off
     // from every neighbour is skipped.
@@ -857,6 +1045,7 @@ public class GameManager : MonoBehaviour
         foreach (var t in candidates)
         {
             if (done >= count) break;
+            if (t.Kind != Map.TerrainKind.Land) continue;
             if (t.NeighbourTerritories.Any(n => n.NeighbourTerritories.Count <= 1)) continue;
             _tr.Devastate(t);
             done++;
@@ -867,7 +1056,7 @@ public class GameManager : MonoBehaviour
     private void AssignEnergy()
     {
         foreach (var player in Players)
-            player.SetEnergy(IncomeRules.StartingEnergy);
+            if (!player.Neutral) player.SetEnergy(IncomeRules.StartingEnergy);
     }
 
     private void CreatePlayers()
@@ -904,7 +1093,7 @@ public class GameManager : MonoBehaviour
         var playerOrder = Enumerable.Range(0, Players.Count).ToList();
         playerOrder.Shuffle();
         foreach (var i in playerOrder)
-            _playerQueue.Enqueue(Players[i]);
+            if (!Players[i].Neutral) _playerQueue.Enqueue(Players[i]);
     }
 
     public void NextTurnPhase()
@@ -949,6 +1138,22 @@ public class GameManager : MonoBehaviour
         if (Relay != null && _agreedDepth == 0)
             return Relay.Send(action);
 
+        _actionDepth++;
+        try
+        {
+            var ok = ApplyLocalAction(action);
+            if (ok) MatchSave.Record(this, action, _actionDepth, _agreedDepth);
+            return ok;
+        }
+        finally { _actionDepth--; }
+    }
+
+    // How many HandlePlayerAction calls are on the stack. Nested AI answers (bot bids, defender
+    // replies) are regenerated from the seed on resume, so only depth 1 is written to the save.
+    int _actionDepth;
+
+    bool ApplyLocalAction(PlayerAction action)
+    {
         if (action is BidAction bid)
             return ApplyBid(bid.EnergyThePlayerBid);
         if (action is ChooseTurnPositionAction seat)
@@ -968,6 +1173,11 @@ public class GameManager : MonoBehaviour
         if (action is BuyCommandCardAction buy)
         {
             CommandCards.Buy(buy.Player, buy.Deck);
+            return true;
+        }
+        if (action is CloseShopAction)
+        {
+            ShopClosed = true;
             return true;
         }
         if (action is PlayCommandCardAction play)
@@ -1006,13 +1216,17 @@ public class GameManager : MonoBehaviour
 
         // AI defenders, and players whose device dropped, decide instantly.
         var asked = InputPlayer;
-        if (asked != null && (asked.IsBot() || !IsConnected(asked)))
+        var finishMine = IsDrafting && IsLocal(asked) && (
+            (_draftHelp == DraftHelp.Claim && decision.Kind == DecisionKind.ClaimTerritory)
+            || (_draftHelp == DraftHelp.Place && decision.Kind == DecisionKind.PlaceStartingTroops));
+        if (asked != null && (asked.IsBot() || !IsConnected(asked) || finishMine))
         {
             // The AI may look at the player's hand, so online the host decides and the others use its answer.
             HandlePlayerAction(new DecisionResponseAction(asked, _turn, Secrets.Public(() => DefenderAI.Choose(this, decision))));
             return;
         }
-        if (decision.Kind is DecisionKind.DefenseReaction or DecisionKind.EvacuationDestination
+        if (decision.Kind is DecisionKind.DefenseReaction or DecisionKind.DefenseDice
+            or DecisionKind.EvacuationDestination
             or DecisionKind.ArmageddonCard or DecisionKind.ArmageddonTarget)
             _decisionClock.Start(Time.realtimeSinceStartupAsDouble, ReactionTimeoutSeconds);
     }
@@ -1067,6 +1281,8 @@ public class GameManager : MonoBehaviour
         FinalRanking = Scoring.Ranking(Players);
         Debug.Log("Game over. " + string.Join(", ", FinalRanking.Select(p => $"{p.Name}: {Scoring.ScoreOf(p)}")));
         SetGameState(GameState.Over);
+        if (Correspondence.IsPlaying) Correspondence.NoteSaved(this);
+        else MatchSave.Delete();
     }
 
     // Colony Influence cards count in the final score, so at the end every device sees every hand.

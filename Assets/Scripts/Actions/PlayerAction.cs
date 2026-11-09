@@ -44,6 +44,15 @@ namespace Actions
             string name = GetType().Name;
             UnityEngine.Debug.LogError(name + " ERROR: " + message);
         }
+
+        // A rule the player can fix. Not a console error.
+        protected void Reject(string message)
+        {
+            LogWarning(message);
+            var gm = GameManager.Instance;
+            if (gm != null && gm.IsLocal(Player))
+                gm.TurnHud?.Flash(message, 4f);
+        }
     }
 }
 

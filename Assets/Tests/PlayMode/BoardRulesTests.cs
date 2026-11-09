@@ -54,8 +54,8 @@ public class BoardRulesTests
         var b = OpeningDeal.Deal(12, 2, new SeededRandom(4));
         CollectionAssert.AreEqual(a.OwnerOf, b.OwnerOf);
         CollectionAssert.AreEqual(a.Troops, b.Troops);
-        Assert.AreEqual(40, a.Troops.Where((t, i) => a.OwnerOf[i] == 0).Sum());
-        Assert.AreEqual(40, a.Troops.Where((t, i) => a.OwnerOf[i] == 1).Sum());
+        Assert.AreEqual(30, a.Troops.Where((t, i) => a.OwnerOf[i] == 0).Sum());
+        Assert.AreEqual(30, a.Troops.Where((t, i) => a.OwnerOf[i] == 1).Sum());
 
         var other = OpeningDeal.Deal(12, 2, new SeededRandom(5));
         Assert.IsFalse(a.Troops.SequenceEqual(other.Troops) && a.OwnerOf.SequenceEqual(other.OwnerOf));

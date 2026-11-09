@@ -10,6 +10,9 @@ namespace InvadeEarth.Rules
         public int Troops;
         public bool Station;
         public int[] Neighbours = Array.Empty<int>();
+        public int Continent = -1;
+        // "Land", "Sea", or "Moon". Empty on the tiny test maps, which have no water gate.
+        public string Terrain;
     }
 
     // A map with no scene. Reinforce, attack, move-in and one fortify, using the same

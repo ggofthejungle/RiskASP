@@ -29,8 +29,8 @@ namespace Actions
         }
 
         // The commanders in a territory that attack with an 8-sided die (what the AI brings along).
-        public static List<CommanderType> D8Commanders(Territory origin) =>
-            origin.CommandersList.Where(c => BattleSimulator.AttacksWithD8(c.CommanderType)).Select(c => c.CommanderType).ToList();
+        public static List<CommanderType> D8Commanders(Territory origin, Territory target) =>
+            origin.CommandersList.Where(c => BattleSimulator.AttacksWithD8(c.CommanderType, origin, target)).Select(c => c.CommanderType).ToList();
 
         public override bool IsValid()
         {
@@ -66,13 +66,20 @@ namespace Actions
                     return false;
                 }
 
-            if (Origin.GetAvailableTroops() < 1)
+            var units = Origin.Troops + Origin.CommandersList.Count;
+            if (units < 2)
             {
-                LogWarning($"{Origin.Name} needs at least one unit that can move in if the attack wins");
+                LogWarning($"{Origin.Name} needs at least two units to invade. A commander counts as a unit.");
                 return false;
             }
 
-            if (Troops > Origin.GetAvailableTroops())
+            if (Troops + Commanders.Count > units - 1)
+            {
+                LogWarning("Leave at least one unit behind.");
+                return false;
+            }
+
+            if (Troops > Origin.Troops)
             {
                 LogError($"Troops ({Troops}) is greater than available troops ({Origin.GetAvailableTroops()})");
                 return false;
@@ -97,11 +104,33 @@ namespace Actions
                 return false;
             }
 
-            if (!Origin.IsNeighbourOf(Target))
+            var surface = GameManager.Instance != null && GameManager.Instance.CommandCards != null
+                && GameManager.Instance.CommandCards.AllowsSurfaceAttack(Player, Origin, Target);
+            if (!Origin.IsNeighbourOf(Target) && !surface)
             {
                 LogError($"Origin territory ({Origin.Name}) is not a neighbour of Target territory ({Target.Name})");
                 return false;
             }
+
+            var locked = Expansions.Purchases.WhyCantEnterBattle(Player, Origin, Target);
+            if (locked != null)
+            {
+                LogWarning(locked);
+                return false;
+            }
+
+            if (Origin.Kind == TerrainKind.Moon && Target.Kind == TerrainKind.Land && !surface)
+            {
+                LogWarning("The Moon can attack Earth only with Invade Earth.");
+                return false;
+            }
+
+            foreach (var type in Commanders)
+                if (!Expansions.Purchases.CanStand(type, Target))
+                {
+                    LogError($"A {type} can't enter {Target.Name}.");
+                    return false;
+                }
 
             return base.IsValid();
         }

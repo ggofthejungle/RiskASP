@@ -90,6 +90,7 @@ namespace TurnPhases
 
         public void End(Player player)
         {
+            _gm.CommandCards?.RevealBought(player);
         }
     }
 }

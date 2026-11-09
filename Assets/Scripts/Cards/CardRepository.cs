@@ -103,6 +103,37 @@ namespace Cards
             
         }
 
+        bool _frontierDecks;
+
+        // Seas and the moon are built after this object awakes, so their cards are added then.
+        public void AddFrontierDecks()
+        {
+            if (_frontierDecks) return;
+            _frontierDecks = true;
+            var list = new List<Card>(AllCards);
+            void AddRange(IReadOnlyList<(CardType Type, int Copies)> entries)
+            {
+                foreach (var (type, copies) in entries)
+                    for (var i = 0; i < copies; i++)
+                    {
+                        var card = new Card(Abilities.FindFor(type), type) { Id = list.Count };
+                        switch (CommanderFor(type))
+                        {
+                            case CommanderType.NavalCommander: NavalCommander.AddCard(card); break;
+                            case CommanderType.SpaceCommander: SpaceCommander.AddCard(card); break;
+                            default: NuclearCommander.AddCard(card); break;
+                        }
+                        list.Add(card);
+                        CardsInDeck.Add(card);
+                        _deckCount[card.Commander] = DeckCount(card.Commander) + 1;
+                    }
+            }
+            AddRange(DeckLists.Naval);
+            AddRange(DeckLists.Space);
+            AddRange(DeckLists.FrontierNuclear);
+            AllCards = list.ToArray();
+        }
+
         // private IEnumerable<CardExchangeType> GenerateExchangeTypes()
         // {
         //     return new CardExchangeType[]

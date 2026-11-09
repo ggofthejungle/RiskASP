@@ -40,6 +40,7 @@ namespace TurnPhases.Selection
                 Unselect();
                 return;
             }
+            if (selection.IsDisabled || selection.Territory.Owner != player) return;
             
             _selectedTerritory = selection;
             _selectedTerritory.Select();

@@ -27,6 +27,8 @@ public class ActionReader : MonoBehaviour
         }
     }
 
+    public int Count => _actions.Count;
+
     public void AddAction(PlayerAction action)
     {
         _actions.Enqueue(action);

@@ -48,8 +48,11 @@ namespace player
         {
             var playerConfiguration = playerCreationConfiguration.PlayerConfiguration;
             Player player;
-            if(playerConfiguration is BotConfiguration)
+            if (playerConfiguration is BotConfiguration botConfiguration)
+            {
                 player = CreateBotPlayer();
+                player.GetComponent<BotPlayer>().SetConfiguration(botConfiguration);
+            }
             else if(playerConfiguration is HumanPlayerConfiguration)
                 player = CreateHumanPlayer();
             else

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using TurnPhases;
 using UnityEngine;
 
@@ -9,6 +10,12 @@ namespace player
     {
         public BotConfiguration BotConfiguration => _botConfiguration;
         [SerializeField] private BotConfiguration _botConfiguration;
+
+        // The seat's pick from the menu; the prefab's own one is only the default.
+        public void SetConfiguration(BotConfiguration configuration)
+        {
+            if (configuration != null) _botConfiguration = configuration;
+        }
 
         public BotBrain BotBrain => _botBrain;
         [SerializeField] private BotBrain _botBrain;
@@ -34,6 +41,23 @@ namespace player
             if (_gm == null) return; // the match scene is being torn down
             _gm.OnTurnPhaseChanged += OnTurnPhaseChanged;
             _gm.AttackPhase.OnAttackTurn += OnAttackPhaseTurn;
+            _gm.FortifyPhase.OnFortifyAction += OnFortified;
+        }
+
+        private void OnDisable()
+        {
+            if (_gm == null) return;
+            _gm.OnTurnPhaseChanged -= OnTurnPhaseChanged;
+            _gm.AttackPhase.OnAttackTurn -= OnAttackPhaseTurn;
+            _gm.FortifyPhase.OnFortifyAction -= OnFortified;
+        }
+
+        // Redeployment: the phase stays open for one more move, so take another step once this one is done.
+        private void OnFortified(Actions.FortifyAction action)
+        {
+            if (action.Player == _player && _gm.RunsBotAI && _gm.FortifyPhase.ExtraMoves > 0
+                && _botBrain.UsesHeuristic(this))
+                _waiting = true;
         }
 
 
@@ -42,13 +66,12 @@ namespace player
             if (!_gm.IsCurrentPlayer(_player) || !_gm.RunsBotAI)
                 return;
 
-            // skip first attack turn, since it's handled by
-            // OnTurnPhaseChanged
-            if (_gm.AttackPhase.AttackTurn <= 1)
+            // The event raised as the phase starts comes before OnTurnPhaseChanged, which handles that one.
+            // (Not "AttackTurn <= 1": Cease Fire on the first attack raises it again without a new turn.)
+            if (_botBrain.CurrentPhase != _botBrain.AttackPhase)
                 return;
 
-
-            _botBrain.HandleCommunication(this, _player);
+            Think();
         }
 
         private void OnTurnPhaseChanged(IPhase oldPhase, IPhase newPhase)
@@ -58,13 +81,50 @@ namespace player
                 || !_gm.RunsBotAI)
                 return;
 
-            if (newPhase is ReinforcePhase)
-                foreach (var action in BotEconomy.Plan(_gm, _player))
-                    ActionReader.Instance.AddAction(action);
-
             _botBrain.OnTurnPhaseChanged(oldPhase, newPhase);
+            _waiting = false;
+            if (newPhase is ReinforcePhase)
+            {
+                var plan = BotEconomy.Plan(_gm, _player);
+                foreach (var action in plan)
+                    ActionReader.Instance.AddAction(action);
+                // MOD Reduction / Armageddon: placing now would be refused while the others answer.
+                if (plan.Any(BotEconomy.StopsTheGame))
+                {
+                    _waiting = true;
+                    return;
+                }
+            }
             if (newPhase is not EmptyPhase)
-                _botBrain.HandleCommunication(this, _player);
+                Think();
+        }
+
+        // Set while the bot's next step has to wait: its queued actions haven't run yet, or someone is
+        // answering a question (a card's, a defender's).
+        private bool _waiting;
+
+        private void Think()
+        {
+            if (_gm.PendingDecision != null)
+            {
+                _waiting = true;
+                return;
+            }
+            _botBrain.HandleCommunication(this, _player);
+        }
+
+        private void Update()
+        {
+            if (!_waiting || _gm == null) return;
+            if (!_gm.IsCurrentPlayer(_player) || _gm.GameState != GameState.Playing || !_gm.RunsBotAI
+                || _gm.CurrentPhase is EmptyPhase)
+            {
+                _waiting = false;
+                return;
+            }
+            if (_gm.PendingDecision != null || ActionReader.Instance.Count > 0) return;
+            _waiting = false;
+            Think();
         }
 
         // This device just started running the bots (it became the online host) in the middle of the
@@ -74,12 +134,11 @@ namespace player
             if (!_gm.IsCurrentPlayer(_player)
                 || _gm.GameState != GameState.Playing
                 || !_gm.RunsBotAI
-                || _gm.PendingDecision != null
                 || _gm.CurrentPhase is EmptyPhase)
                 return;
 
             _botBrain.OnTurnPhaseChanged(null, _gm.CurrentPhase);
-            _botBrain.HandleCommunication(this, _player);
+            Think();
         }
     }
 }

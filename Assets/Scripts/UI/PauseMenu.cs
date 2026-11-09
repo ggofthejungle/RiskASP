@@ -87,9 +87,9 @@ namespace UI
         {
             _confirming = false;
             _leaveLabel.text = "Leave match";
-            _body.text = _gm != null && _gm.Relay != null
-                ? "The match keeps going while this is open."
-                : "Leaving ends this game.";
+            _body.text = Correspondence.IsPlaying ? "The match is saved in the cloud. Other players take their turns whenever they're free."
+                : _gm != null && _gm.Relay != null ? "The match keeps going while this is open."
+                : "Your progress is saved. Continue from the main menu.";
             transform.SetAsLastSibling();
             _root.SetActive(true);
         }
@@ -114,7 +114,8 @@ namespace UI
 
         string LeaveWarning()
         {
-            if (_gm == null || _gm.Relay == null) return "Leave this game? It can't be resumed.";
+            if (Correspondence.IsPlaying) return "Leave? Your turn is saved. Open Your games on the main menu to continue.";
+            if (_gm == null || _gm.Relay == null) return "Leave? You can continue this game from the main menu.";
             if (OnlineNet.IsHost) return "You're the host. If you leave, another player's device takes over the match.";
             var code = OnlineRoom.LastCode;
             return string.IsNullOrEmpty(code)
@@ -125,6 +126,12 @@ namespace UI
         async void LeaveNow()
         {
             _root.SetActive(false);
+            if (Correspondence.IsPlaying && _gm != null)
+            {
+                try { await Correspondence.FlushAsync(_gm); }
+                catch (System.Exception e) { Debug.LogWarning("Cloud save on leave failed: " + e.Message); }
+            }
+            else if (_gm != null && _gm.Relay == null) MatchSave.Flush(_gm);
             if (_gm != null && _gm.Relay != null && OnlineRoom.InRoom)
             {
                 try { await OnlineRoom.LeaveAsync(); }

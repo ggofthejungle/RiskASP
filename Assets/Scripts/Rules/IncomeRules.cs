@@ -6,8 +6,9 @@ namespace InvadeEarth.Rules
         public const int StartingEnergy = 3;
         public const int StationTroopGrant = 1;
 
-        // 2210 Score Chart: the space for the number of territories you control gives that many MODs AND
-        // that much energy: territories / 3 (fractions dropped), at least 3. Continent bonuses add to both.
+        // The Score Chart's lower-right number is this: territories / 3, fraction dropped, at least 3.
+        // That many MODs, and the same amount of energy. A space station adds one MOD and no energy.
+        // Continent and colony bonuses are added on top; those numbers are printed on the board.
         public static int ScoreChart(int territoryCount) => System.Math.Max(3, territoryCount / 3);
 
         public static int EnergyIncome(int territoryCount, int continentBonus = 0) =>

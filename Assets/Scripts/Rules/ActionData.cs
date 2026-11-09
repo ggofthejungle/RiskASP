@@ -39,5 +39,6 @@ namespace Actions
         public const string TypeBuild = "Build";
         public const string TypeBuy = "Buy";
         public const string TypePlay = "Play";
+        public const string TypeCloseShop = "CloseShop";
     }
 }

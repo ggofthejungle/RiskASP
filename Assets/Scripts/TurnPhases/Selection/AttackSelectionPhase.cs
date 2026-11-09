@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Actions;
 using Map;
 using player;
@@ -80,6 +81,13 @@ namespace TurnPhases.Selection
 
             if (_from == null)
             {
+                var locked = Expansions.Purchases.WhyCantEnterBattle(player, selection.Territory, selection.Territory);
+                if (locked != null)
+                {
+                    _gm.TurnHud?.Flash(locked);
+                    return;
+                }
+                if (selection.IsDisabled || selection.Territory.Owner != player) return;
                 _from = selection;
                 _from.Select();
                 EnableTerritoriesToAttack(player);
@@ -88,6 +96,19 @@ namespace TurnPhases.Selection
             {
                 if (_from == selection)
                     throw new Exception("Cannot attack from a territory to itself");
+                var locked = Expansions.Purchases.WhyCantEnterBattle(player, _from.Territory, selection.Territory);
+                if (locked != null)
+                {
+                    _gm.TurnHud?.Flash(locked);
+                    return;
+                }
+                if (_from.Territory.Kind == TerrainKind.Moon && selection.Territory.Kind == TerrainKind.Land
+                    && (_gm.CommandCards == null || !_gm.CommandCards.AllowsSurfaceAttack(player, _from.Territory, selection.Territory)))
+                {
+                    _gm.TurnHud?.Flash("The Moon can attack Earth only with Invade Earth.");
+                    return;
+                }
+                if (selection.IsDisabled || selection.Territory.Owner == player) return;
                 _to = selection;
                 _to.Select();
 
@@ -177,6 +198,10 @@ namespace TurnPhases.Selection
         {
             _sm.DisableAllTerritories();
             _sm.EnablePlayerTerritoriesWithAttackPossibility(player);
+            if (_gm.CommandCards == null) return;
+            foreach (var t in player.Territories)
+                if (t.GetAvailableTroops() > 0 && _gm.CommandCards.SurfaceLands(player).Any(land => _gm.CommandCards.AllowsSurfaceAttack(player, t, land)))
+                    _sm.EnableTerritory(t);
         }
 
         private void EnableTerritoriesToAttack(Player player)
@@ -184,9 +209,18 @@ namespace TurnPhases.Selection
             _sm.DisableAllTerritories();
             _sm.EnableEnemyNeighbourTerritories(_from.Territory);
             foreach (var n in _from.Territory.NeighbourTerritories)
+            {
                 if (n.Owner != player && _gm.AttackPhase.IsCeaseFireAgainst(n.Owner))
                     _sm.TerritoryToSelectionMap[n].Disable();
+                if (_from.Territory.Kind == TerrainKind.Moon && n.Kind == TerrainKind.Land
+                    && (_gm.CommandCards == null || !_gm.CommandCards.AllowsSurfaceAttack(player, _from.Territory, n)))
+                    _sm.TerritoryToSelectionMap[n].Disable();
+            }
             _sm.EnableTerritory(_from);
+            if (_gm.CommandCards == null) return;
+            foreach (var land in _gm.CommandCards.SurfaceLands(player))
+                if (_gm.CommandCards.AllowsSurfaceAttack(player, _from.Territory, land) && !_gm.AttackPhase.IsCeaseFireAgainst(land.Owner))
+                    _sm.EnableTerritory(land);
         }
 
 

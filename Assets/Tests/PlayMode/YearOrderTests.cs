@@ -26,14 +26,14 @@ public class YearOrderTests
     }
 
     [Test]
-    public void EqualBids_UseTheTieBreakKeys()
+    public void EqualBids_HighDieChoosesFirst()
     {
         var start = BothBidOne();
-        Assert.IsTrue(YearOrder.TryBid(start, 1, 1, new ScriptedRandom(10, 1), out var lowKeySecond));
-        CollectionAssert.AreEqual(new[] { 1, 0 }, lowKeySecond.ChooserIds, "Smaller key goes first");
+        Assert.IsTrue(YearOrder.TryBid(start, 1, 1, new ScriptedRandom(2, 5), out var highSecond));
+        CollectionAssert.AreEqual(new[] { 1, 0 }, highSecond.ChooserIds, "Player 1 rolled 5, player 0 rolled 2");
 
-        Assert.IsTrue(YearOrder.TryBid(start, 1, 1, new ScriptedRandom(1, 10), out var lowKeyFirst));
-        CollectionAssert.AreEqual(new[] { 0, 1 }, lowKeyFirst.ChooserIds);
+        Assert.IsTrue(YearOrder.TryBid(start, 1, 1, new ScriptedRandom(6, 3), out var highFirst));
+        CollectionAssert.AreEqual(new[] { 0, 1 }, highFirst.ChooserIds);
     }
 
     [Test]

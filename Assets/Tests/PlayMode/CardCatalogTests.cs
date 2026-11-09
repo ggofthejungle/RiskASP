@@ -16,7 +16,9 @@ public class CardCatalogTests
         Assert.AreEqual(RuleTiming.EndOfGame, CardCatalog.For("ColonyInfluenceL").Timing);
         Assert.AreEqual(4, CardCatalog.For("Armageddon").PowerUpCost);
         Assert.AreEqual(RuleTiming.BeforeFirstInvasion, CardCatalog.For("Armageddon").Timing);
-        Assert.AreEqual(RuleTiming.NotImplemented, CardCatalog.For("AquaBrother").Timing); // water card, not on our map
+        Assert.AreEqual(3, CardCatalog.For("AquaBrother").PowerUpCost);
+        Assert.AreEqual(RuleTiming.BeforeFirstInvasion, CardCatalog.For("AquaBrother").Timing);
+        Assert.AreEqual(RuleTiming.BeforeFirstInvasion, CardCatalog.For("NickyBoy").Timing);
         Assert.AreEqual(1, CardCatalog.BuyCost);
         Assert.AreEqual(4, CardCatalog.MaxBuysPerTurn);
     }

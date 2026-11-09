@@ -12,6 +12,17 @@ Picture of the map after the seas were moved. No sea disc overlapped another ter
 - 11 seas and the 6 moon territories (59 on the board). The moon row is below the land and linked only to its side-by-side neighbours.
 - Siam is not connected to Monsoon Reach. Alaska is not connected to the arctic group.
 
+### Nov 7, ~7:10 PM — naval commander, naval cards, moon on screen
+
+Same match scene. The moon row was behind the card bar, so the camera pulls back until that row sits just above it. 37 checks, 0 failures.
+
+- Sea to a neighbouring sea, with the naval commander: allowed. 3 MODs plus that commander: rejected. A sea that does not touch the target: rejected.
+- Sea to a neighbouring land: MODs allowed, the naval commander rejected, a diplomat allowed.
+- Land to a neighbouring sea: MODs allowed, the land commander rejected. A land that does not touch that sea: rejected.
+- A 1-unit sea cannot attack. Fortify can move MODs from your sea onto your coast, and cannot bring the naval commander, empty the sea, or skip to a sea that does not touch.
+- Assemble and reinforcements stay on seas. A water rocket refuses land and leaves a 1-unit sea at 1. Hidden Energy pays 4 only while you still hold the drawn sea. Water Death Trap and naval Stealth MODs answer a sea invasion only. The trap cut 4 attackers to 2.
+- Moon to a neighbouring moon with the space commander: allowed. That commander cannot enter a sea or land. A station lets MODs on the near side attack that land.
+
 ### Nov 7, ~3:40 PM — every new card once, at 5 then 4 then 3 players
 
 First command step. Each seat was given Naval, Space, Land, Diplomat, and Nuclear.

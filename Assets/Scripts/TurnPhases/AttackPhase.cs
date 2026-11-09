@@ -121,7 +121,7 @@ namespace TurnPhases
                 return;
             }
 
-            ResolveAttack(attackAction);
+            AskDiceOrResolve(attackAction);
         }
 
         private void AskDefender(AttackAction attack)
@@ -206,16 +206,43 @@ namespace TurnPhases
             }
             if (troops != attack.Troops)
                 attack = new AttackAction(attack.Player, attack.Turn, attack.AttackTurn, attack.Origin, attack.Target, troops, attack.Commanders);
-            ResolveAttack(attack);
+            AskDiceOrResolve(attack);
+        }
+
+        // The defender picks 1 or 2 dice when they have the units. A neutral army, an empty
+        // territory, and a single unit do not get a question.
+        private void AskDiceOrResolve(AttackAction attack)
+        {
+            var target = attack.Target;
+            var troops = target.Troops;
+            var owner = target.Owner;
+            if (troops <= 0 || owner == null || owner.Neutral || troops < 2)
+            {
+                ResolveAttack(attack, troops <= 0 ? 0 : 1);
+                return;
+            }
+            _pendingAttack = attack;
+            SetState(AttackState.AwaitingDefender);
+            _gm.OpenDecision(new PendingDecision(_gm.GetPlayerId(owner), DecisionKind.DefenseDice, new[] { "1", "2" }),
+                OnDefenseDice);
+        }
+
+        private void OnDefenseDice(DecisionResponseAction response)
+        {
+            var attack = _pendingAttack;
+            _pendingAttack = null;
+            if (attack == null) return;
+            SetState(AttackState.Attacking);
+            ResolveAttack(attack, response.Option == "2" ? 2 : 1);
         }
 
         // Rolls the dice for a declared attack and applies the result.
-        private void ResolveAttack(AttackAction attackAction)
+        private void ResolveAttack(AttackAction attackAction, int defenderDice)
         {
             // Evacuated (empty) territory: no battle, the attacker simply takes it.
             var attackResult = attackAction.Target.Troops == 0
                 ? new AttackResult(attackAction, 0, 0, attackAction.Origin.Troops, 0, 0, new int[0], new int[0])
-                : _bs.SimulateAttack(attackAction);
+                : _bs.SimulateAttack(attackAction, defenderDice);
 
             var applied = TroopMovement.ApplyBattle(
                 attackResult.Origin.Troops,
@@ -244,11 +271,17 @@ namespace TurnPhases
             {
                 Purchases.OnTerritoryConquered(attackResult.Target, attackAction.Player);
                 attackResult.Target.SetOwner(attackAction.Player, 0);
-                // Commanders that attacked move in with the army (2210 FAQ).
-                FortifyAction.MoveCommanders(attackResult.Origin, attackResult.Target, attackAction.Commanders);
-                ConqueredTerritoriesCount++;
-                if (IncomeRules.EarnsConquestBonus(ConqueredTerritoriesCount))
-                    _gm.CommandCards?.GrantConquestBonus(attackAction.Player);
+                // A commander who rolled a d8 must move in. A commander who rolled a d6 may stay.
+                var forced = attackAction.Commanders.Where(t =>
+                    BattleSimulator.AttacksWithD8(t, attackResult.Origin, attackResult.Target));
+                FortifyAction.MoveCommanders(attackResult.Origin, attackResult.Target, forced);
+                // The 3-territory bonus is only for contested territories (they had enemy units).
+                if (attackResult.DefendingTroops > 0)
+                {
+                    ConqueredTerritoriesCount++;
+                    if (IncomeRules.EarnsConquestBonus(ConqueredTerritoriesCount))
+                        _gm.CommandCards?.GrantConquestBonus(attackAction.Player);
+                }
                 SetState(AttackState.Fortifying);
             }
             

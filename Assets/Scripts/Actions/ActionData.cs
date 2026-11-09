@@ -80,6 +80,9 @@ namespace Actions
                     data.Type = ActionData.TypeBuy;
                     data.Deck = buy.Deck.ToString();
                     break;
+                case CloseShopAction:
+                    data.Type = ActionData.TypeCloseShop;
+                    break;
                 case PlayCommandCardAction play:
                     data.Type = ActionData.TypePlay;
                     data.CardId = play.Card.Id;
@@ -130,6 +133,8 @@ namespace Actions
                     return new BuildSpaceStationAction(actor, data.Turn, tr.FromName(data.Origin));
                 case ActionData.TypeBuy:
                     return new BuyCommandCardAction(actor, data.Turn, ParseCommander(data.Deck));
+                case ActionData.TypeCloseShop:
+                    return new CloseShopAction(actor, data.Turn);
                 case ActionData.TypePlay:
                 {
                     var card = FindCard(data.CardId);

@@ -12,9 +12,9 @@ namespace UI
     // The player whose turn it is gets an arrow; eliminated players are dimmed; dropped online players say "away".
     public class Scoreboard : MonoBehaviour
     {
-        const float RowHeight = 30f;
-        const float Width = 360f;
-        const float HeaderHeight = 30f;
+        const float RowHeight = 38f;
+        const float Width = 460f;
+        const float HeaderHeight = 36f;
         static readonly Color Dim = new(1f, 1f, 1f, 0.38f);
         static readonly Color Muted = new(0.70f, 0.73f, 0.80f, 1f);
 
@@ -53,12 +53,12 @@ namespace UI
             _panel.anchoredPosition = new Vector2(12f, -12f);
             TurnHud.FramePopup(panel, TurnHud.PopupFill, 2f);
 
-            _header = TurnHud.NewText("Header", _panel, 15, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
+            _header = TurnHud.NewText("Header", _panel, 20, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
             _header.color = TurnHud.PopupBorder;
             _header.characterSpacing = 2f;
             TurnHud.Place(_header.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(12f, -HeaderHeight), new Vector2(-8f, -4f));
 
-            var labels = TurnHud.NewText("Columns", _panel, 12, FontStyles.Bold, TextAlignmentOptions.MidlineRight);
+            var labels = TurnHud.NewText("Columns", _panel, 15, FontStyles.Bold, TextAlignmentOptions.MidlineRight);
             labels.color = Muted;
             labels.text = "SCORE    ENERGY    CARDS    LAND";
             TurnHud.Place(labels.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(12f, -HeaderHeight - 18f), new Vector2(-12f, -HeaderHeight));
@@ -69,22 +69,23 @@ namespace UI
 
         Row NewRow(int index)
         {
-            var top = -(HeaderHeight + 20f + index * RowHeight);
+            var top = -(HeaderHeight + 24f + index * RowHeight);
             var row = new Row();
             row.Swatch = TurnHud.NewImage("Swatch" + index, _panel, Color.gray);
-            TurnHud.Place(row.Swatch.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(12f, top - RowHeight + 6f), new Vector2(18f, top - 4f));
+            TurnHud.Place(row.Swatch.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f),
+                new Vector2(12f, top - RowHeight + 6f), new Vector2(40f, top - 6f));
 
-            row.Name = Cell("Name" + index, TextAlignmentOptions.MidlineLeft, 26f, 150f, top);
-            row.Score = Cell("Score" + index, TextAlignmentOptions.MidlineRight, 176f, 42f, top);
-            row.Energy = Cell("Energy" + index, TextAlignmentOptions.MidlineRight, 226f, 46f, top);
-            row.Cards = Cell("Cards" + index, TextAlignmentOptions.MidlineRight, 280f, 34f, top);
-            row.Land = Cell("Land" + index, TextAlignmentOptions.MidlineRight, 314f, 34f, top);
+            row.Name = Cell("Name" + index, TextAlignmentOptions.MidlineLeft, 48f, 160f, top);
+            row.Score = Cell("Score" + index, TextAlignmentOptions.MidlineRight, 214f, 52f, top);
+            row.Energy = Cell("Energy" + index, TextAlignmentOptions.MidlineRight, 274f, 56f, top);
+            row.Cards = Cell("Cards" + index, TextAlignmentOptions.MidlineRight, 338f, 48f, top);
+            row.Land = Cell("Land" + index, TextAlignmentOptions.MidlineRight, 392f, 48f, top);
             return row;
         }
 
         TMP_Text Cell(string name, TextAlignmentOptions align, float x, float width, float top)
         {
-            var t = TurnHud.NewText(name, _panel, 17, FontStyles.Normal, align);
+            var t = TurnHud.NewText(name, _panel, 22, FontStyles.Normal, align);
             t.textWrappingMode = TextWrappingModes.NoWrap;
             t.overflowMode = TextOverflowModes.Truncate;
             TurnHud.Place(t.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(x, top - RowHeight), new Vector2(x + width, top));
@@ -133,7 +134,7 @@ namespace UI
             }
 
             var visible = Mathf.Min(order.Count, _rows.Count);
-            _panel.sizeDelta = new Vector2(Width, HeaderHeight + 26f + visible * RowHeight);
+            _panel.sizeDelta = new Vector2(Width, HeaderHeight + 32f + visible * RowHeight);
         }
     }
 }

@@ -8,6 +8,7 @@ namespace Decisions
     public enum DecisionKind
     {
         DefenseReaction, // defender may react before an attack's dice are rolled
+        DefenseDice,     // defender chooses 1 or 2 dice before the roll
         RemoveUnits,     // MOD Reduction: pick one of your territories to lose a unit (options = territory names)
         PlaceStartingUnit, // game start: pick the territory for a starting unit (Subject = Diplomat / LandCommander / SpaceStation)
         EvacuationDestination, // Evacuation: pick where the units go (options = your other territories, Subject = attacked territory)
@@ -27,7 +28,7 @@ namespace Decisions
     // A question the game is waiting on. While one is open, the player it names is the
     // "input owner": only they may act, and only by answering it (DecisionResponseAction).
     // Plain C# (ids and strings only) so it can be sent over the network later.
-    [Serializable]
+    // Not [Serializable]: Unity would rebuild it empty (Options null) after a script reload in Play Mode.
     public sealed class PendingDecision
     {
         public int PlayerId { get; }

@@ -18,8 +18,13 @@ namespace UI
         public int PlayerCount => _startingPlayersConfiguration.PlayersConfiguration.Count;
         
         
+        // The C# bot (MM-2). Loaded here so the seat picker offers it without a scene edit.
+        public const string StandardBotName = "Standard BOT";
+        const string StandardBotResource = "Bots/standard_bot_conf";
+
         private void Awake()
         {
+            AddStandardBot();
             _startingPlayersConfiguration.PlayersConfiguration.Clear();
             
             _startGameButton.interactable = PlayerCount >= 2;
@@ -56,7 +61,7 @@ namespace UI
             else
             {
                 AddDefault(0, "Red", "You", "Human");
-                AddDefault(1, "Blue", "Bot", "Dumb BOT");
+                AddDefault(1, "Blue", "Bot", StandardBotName);
             }
             _startGameButton.interactable = PlayerCount >= 2;
         }
@@ -72,7 +77,8 @@ namespace UI
             var list = _startingPlayersConfiguration.PlayersConfiguration;
             list.Clear();
             var human = PlayerConfigurations[ConfigIndex("Human")];
-            var bot = PlayerConfigurations[ConfigIndex("Dumb BOT")];
+            // The host may be a phone: online bots play the C# way.
+            var bot = PlayerConfigurations[ConfigIndex(StandardBotName)];
             for (int i = 0; i < names.Count; i++)
             {
                 list.Add(new PlayerCreationConfiguration
@@ -82,6 +88,18 @@ namespace UI
                     PlayerColor = PlayerColors[ColorIndex(OnlineColors[i % OnlineColors.Length])],
                 });
             }
+        }
+
+        // Also called by the seats, whose Awake (which fills their dropdowns) may run before this one's.
+        public void AddStandardBot()
+        {
+            var standard = Resources.Load<BotConfiguration>(StandardBotResource);
+            if (standard == null) return;
+            var list = PlayerConfigurations ?? Array.Empty<PlayerConfiguration>();
+            if (Array.IndexOf(list, standard) >= 0) return;
+            Array.Resize(ref list, list.Length + 1);
+            list[list.Length - 1] = standard;
+            PlayerConfigurations = list;
         }
 
         public void ClearAll()
@@ -131,8 +149,32 @@ namespace UI
         }
 
 
+        // Continue: write the saved seats onto the starting configuration the match scene reads.
+        public bool ApplySavedSeats(string[] seats)
+        {
+            AddStandardBot();
+            if (seats == null || seats.Length < 2 || _startingPlayersConfiguration == null) return false;
+            var list = _startingPlayersConfiguration.PlayersConfiguration;
+            list.Clear();
+            foreach (var seat in seats)
+            {
+                var name = MatchSave.SeatName(seat);
+                var color = MatchSave.SeatColor(seat);
+                var config = MatchSave.SeatConfig(seat);
+                if (string.IsNullOrEmpty(name)) return false;
+                list.Add(new PlayerCreationConfiguration
+                {
+                    PlayerConfiguration = PlayerConfigurations[ConfigIndex(string.IsNullOrEmpty(config) ? "Human" : config)],
+                    PlayerName = name,
+                    PlayerColor = PlayerColors[ColorIndex(string.IsNullOrEmpty(color) ? "Red" : color)],
+                });
+            }
+            return list.Count >= 2;
+        }
+
         private void StartGame()
         {
+            MatchSave.ClearPending();
             MatchSession.ArmForNextLoad();
             SceneManager.LoadScene("Main");
         }

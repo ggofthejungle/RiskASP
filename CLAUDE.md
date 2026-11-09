@@ -1,6 +1,6 @@
 # Invade Earth (RiskASP fork): handoff for Claude / Cursor
 
-Read this first. Last updated: Nov 7, 2026, ~6:30 PM. Everything through the "Nov 7 (~1 AM): committed and pushed" log is **committed and pushed on `dev`**; the later Nov 7 logs (SAVE-1, OL-6, Game view, card polish, two-player correspondence probe, seas and moon, 5/4/3 card probe, click and edge probe, card-bar fight, 3-player floors and caps, sea groups) are uncommitted. Owner: George (ggofthejungle).
+Read this first. Last updated: Nov 7, 2026, ~7:10 PM. Everything through the "Nov 7 (~1 AM): committed and pushed" log is **committed and pushed on `dev`**; the later Nov 7 logs (SAVE-1, OL-6, Game view, card polish, two-player correspondence probe, seas and moon, 5/4/3 card probe, click and edge probe, card-bar fight, 3-player floors and caps, sea groups) are uncommitted. Owner: George (ggofthejungle).
 **Full project plan (Trello + code, phases, open questions): `docs/PROJECT_PLAN.md`.**
 
 ## Where things are
@@ -138,7 +138,7 @@ PT-2 playtest fixes in working tree (not committed unless George asked again aft
   - Commander survival on 3v2/2v1 when excess losses would otherwise kill a commander with few MODs (may need extra rule beyond MOD-first; clarify with George if still broken after the dice-cap fix).
 
 ## Next steps (in order)
-Every task has a unique ID. **CURRENT: sea groups sit in open water, lines stop at the coast. Uncommitted.** Do not commit unless George asks. He pushes `dev` himself. No test runs (they hang Unity); compile + `Unity_RunCommand` probes only.
+Every task has a unique ID. **CURRENT: Larger UI, sea names off the land, taller turn banner and shop. Uncommitted.** Do not commit unless George asks. He pushes `dev` himself. No test runs (they hang Unity); compile + `Unity_RunCommand` probes only.
 
 Pick up: read `docs/frontier-test-log.md`. Still not covered: take-turns placement, and clicking with the mouse in the Game view (the probes call the button methods).
 
@@ -449,3 +449,70 @@ George: naval territories should sit in groups of 2 or 3 where there is open wat
 - Seas are smaller discs in the actual gaps. Gulf + North Atlantic (between the Americas and Europe). South Atlantic + Cape Basin (between South America and Africa). Indian Ocean + Monsoon Reach. South Pacific + East Passage + North Pacific, in a column east of Asia. Arctic Ocean + High North, above the Northwest Territory. 11 seas, 59 territories with the moon.
 - A line is drawn from the edge of one territory to the point where it meets the next. If anything else is in between, that link is not added. The moon row is below the land, and only neighbours in the row are linked. A station can still launch, and that route is still not drawn.
 - Aqua Brother's die hits these same groups. Siam is not a neighbour of Monsoon Reach: that line would cross another country. Alaska has no shape to stop a line on, so the arctic group connects to the Northwest Territory and Greenland instead.
+
+## Session log Nov 7 (~7 PM): naval edges and the moon row. UNCOMMITTED
+George: test naval attacks between water and water, water and land, and land and water, and he could not see the moon.
+
+- The moon is not another scene. It is the column labelled MOON in the open water west of the Americas, on the same match, when Seas and Moon is On. Pulling the camera back to show a bottom row made the sea discs tiny, so the closer view is restored and the moon sits in that frame.
+- The placement banner says YOU PLACE. Other players still get "NAME PLACES".
+- Probe, 37/37, later corrected: a naval commander attacks a neighbouring sea and is refused onto land. A land commander cannot go to sea. MODs no longer cross a coast without the Naval Commander (see the Nov 8 log). Unconnected seas cannot attack or fortify. A 1-unit sea cannot attack. 3 MODs plus the naval commander is over the dice cap. With the Naval Commander in play, fortify can move MODs from your sea onto your coast and cannot bring the naval commander or empty the sea. Assemble, reinforcements, and the water rocket stay on seas and leave a 1-unit sea at 1. Hidden Energy pays 4 only if you still hold the drawn sea. Water Death Trap and Stealth MODs answer a sea invasion and refuse a land one. A station lets the moon attack that land with MODs once the Space Commander is in play.
+
+## Session log Nov 8: water and moon need their commander. UNCOMMITTED
+George: India is land. Attacking Indian Ocean without a Naval Commander has to be refused. The commander card says you need him to send MODs into battle in water territories, and losing him locks those MODs down.
+
+- `Purchases.WhyCantEnterBattle` applies to invasions only. A sea on either end needs the Naval Commander in play. The Moon needs the Space Commander. He can be anywhere you hold. Fortify is allowed without him. Any commander can stand on any territory you occupy. Attack dice: Land d8 from or into land, Naval d8 from or into water, Space d8 from or into the Moon, Nuclear always, Diplomat never. Every commander defends with d8. The Moon cannot attack Earth except with Invade Earth. Rules text is in `docs/rules/`.
+- Sea and moon names are drawn beside the disc, at full size, so they are readable. Shop buttons use the whole bar and keep their words inside the button.
+
+## Session log Nov 8 (afternoon): the moon board. UNCOMMITTED, compiled (0/0), not play-tested
+George: match the rulebook, and first put in as many moon territories as the game has. Put a moon picture in the open Pacific. Clicking it opens a board that can be collapsed. He asked how attacks to and from the moon should work.
+
+- 14 territories, three colonies (`ash_belt` +2, `bright_sea` +2, `south_scar` +3). Those bonuses are ours until George checks the printed score chart. Names and borders are original. One landing site in each colony: `cinder_reach`, `quiet_basin`, `impact_basin`.
+- The picture in the Pacific is a door, not a territory. The 14 discs sit off the map with their colliders off, so they cannot be clicked by accident. `UI/MoonBoard` lists them by colony. Click a lit name and it is the same click as the map. Collapse stays shut until the moment that needed the board has passed. The board opens itself when a landing site becomes selectable, and once when a moon territory is part of the current step.
+- Earth to the Moon: click your space station, then a lit landing site on the board. Moon to moon: click on the board. The Moon cannot attack Earth except with Invade Earth, and that card works from any moon territory you have units on. Fortify does not need the Space Commander. The picture glows gold when a landing site can be clicked.
+
+## Session log Nov 8 (later): empty water, moon map, the rest of the sweep. UNCOMMITTED
+George: put the moon left of the Americas, leave water and the moon empty, and make the moon territories look connected. Then fix the rules the earlier sweep found and had not implemented.
+
+- The moon picture is at world (-17.7, 4.3), in the water west of Alaska. The board is a map of blobs with a line between neighbours.
+- Random setup and take-turns claim land only. Seas and moon stay unowned. Walking into an empty territory is an invasion with no dice roll. It does not count toward the 3-territory bonus. Bots will take an empty sea or moon when the commander for that terrain is in play.
+- Fortify can cross a path of your own territories, including a station linked to a landing site.
+- One unit must stay behind, and a commander counts as a unit. A commander who rolled a d8 moves in on a capture. A commander who rolled a d6 can stay.
+- An eliminated player's cards are discarded.
+- Still asking George: the reaction window (rules allow other players; we only ask the defender), and the printed colony bonus numbers. Face-down buys and the 2-player army (30 MODs plus a neutral) are in.
+
+## Session log Nov 8 (evening): moon board polish. UNCOMMITTED, compiled (0/0), not play-tested
+George: the grouped board is better, but it should look polished.
+
+- `UI/MoonBoard` draws three separate plates (Ash Belt +2, Bright Sea +2, South Scar +3) with a thin accent bar and a tint, so the groups no longer overlap.
+- Each territory is the same rounded card. The owner colour fills the card, a gold frame marks the selection, and "landing" sits on the troop line in gold.
+- Neighbour lines stop at the card edge.
+- The left rail is a legend: a colour chip, the colony name, and "+N MODs and energy". Restart Play to see it. The board is built when the match starts.
+
+## Session log Nov 8 (evening): India was opening the moon. UNCOMMITTED, probed
+George: clicking India opened the moon. Then test moon fights, the space commander, space, nuclear and land cards, including cards used on the wrong ground.
+
+- The board was opening whenever any moon territory was owned, and the neutral army owns moons. A land click, including India, no longer opens it. A space station still links that land to the three landing sites. The moon picture glows, and a line says to click the picture.
+- The board still opens when the territory you selected is on the moon, or a card is asking for a moon territory.
+- Clicking a territory a card cannot use flashes the reason. A card that cannot be played at all still opens its preview with the reason under the text.
+- Energy Extraction pays when you hold every moon territory. It was looking for a continent named "moon", which is not how the three colonies are stored.
+- Probe, seed 21, your reinforce then attack: a space card on India is refused, a land card on India is allowed, a moon rocket on land is the wrong ground, a land rocket on a moon is the wrong ground. Land into the sea without a Naval Commander is refused, and with him it is allowed. Sea into enemy land is allowed with him and refused without him. A station reaches an empty landing only with a Space Commander. Moon to moon takes an empty territory. A landing cannot attack Earth. One unit cannot invade. A rocket after the first invasion is refused, and the preview says so.
+
+## Session log Nov 8 (evening): six rule gaps. UNCOMMITTED, compiled (0/0), not play-tested
+George: implement the remaining rule gaps he listed.
+
+- Reinforcements: 1 or 2 territories of that ground get 1 unit each, with no picker. 3 or more still asks for three.
+- "Before your first invasion" waits for **Done hiring**. Hire, build, and buy stop after that. Bots hire, build, and buy, then close the shop, then play cards.
+- Bids stay hidden until everyone has bid, then one toast shows every amount. A shared bid is a d6; the high roll chooses first, and a tied roll is thrown again.
+- The defender with 2 or more units picks 1 or 2 dice. A single unit, an empty territory, and the neutral army do not get the question. A bot takes 2.
+- Water is five colonies: Gulf Stream +2, Cape Waters +2, Monsoon Sea +2, Pacific Passage +3, High Ice +2. Those numbers are placeholders, same as the moon, because the printed chart is not in the manual.
+- A new install defaults to take-turns. Random is still on the Match rules row. A saved choice is left as it is.
+- Take-turns greys out territories during `GameManager.Start`, before `TerritoryGraphics` has stored a colour. `UpdateColor` now uses the unowned colour instead of throwing. Restart Play to load it.
+
+## Session log Nov 8 (night): roomier type. UNCOMMITTED, compiled (0/0)
+George: the map and the panels were cramped, and labels sat on top of each other.
+
+- Sea and moon names sit in the open water, away from land and from the neighbouring disc, on one line.
+- Land names sit lower, under the troop count, and both are a bit larger.
+- The turn banner is taller. The instruction is its own band under the phase chips.
+- The shop bar, scoreboard, commander tooltip, side notes, and the Bot/You panels use larger type with more room between lines.
+- Restart Play to see it. The camera zoom is unchanged.

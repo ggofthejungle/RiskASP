@@ -9,6 +9,10 @@ public static class DefenderAI
     {
         var defender = gm.GetPlayerById(decision.PlayerId);
 
+        // Two dice when the defender has them. One die is the only choice with a single unit.
+        if (decision.Kind == DecisionKind.DefenseDice)
+            return decision.Options.Contains("2") ? "2" : "1";
+
         // Take-turns setup: grow next to what it already holds, aiming at continents it is closest to finishing.
         if (decision.Kind == DecisionKind.ClaimTerritory)
         {
@@ -19,13 +23,14 @@ public static class DefenderAI
                 .ThenBy(t => t.NeighbourTerritories.Count(n => n.Owner != null && n.Owner != defender))
                 .First().Name;
         }
-        // Then stack the border that faces the most enemies, weakest first.
+        // Spread the remaining army across the borders. One territory used to take every leftover MOD.
         if (decision.Kind == DecisionKind.PlaceStartingTroops)
         {
             return decision.Options
                 .Select(name => Map.TerritoryRepository.Instance.FromName(name))
-                .OrderByDescending(t => t.NeighbourTerritories.Count(n => n.Owner != null && n.Owner != defender))
+                .OrderByDescending(t => t.NeighbourTerritories.Any(n => n.Owner != null && n.Owner != defender))
                 .ThenBy(t => t.Troops)
+                .ThenByDescending(t => t.NeighbourTerritories.Count(n => n.Owner != null && n.Owner != defender))
                 .First().Name;
         }
 

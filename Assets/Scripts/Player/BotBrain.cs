@@ -28,6 +28,22 @@ namespace player
 
         private Handler _dlv2Handler;
         private Handler _clingoHandler;
+        private bool _dlv2Found;
+        private bool _clingoFound;
+        private HeuristicBrain _heuristic;
+
+        // The solver bots need the DLV2/Clingo executables (desktop only); anywhere else they play the C# way.
+        public bool UsesHeuristic(BotPlayer botPlayer)
+        {
+            var config = botPlayer != null ? botPlayer.BotConfiguration : null;
+            if (config == null) return true;
+            return config.ASPSolver switch
+            {
+                ASPSolver.DLV2 => !_dlv2Found,
+                ASPSolver.Clingo => !_clingoFound,
+                _ => true,
+            };
+        }
 
 
         public Action<InputProgram> OnProgramLoaded;
@@ -94,6 +110,13 @@ namespace player
 
         public void HandleCommunication(BotPlayer botPlayer, Player player)
         {
+            if (UsesHeuristic(botPlayer))
+            {
+                _heuristic ??= new HeuristicBrain(_gm, ActionReader.Instance);
+                _heuristic.Act(player);
+                return;
+            }
+
             InputProgram inputProgram = CreateProgram(botPlayer, player);
 
             var currHandler = botPlayer.BotConfiguration.ASPSolver switch
@@ -304,9 +327,16 @@ namespace player
                 dlv2ExecutablePath += "-mac";
                 clingoExecutablePath += "-mac";
             }
-            else throw new Exception("OS not supported");
+            else
+            {
+                Debug.Log("BotBrain: no ASP solver on this platform, bots use the C# tactics.");
+                return;
+            }
 
-
+            _dlv2Found = File.Exists(dlv2ExecutablePath);
+            _clingoFound = File.Exists(clingoExecutablePath);
+            if (!_dlv2Found || !_clingoFound)
+                Debug.Log($"BotBrain: solver executables found: DLV2 {_dlv2Found}, Clingo {_clingoFound}; the others use the C# tactics.");
             _dlv2Handler = new DesktopHandler(new DLV2DesktopService(dlv2ExecutablePath));
             _clingoHandler = new DesktopHandler(new ClingoDesktopService(clingoExecutablePath));
         }
