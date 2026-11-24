@@ -16,6 +16,7 @@ namespace Decisions
         ArmageddonTarget, // Armageddon: the territory for that card (options = territory names, Subject = card name)
         ClaimTerritory,      // take-turns setup: claim an empty territory with 1 MOD (options = empty territories)
         PlaceStartingTroops, // take-turns setup: place 1 MOD (options = your territories, Subject = MODs left in this batch)
+        ConquestBonus,       // 3 contested territories: pick the deck for the free card (options = "Deck:<CommanderType>")
     }
 
     // Option ids a player can answer with. Defense cards will be added later as "Card:<id>".

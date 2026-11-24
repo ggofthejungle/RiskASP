@@ -3,7 +3,6 @@ using player;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
-using Random = UnityEngine.Random;
 
 namespace UI
 {
@@ -111,7 +110,7 @@ namespace UI
                     if (configs[i] != null && configs[i].Name == "Human") { configIndex = i; break; }
             }
             if (colorIndex < 0 || colorIndex >= colors.Length)
-                colorIndex = Random.Range(0, colors.Length);
+                colorIndex = _uiPlayerCreationManager.FirstFreeColor();
 
             var playerConfiguration = configs[configIndex];
             var playerColor = colors[colorIndex];

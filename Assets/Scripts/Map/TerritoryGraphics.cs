@@ -38,12 +38,9 @@ namespace Map
             else 
                 Debug.LogWarning("TerritorySelection is null");
 
-            _territoryNameText.text = _territory.Name.Replace('_', ' ');
-            _territoryNameText.enableAutoSizing = false;
-            _territoryNameText.fontSize = 2.55f;
-            var nameRt = _territoryNameText.rectTransform;
-            nameRt.sizeDelta = new Vector2(2.2f, 0.55f);
-            nameRt.anchoredPosition = new Vector2(nameRt.anchoredPosition.x, -0.62f);
+            // The name lives in the left-hand hint. A label on the territory was covering the troop count.
+            if (_territoryNameText != null)
+                _territoryNameText.gameObject.SetActive(false);
             if (_troopsCountText != null)
             {
                 _troopsCountText.enableAutoSizing = false;
@@ -72,7 +69,7 @@ namespace Map
 
         PlayerColor ColorOfOwner()
         {
-            if (_territory.Devastated) return _devastated ??= Neutral(new Color(0.16f, 0.15f, 0.14f, 1f));
+            if (_territory.Devastated) return _devastated ??= Neutral(new Color(0.42f, 0.20f, 0.12f, 1f));
             if (_territory.Owner == null || _territory.Owner.Color == null)
                 return _unclaimed ??= Neutral(new Color(0.62f, 0.64f, 0.68f, 1f));
             return _territory.Owner.Color;
@@ -158,11 +155,8 @@ namespace Map
             var showCount = !_territory.Devastated && _territory.Owner != null;
             _troopsCountText.gameObject.SetActive(showCount);
             _troopsCountBackgroundSpriteRenderer.gameObject.SetActive(showCount);
-            if (_territory.Devastated)
-            {
-                _territoryNameText.text = _territory.Name.Replace('_', ' ') + "\n<size=70%>devastated</size>";
-                _territoryNameText.color = new Color(0.72f, 0.70f, 0.66f, 1f);
-            }
+            if (_territoryNameText != null)
+                _territoryNameText.gameObject.SetActive(false);
             //SetCommanderAndSpaceStationLabels() //if I knew what string to put in parentheses
         }
 

@@ -4,13 +4,14 @@ using Expansions;
 using TMPro;
 using UI;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace Map
 {
     // Icons on the map, next to each territory's troop counter:
     //   Diplomat = laurel, Land = chevron shield, Nuclear = atom, Station = orbital hub.
-    // Hovering a territory shows a label spelling it out (and that they roll 8-sided dice).
+    // Hovering a territory fills a fixed panel on the left. It does not follow the cursor.
     public class MapBadges : MonoBehaviour
     {
         private const float BadgeSize = 0.40f;
@@ -24,21 +25,25 @@ namespace Map
         private static Sprite _stationIcon;
         private readonly Dictionary<Territory, GameObject> _rows = new();
         private Canvas _canvas;
-        private Camera _cam;
         private RectTransform _tooltipPanel;
-        private RectTransform _tooltipRows;
         private TMP_Text _tooltipHeader;
         private TMP_Text _tooltipNote;
         private string _tooltipPlain = "";
         private Territory _hovered;
+        private Territory _uiHover;
+        public static MapBadges Instance { get; private set; }
 
         public static MapBadges Create(GameManager gm, Canvas canvas = null)
         {
             var go = new GameObject("MapBadges");
             var badges = go.AddComponent<MapBadges>();
             badges._canvas = canvas != null ? canvas.rootCanvas : null;
+            Instance = badges;
             return badges;
         }
+
+        // The moon board has no map collider, so a card on that board uses this.
+        public void HoverFromUi(Territory t) => _uiHover = t;
 
         private void Start()
         {
@@ -47,7 +52,6 @@ namespace Map
                 var c = GameManager.Instance.UIGameInfo.GetComponentInParent<Canvas>();
                 if (c != null) _canvas = c.rootCanvas;
             }
-            _cam = Camera.main;
             foreach (var t in TerritoryRepository.Instance.Territories)
             {
                 var territory = t;
@@ -159,52 +163,43 @@ namespace Map
             glyph.sortingOrder = SortingOrder + 2;
         }
 
-        // ---------- Hover label (Canvas UI so it draws above the dice panel) ----------
-
+        // Fixed dock under the top bar, in the water on the left. It never sits on the territory.
         private void BuildTooltip()
         {
             if (_canvas == null) return;
             var panel = TurnHud.NewImage("MapBadgeTooltip", _canvas.transform, TurnHud.PopupBorder);
             _tooltipPanel = panel.rectTransform;
-            _tooltipPanel.anchorMin = _tooltipPanel.anchorMax = new Vector2(0.5f, 0.5f);
-            _tooltipPanel.pivot = new Vector2(0.5f, 0f);
-            _tooltipPanel.sizeDelta = new Vector2(460, 160);
+            _tooltipPanel.anchorMin = _tooltipPanel.anchorMax = new Vector2(0f, 1f);
+            _tooltipPanel.pivot = new Vector2(0f, 1f);
+            _tooltipPanel.anchoredPosition = new Vector2(16f, -64f);
+            _tooltipPanel.sizeDelta = new Vector2(300f, 88f);
             panel.raycastTarget = false;
             var fill = TurnHud.FramePopup(panel, new Color(0.08f, 0.08f, 0.12f, 0.94f));
             fill.raycastTarget = false;
 
             var content = new GameObject("Content", typeof(RectTransform)).GetComponent<RectTransform>();
             content.SetParent(_tooltipPanel, false);
-            TurnHud.Place(content, Vector2.zero, Vector2.one, new Vector2(12, 10), new Vector2(-12, -10));
+            TurnHud.Place(content, Vector2.zero, Vector2.one, new Vector2(12, 8), new Vector2(-12, -10));
             var v = content.gameObject.AddComponent<VerticalLayoutGroup>();
-            v.spacing = 8;
+            v.spacing = 2;
             v.childAlignment = TextAnchor.UpperLeft;
             v.childControlWidth = true;
             v.childControlHeight = true;
             v.childForceExpandWidth = true;
             v.childForceExpandHeight = false;
-            content.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            _tooltipHeader = TurnHud.NewText("Header", content, 24, FontStyles.Bold, TextAlignmentOptions.Left);
-            _tooltipHeader.gameObject.AddComponent<LayoutElement>().preferredHeight = 32;
+            _tooltipHeader = TurnHud.NewText("Header", content, 20, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
+            _tooltipHeader.margin = new Vector4(2f, 0f, 2f, 0f);
+            _tooltipHeader.textWrappingMode = TextWrappingModes.NoWrap;
+            _tooltipHeader.overflowMode = TextOverflowModes.Ellipsis;
+            _tooltipHeader.gameObject.AddComponent<LayoutElement>().preferredHeight = 26;
 
-            _tooltipRows = new GameObject("Legend", typeof(RectTransform)).GetComponent<RectTransform>();
-            _tooltipRows.SetParent(content, false);
-            var rowsLayout = _tooltipRows.gameObject.AddComponent<VerticalLayoutGroup>();
-            rowsLayout.spacing = 8;
-            rowsLayout.childAlignment = TextAnchor.UpperLeft;
-            rowsLayout.childControlWidth = true;
-            rowsLayout.childControlHeight = true;
-            rowsLayout.childForceExpandWidth = true;
-            rowsLayout.childForceExpandHeight = false;
-            _tooltipRows.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-
-            _tooltipNote = TurnHud.NewText("Note", content, 18, FontStyles.Normal, TextAlignmentOptions.Left);
+            _tooltipNote = TurnHud.NewText("Note", content, 16, FontStyles.Normal, TextAlignmentOptions.TopLeft);
             _tooltipNote.color = new Color(0.80f, 0.82f, 0.88f, 1f);
             _tooltipNote.textWrappingMode = TextWrappingModes.Normal;
             var noteLe = _tooltipNote.gameObject.AddComponent<LayoutElement>();
-            noteLe.preferredHeight = 64f;
-            noteLe.minHeight = 48f;
+            noteLe.preferredHeight = 44f;
+            noteLe.minHeight = 40f;
 
             _tooltipPanel.SetAsLastSibling();
             SetTooltip(null);
@@ -214,11 +209,13 @@ namespace Map
         {
             var sm = SelectionManager.Instance;
             if (sm == null || _tooltipPanel == null) return;
-            Territory hovered = null;
-            foreach (var kv in sm.TerritoryToSelectionMap)
-                if (kv.Value != null && kv.Value.IsHovered) { hovered = kv.Key; break; }
+            Territory hovered = _uiHover;
+            if (hovered == null)
+            {
+                foreach (var kv in sm.TerritoryToSelectionMap)
+                    if (kv.Value != null && kv.Value.IsHovered) { hovered = kv.Key; break; }
+            }
             if (hovered != _hovered) SetTooltip(hovered);
-            else if (_hovered != null) PositionTooltip(_hovered);
         }
 
         public string TooltipText =>
@@ -227,106 +224,62 @@ namespace Map
         private void SetTooltip(Territory t)
         {
             _hovered = t;
-            var hasStuff = t != null && (t.CommandersList.Count > 0 || t.containsSpaceStation);
-            if (_tooltipPanel != null) _tooltipPanel.gameObject.SetActive(hasStuff);
-            if (!hasStuff) { _tooltipPlain = ""; return; }
+            if (_tooltipPanel != null) _tooltipPanel.gameObject.SetActive(t != null);
+            if (t == null) { _tooltipPlain = ""; return; }
 
-            foreach (Transform child in _tooltipRows) Destroy(child.gameObject);
+            var owner = t.Owner;
+            var who = t.Devastated ? "Devastated"
+                : owner == null ? "Unclaimed"
+                : owner.Neutral ? "Neutral"
+                : owner.Name;
+            var units = t.Troops == 1 ? "1 unit" : t.Troops + " units";
+            var ground = t.Kind switch
+            {
+                TerrainKind.Sea => "water",
+                TerrainKind.Moon => "moon",
+                _ => "land",
+            };
+            var colony = t.Continent != null ? TurnHud.Nice(t.Continent.Name) : "";
+            var bonus = t.Continent != null && t.Continent.BonusTroops > 0 ? " +" + t.Continent.BonusTroops : "";
+            var facts = who + "  ·  " + units;
+            facts += string.IsNullOrEmpty(colony) ? "\n" + ground : "\n" + colony + bonus + "  ·  " + ground;
 
-            var plain = new List<string> { t.Owner?.Name ?? "" };
-            _tooltipHeader.text = t.Owner?.Name ?? "";
-            _tooltipHeader.color = t.Owner?.Color != null ? t.Owner.Color.Normal : Color.white;
+            var plain = new List<string> { TurnHud.Nice(t.Name), facts };
+            _tooltipHeader.text = TurnHud.Nice(t.Name);
+            _tooltipHeader.color = owner != null && owner.Color != null ? owner.Color.Normal : Color.white;
 
-            foreach (var c in t.CommandersList)
+            var commanders = t.CommandersList ?? new List<Commander>();
+            foreach (var c in commanders)
             {
                 var type = c.CommanderType;
                 var die = type switch
                 {
-                    CommanderType.NuclearCommander => " · attacks and defends d8",
-                    CommanderType.LandCommander => " · defends d8; attacks d8 from or into land",
-                    CommanderType.NavalCommander => " · defends d8; attacks d8 from or into water",
-                    CommanderType.SpaceCommander => " · defends d8; attacks d8 from or into the Moon",
-                    _ => " · defends d8, attacks d6",
+                    CommanderType.NuclearCommander => "d8",
+                    CommanderType.LandCommander => "d8 on land",
+                    CommanderType.NavalCommander => "d8 on water",
+                    CommanderType.SpaceCommander => "d8 on the Moon",
+                    _ => "d6 attack, d8 defend",
                 };
-                AddLegendRow(IconFor(type), TypeColor(type), FullName(type) + die, Circle());
-                plain.Add(FullName(type));
+                var line = FullName(type) + " · " + die;
+                facts += "\n" + line;
+                plain.Add(line);
             }
             if (t.containsSpaceStation)
             {
-                AddLegendRow(StationIcon(), new Color(0.10f, 0.12f, 0.22f),
-                    "Space Station · +1 MOD/turn, all defenders d8", Square());
-                plain.Add("Space Station: all defenders roll 8-sided dice");
+                var line = "Space Station · +1 MOD/turn, defenders d8";
+                facts += "\n" + line;
+                plain.Add(line);
             }
 
-            _tooltipNote.text = t.CommandersList.Count > 0
-                ? "Every commander defends with d8. The attack die depends on the two territories."
-                : "";
-            _tooltipNote.gameObject.SetActive(!string.IsNullOrEmpty(_tooltipNote.text));
+            _tooltipNote.text = facts;
+            _tooltipNote.gameObject.SetActive(true);
+            var lines = Mathf.Max(1, facts.Split('\n').Length);
+            var noteLe = _tooltipNote.GetComponent<LayoutElement>();
+            if (noteLe != null) noteLe.preferredHeight = 20f * lines;
             _tooltipPlain = string.Join("\n", plain);
 
-            Canvas.ForceUpdateCanvases();
-            var rows = t.CommandersList.Count + (t.containsSpaceStation ? 1 : 0);
-            var h = 64 + rows * 64 + (string.IsNullOrEmpty(_tooltipNote.text) ? 0 : 72);
-            _tooltipPanel.sizeDelta = new Vector2(500, Mathf.Clamp(h, 120, 420));
-            _tooltipPanel.SetAsLastSibling();
-            PositionTooltip(t);
-        }
-
-        private void AddLegendRow(Sprite icon, Color badgeFill, string label, Sprite badgeShape)
-        {
-            var row = new GameObject("Row", typeof(RectTransform)).GetComponent<RectTransform>();
-            row.SetParent(_tooltipRows, false);
-            var h = row.gameObject.AddComponent<HorizontalLayoutGroup>();
-            h.spacing = 12;
-            h.childAlignment = TextAnchor.MiddleLeft;
-            h.childControlWidth = true;
-            h.childControlHeight = true;
-            h.childForceExpandWidth = false;
-            h.childForceExpandHeight = true;
-            row.gameObject.AddComponent<LayoutElement>().preferredHeight = 56;
-
-            var badge = TurnHud.NewImage("Badge", row, Color.white);
-            badge.sprite = badgeShape;
-            badge.color = badgeFill;
-            badge.preserveAspect = true;
-            badge.raycastTarget = false;
-            var badgeLe = badge.gameObject.AddComponent<LayoutElement>();
-            badgeLe.preferredWidth = badgeLe.preferredHeight = 36;
-
-            var glyph = TurnHud.NewImage("Icon", badge.rectTransform, Color.white);
-            glyph.sprite = icon;
-            glyph.preserveAspect = true;
-            glyph.raycastTarget = false;
-            TurnHud.Place(glyph.rectTransform, new Vector2(0.15f, 0.15f), new Vector2(0.85f, 0.85f), Vector2.zero, Vector2.zero);
-
-            var text = TurnHud.NewText("Label", row, 18, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
-            text.text = label;
-            text.textWrappingMode = TextWrappingModes.Normal;
-            text.overflowMode = TextOverflowModes.Overflow;
-            var textLe = text.gameObject.AddComponent<LayoutElement>();
-            textLe.preferredWidth = 420;
-            textLe.flexibleWidth = 1;
-            textLe.minHeight = 48;
-        }
-
-        private void PositionTooltip(Territory t)
-        {
-            if (_tooltipPanel == null || _canvas == null || t == null) return;
-            if (_cam == null) _cam = Camera.main;
-            if (_cam == null) return;
-            var world = AnchorOf(t) + new Vector3(-1.4f, -0.2f, 0);
-            var screen = _cam.WorldToScreenPoint(world);
-            if (screen.z < 0) { _tooltipPanel.gameObject.SetActive(false); return; }
-            RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                (RectTransform)_canvas.transform, screen, _canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : _cam,
-                out var local);
-            // Nudge left if near the dice panel (top-centre / right).
-            var half = _tooltipPanel.sizeDelta * 0.5f;
-            var canvasRt = (RectTransform)_canvas.transform;
-            var bounds = canvasRt.rect;
-            local.x = Mathf.Clamp(local.x, bounds.xMin + half.x + 8, bounds.xMax - half.x - 8);
-            local.y = Mathf.Clamp(local.y, bounds.yMin + 8, bounds.yMax - _tooltipPanel.sizeDelta.y - 8);
-            _tooltipPanel.anchoredPosition = local;
+            var h = 36f + 20f * lines + 16f;
+            _tooltipPanel.sizeDelta = new Vector2(300f, Mathf.Clamp(h, 84f, 200f));
         }
 
         // ---------- Generated sprites ----------
@@ -564,5 +517,13 @@ namespace Map
                 SoftSet(tex, x - px * w * 0.5f, y - py * w * 0.5f, a);
             }
         }
+    }
+
+    // Hover on a UI stand-in for a territory (the moon board) shows the same hint as the map.
+    public class TerritoryHoverTip : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+    {
+        public Territory Territory;
+        public void OnPointerEnter(PointerEventData eventData) => MapBadges.Instance?.HoverFromUi(Territory);
+        public void OnPointerExit(PointerEventData eventData) => MapBadges.Instance?.HoverFromUi(null);
     }
 }

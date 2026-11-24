@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using Actions;
 using Cards;
+using Decisions;
 using Expansions;
 using Map;
 using NUnit.Framework;
@@ -13,20 +14,12 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 using Object = UnityEngine.Object;
-#if UNITY_EDITOR
-using UnityEditor;
-#endif
 
 // Risk 2210 command cards (pilot): buy for 1 energy (max 4 per turn) from the deck of a commander you have in
 // play, play on your turn before your first invasion, pay the power-up cost, discard (never reshuffled).
 // Pilot cards: Energy Crisis (Diplomat) and Assemble MODs (Land). Naval/Space decks are out of play (land-only map).
 public class CommandCardTests
 {
-    private const string ConfigPath = "Assets/ScriptableObjects/StartingPlayersConfiguration.asset";
-    private const string HumanConfigPath = "Assets/ScriptableObjects/PlayerConfig/Human_Player_conf.asset";
-
-    private StartingPlayersConfiguration _config;
-    private List<PlayerCreationConfiguration> _savedConfig;
     private GameManager _gm;
     private CardRepository _cr;
     private CommandCards _cc;
@@ -37,16 +30,7 @@ public class CommandCardTests
     {
         GameManager.AutoPlaceStartingUnits = true; // start right at bidding
         UnityEngine.Debug.Log($"[TEST] start {NUnit.Framework.TestContext.CurrentContext.Test.Name}");
-#if UNITY_EDITOR
-        _config = AssetDatabase.LoadAssetAtPath<StartingPlayersConfiguration>(ConfigPath);
-        var human = AssetDatabase.LoadAssetAtPath<PlayerConfiguration>(HumanConfigPath);
-        var red = AssetDatabase.LoadAssetAtPath<PlayerColor>("Assets/ScriptableObjects/PlayerColors/Red.asset");
-        var blue = AssetDatabase.LoadAssetAtPath<PlayerColor>("Assets/ScriptableObjects/PlayerColors/Blue.asset");
-        _savedConfig = new List<PlayerCreationConfiguration>(_config.PlayersConfiguration);
-        _config.PlayersConfiguration.Clear();
-        _config.PlayersConfiguration.Add(new PlayerCreationConfiguration { PlayerConfiguration = human, PlayerName = "Alice", PlayerColor = red });
-        _config.PlayersConfiguration.Add(new PlayerCreationConfiguration { PlayerConfiguration = human, PlayerName = "Bob", PlayerColor = blue });
-#endif
+        TestSeats.AliceAndBob();
         yield return SceneManager.LoadSceneAsync("Main");
         for (int i = 0; i < 300; i++)
         {
@@ -71,11 +55,7 @@ public class CommandCardTests
     public void TearDown()
     {
         UnityEngine.Debug.Log($"[TEST] end {NUnit.Framework.TestContext.CurrentContext.Test.Name}");
-        if (_config != null && _savedConfig != null)
-        {
-            _config.PlayersConfiguration.Clear();
-            _config.PlayersConfiguration.AddRange(_savedConfig);
-        }
+        TestSeats.Clear();
     }
 
     // ---------- Buying ----------
@@ -155,6 +135,7 @@ public class CommandCardTests
         Assert.IsNotNull(_cc.WhyCantBuy(_alice, CommanderType.LandCommander), "Bidding");
 
         StartAlicesTurn();
+        Assert.IsNull(_cc.WhyCantBuy(_alice, CommanderType.LandCommander), "Reinforce, before the first invasion: OK");
         PlaceAllAndEndReinforce();
         Assert.IsNull(_cc.WhyCantBuy(_alice, CommanderType.LandCommander), "Attack phase, before the first invasion: OK");
         Invade();
@@ -168,6 +149,7 @@ public class CommandCardTests
     public IEnumerator EnergyCrisis_EndToEnd_PayCost_TakeEnergy_Discard()
     {
         StartAlicesTurn();
+        FinishShop();
         GiveCommander(_alice, CommanderType.Diplomat);
         var card = Give(_alice, CardType.EnergyCrisis);
         _alice.SetEnergy(5);
@@ -255,6 +237,7 @@ public class CommandCardTests
     public IEnumerator AssembleMods_Land_PutsThreeUnitsOnATerritoryYouOccupy()
     {
         StartAlicesTurn();
+        FinishShop();
         GiveCommander(_alice, CommanderType.LandCommander);
         var card = Give(_alice, CardType.AssembleModsL);
         _alice.SetEnergy(5);
@@ -278,7 +261,10 @@ public class CommandCardTests
         StartAlicesTurn();
         GiveCommander(_alice, CommanderType.NuclearCommander);
         foreach (var c in _cr.CardsInDeck.Where(c => c.Commander == CommanderType.NuclearCommander).ToList())
+        {
             _cr.CardsInDeck.Remove(c);
+            _cr.TookFromDeck(c.Commander);
+        }
         Assert.AreEqual(0, _cc.CardsLeftInDeck(CommanderType.NuclearCommander));
         Assert.IsFalse(Buy(_alice, CommanderType.NuclearCommander));
         yield break;
@@ -344,6 +330,12 @@ public class CommandCardTests
         return card;
     }
 
+    private void FinishShop()
+    {
+        if (_gm.ShopClosed || !_gm.IsCommandStep(_alice)) return;
+        Assert.IsTrue(_gm.HandlePlayerAction(new CloseShopAction(_alice, _gm.Turn)));
+    }
+
     private void StartAlicesTurn()
     {
         for (int i = 0; i < 10 && _gm.IsBidding; i++)
@@ -376,6 +368,10 @@ public class CommandCardTests
         var target = origin.GetEnemyNeighbours().First();
         Assert.IsTrue(_gm.HandlePlayerAction(new AttackAction(p, _gm.Turn, _gm.AttackPhase.AttackTurn, origin, target,
             Mathf.Min(3, origin.GetAvailableTroops()))));
+        var dice = _gm.PendingDecision;
+        if (dice != null && dice.Kind == DecisionKind.DefenseDice)
+            Assert.IsTrue(_gm.HandlePlayerAction(new DecisionResponseAction(
+                _gm.GetPlayerById(dice.PlayerId), _gm.Turn, "1")));
         Assert.AreEqual(1, _gm.AttackPhase.AttackResults.Count());
     }
 

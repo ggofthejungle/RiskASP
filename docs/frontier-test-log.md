@@ -75,8 +75,29 @@ Cards and stations:
 
 ## Not covered yet
 
-- Take-turns placement (claiming every territory, then the 3-unit batches). With seas and the moon on, that is 59 territories.
 - Clicking with the mouse in the Game view. The probes call the button methods and the territory-click handler, so a grey territory that the collider still hits has not been tried by a real pointer.
+
+### Nov 24 — take-turns placement, seas and moon on, seed 21
+
+5 players. The human's claims and placements were answered with the same choice the bots use. Console had no game errors.
+
+- All 42 land territories were claimed, then the rest of each army was placed 3 at a time. Every land ended with an owner and at least 1 unit.
+- Each player finished on 25 troops. The split was 8, 9, 9, 8 and 8 territories.
+- The 11 seas and 14 moon territories stayed empty. The match then opened bidding.
+- The right-hand player strips are gone. The lower-left board has a Troops column (25 for each player on this deal).
+
+### Nov 24 — 2 players, seas and moon on, seed 21
+
+Two Standard BOTs, random deal, no devastated territories. The match ran through year 5 with no console errors. The local Continue file was left alone.
+
+- The neutral army held 16 land, 6 seas and 6 moons, 3 units on each. The other seas and moons stayed empty.
+- At the end the board was Bot 2 on 21 points and Bot on 20. The lower-left scores matched that.
+- The game-over window had been naming Neutral the winner, because Neutral holds the most territories. Neutral is now left out of the ranking. The replay said "Bot 2 wins after 5 years" and listed only the two players.
+- The turn banner said Year 6/5 once the match had ended. It now stops at year 5, the same as the scoreboard and the game-over window.
+
+### Nov 24 — the free card after 3 conquests
+
+The rules let the player choose which deck that card comes from. It was being drawn at random. Taking the 3rd contested territory now adds the energy immediately, then asks which deck when more than one commander is in play and that deck still has cards. One legal deck is drawn at once. A bot takes the fullest deck, with Nuclear ahead of Land when they are the same size. Checked in Play Mode: energy went from 3 to 4, the choice was Diplomat or Land, picking Land drew a Land card, and the ranking was You, Bot (Neutral left out). Three tests were added in `CardEffectsTests` and not run through the test menu.
 
 ### Nov 7, ~4:35 PM — floors, caps, jam, Cease Fire, sea conquest (3 players, then land-only)
 

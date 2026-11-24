@@ -75,12 +75,12 @@ public class BoardRulesTests
             },
         };
         board.BeginReinforce(0, 4);
-        Assert.AreEqual(6, board.Energy[0], "3 starting + 3 income");
+        Assert.AreEqual(10, board.Energy[0], "3 starting + 3 from the chart + 4 continent energy");
         Assert.AreEqual(7, board.Territories[0].Troops, "Station grants one unit");
-        Assert.AreEqual(4, board.RemainingToPlace);
-        Assert.IsTrue(board.Place(0, 4));
+        Assert.AreEqual(7, board.RemainingToPlace, "chart 3 for 2 territories, plus the continent's 4");
+        Assert.IsTrue(board.Place(0, 7));
         Assert.AreEqual("Attack", board.Phase);
-        Assert.AreEqual(11, board.Territories[0].Troops);
+        Assert.AreEqual(14, board.Territories[0].Troops);
 
         Assert.IsTrue(board.Attack(0, 1, 3, 0, 0, new ScriptedRandom(6, 6, 6, 1)));
         Assert.IsTrue(board.LastConquered);
@@ -89,14 +89,14 @@ public class BoardRulesTests
         Assert.AreEqual("MoveIn", board.Phase);
         Assert.IsFalse(board.MoveIn(2), "Three attacking MODs have to move at least 3");
         Assert.IsTrue(board.MoveIn(3));
-        Assert.AreEqual(8, board.Territories[0].Troops);
+        Assert.AreEqual(11, board.Territories[0].Troops);
         Assert.AreEqual(3, board.Territories[1].Troops);
         Assert.IsTrue(board.DefenderEliminated, "Beta was their only territory");
 
         board.EndAttack();
         Assert.IsFalse(board.Fortify(0, 2, 1), "Alpha does not touch Gamma");
         Assert.IsTrue(board.Fortify(1, 0, 1));
-        Assert.AreEqual(9, board.Territories[0].Troops);
+        Assert.AreEqual(12, board.Territories[0].Troops);
         Assert.AreEqual(2, board.Territories[1].Troops);
         Assert.AreEqual("Done", board.Phase);
     }

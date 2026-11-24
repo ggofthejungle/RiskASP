@@ -21,6 +21,7 @@ namespace UI
         bool _open;
         bool _need;
         bool _heldShut;
+        bool _userHeld;
         bool _launchWasLit;
         bool _doorWasLit;
         readonly List<Slot> _slots = new();
@@ -84,6 +85,7 @@ namespace UI
         public void Toggle()
         {
             SetOpen(!_open);
+            _userHeld = _open && !NeedsMoon();
             if (!_open && _need) _heldShut = true;
         }
 
@@ -99,7 +101,13 @@ namespace UI
             var need = NeedsMoon();
             var launch = LaunchLit();
             var door = OwnsMoon();
-            if (need && !_need && !_heldShut) SetOpen(true);
+            if (need && !_need && !_heldShut)
+            {
+                _userHeld = false;
+                SetOpen(true);
+            }
+            else if (!need && _need && !_userHeld)
+                SetOpen(false);
             // A land click, including a station in India, lights the picture. It does not cover the map.
             if (launch && !_launchWasLit)
                 GameManager.Instance?.TurnHud?.Flash("A space station can reach the Moon. Click the moon picture.");
@@ -107,6 +115,7 @@ namespace UI
                 GameManager.Instance?.TurnHud?.Flash("Click the moon picture to use your territories there.");
             if (!need) _heldShut = false;
             _need = need;
+            if (_open) PlaceBoard();
             _launchWasLit = launch;
             _doorWasLit = door || launch;
             Refresh();
@@ -137,6 +146,31 @@ namespace UI
         }
 
         bool LaunchLit() => _slots.Any(s => s.Territory.LaunchPoint && Selectable(s.Territory));
+
+        // Sit on the opposite side from the earth territory you still have to click.
+        void PlaceBoard()
+        {
+            var onRight = false;
+            var sel = SelectionManager.Instance;
+            var from = (sel?.CurrentSelectionPhase as TurnPhases.Selection.AttackSelectionPhase)?.From
+                    ?? (sel?.CurrentSelectionPhase as TurnPhases.Selection.FortifySelectionPhase)?.From;
+            var cam = Camera.main;
+            if (from != null && from.Kind != TerrainKind.Moon && cam != null)
+                onRight = cam.WorldToViewportPoint(from.transform.position).x < 0.48f;
+            var min = onRight ? new Vector2(0.54f, 0.24f) : new Vector2(0.012f, 0.24f);
+            var max = onRight ? new Vector2(0.98f, 0.74f) : new Vector2(0.42f, 0.74f);
+            if (_panel != null)
+            {
+                _panel.anchorMin = min;
+                _panel.anchorMax = max;
+            }
+            if (_shadow != null)
+            {
+                var srt = _shadow.GetComponent<RectTransform>();
+                srt.anchorMin = min + new Vector2(0.004f, -0.008f);
+                srt.anchorMax = max + new Vector2(0.006f, 0.008f);
+            }
+        }
 
         static bool Selectable(Territory t)
         {
@@ -339,6 +373,8 @@ namespace UI
             button.targetGraphic = img;
             var captured = territory;
             button.onClick.AddListener(() => captured.GetComponent<TerritorySelection>()?.ClickFromUi());
+            var tip = frame.gameObject.AddComponent<TerritoryHoverTip>();
+            tip.Territory = captured;
 
             var label = NewText("Label", frame.transform, 13, FontStyles.Bold, TextAlignmentOptions.Center);
             label.textWrappingMode = TextWrappingModes.Normal;

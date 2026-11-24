@@ -13,7 +13,7 @@ namespace UI
     public class Scoreboard : MonoBehaviour
     {
         const float RowHeight = 38f;
-        const float Width = 460f;
+        const float Width = 478f;
         const float HeaderHeight = 36f;
         static readonly Color Dim = new(1f, 1f, 1f, 0.38f);
         static readonly Color Muted = new(0.70f, 0.73f, 0.80f, 1f);
@@ -27,7 +27,7 @@ namespace UI
         sealed class Row
         {
             public Image Swatch;
-            public TMP_Text Name, Score, Energy, Cards, Land;
+            public TMP_Text Name, Score, Energy, Cards, Land, Troops;
         }
 
         public IReadOnlyList<string> RowNames => _rows.Where(r => r.Name.gameObject.activeSelf).Select(r => r.Name.text).ToList();
@@ -48,9 +48,9 @@ namespace UI
         {
             var panel = TurnHud.NewImage("Panel", transform, TurnHud.PopupFill);
             _panel = panel.rectTransform;
-            _panel.anchorMin = _panel.anchorMax = new Vector2(0f, 1f);
-            _panel.pivot = new Vector2(0f, 1f);
-            _panel.anchoredPosition = new Vector2(12f, -12f);
+            _panel.anchorMin = _panel.anchorMax = new Vector2(0f, 0f);
+            _panel.pivot = new Vector2(0f, 0f);
+            _panel.anchoredPosition = new Vector2(8f, 8f);
             TurnHud.FramePopup(panel, TurnHud.PopupFill, 2f);
 
             _header = TurnHud.NewText("Header", _panel, 20, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
@@ -58,10 +58,11 @@ namespace UI
             _header.characterSpacing = 2f;
             TurnHud.Place(_header.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(12f, -HeaderHeight), new Vector2(-8f, -4f));
 
-            var labels = TurnHud.NewText("Columns", _panel, 15, FontStyles.Bold, TextAlignmentOptions.MidlineRight);
-            labels.color = Muted;
-            labels.text = "SCORE    ENERGY    CARDS    LAND";
-            TurnHud.Place(labels.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(12f, -HeaderHeight - 18f), new Vector2(-12f, -HeaderHeight));
+            ColumnTitle("SCORE", 168f, 52f);
+            ColumnTitle("ENERGY", 224f, 64f);
+            ColumnTitle("CARDS", 292f, 52f);
+            ColumnTitle("LAND", 348f, 48f);
+            ColumnTitle("TROOPS", 400f, 64f);
 
             for (var i = 0; i < 6; i++) _rows.Add(NewRow(i));
             Refresh();
@@ -75,12 +76,23 @@ namespace UI
             TurnHud.Place(row.Swatch.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f),
                 new Vector2(12f, top - RowHeight + 6f), new Vector2(40f, top - 6f));
 
-            row.Name = Cell("Name" + index, TextAlignmentOptions.MidlineLeft, 48f, 160f, top);
-            row.Score = Cell("Score" + index, TextAlignmentOptions.MidlineRight, 214f, 52f, top);
-            row.Energy = Cell("Energy" + index, TextAlignmentOptions.MidlineRight, 274f, 56f, top);
-            row.Cards = Cell("Cards" + index, TextAlignmentOptions.MidlineRight, 338f, 48f, top);
-            row.Land = Cell("Land" + index, TextAlignmentOptions.MidlineRight, 392f, 48f, top);
+            row.Name = Cell("Name" + index, TextAlignmentOptions.MidlineLeft, 48f, 116f, top);
+            row.Score = Cell("Score" + index, TextAlignmentOptions.MidlineRight, 168f, 52f, top);
+            row.Energy = Cell("Energy" + index, TextAlignmentOptions.MidlineRight, 224f, 64f, top);
+            row.Cards = Cell("Cards" + index, TextAlignmentOptions.MidlineRight, 292f, 52f, top);
+            row.Land = Cell("Land" + index, TextAlignmentOptions.MidlineRight, 348f, 48f, top);
+            row.Troops = Cell("Troops" + index, TextAlignmentOptions.MidlineRight, 400f, 64f, top);
             return row;
+        }
+
+        void ColumnTitle(string text, float x, float width)
+        {
+            var t = TurnHud.NewText("Col" + text, _panel, 13, FontStyles.Bold, TextAlignmentOptions.MidlineRight);
+            t.color = Muted;
+            t.text = text;
+            var top = -HeaderHeight;
+            TurnHud.Place(t.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f),
+                new Vector2(x, top - 20f), new Vector2(x + width, top));
         }
 
         TMP_Text Cell(string name, TextAlignmentOptions align, float x, float width, float top)
@@ -102,7 +114,9 @@ namespace UI
         public void Refresh()
         {
             if (_gm == null || _gm.Players == null) return;
-            var order = _gm.SeatOrder;
+            var order = _gm.SeatOrder
+                .OrderBy(p => p != null && p.Color != null && p.Color.name == "Black")
+                .ToList();
             _header.text = _gm.GameState == GameState.Over
                 ? "FINAL SCORES"
                 : $"YEAR {Mathf.Min(_gm.Year, GameManager.MaxYears)} / {GameManager.MaxYears}" + (_gm.IsBidding ? "  ·  BIDDING" : "");
@@ -113,7 +127,7 @@ namespace UI
                 var p = i < order.Count ? order[i] : null;
                 var show = p != null;
                 row.Swatch.gameObject.SetActive(show);
-                foreach (var t in new[] { row.Name, row.Score, row.Energy, row.Cards, row.Land })
+                foreach (var t in new[] { row.Name, row.Score, row.Energy, row.Cards, row.Land, row.Troops })
                     t.gameObject.SetActive(show);
                 if (!show) continue;
 
@@ -129,7 +143,8 @@ namespace UI
                 row.Energy.text = p.GetEnergy().ToString();
                 row.Cards.text = p.Cards.Count.ToString();
                 row.Land.text = p.GetTerritoryCount().ToString();
-                foreach (var t in new[] { row.Name, row.Score, row.Energy, row.Cards, row.Land })
+                row.Troops.text = p.GetTroopsCountInTerritories().ToString();
+                foreach (var t in new[] { row.Name, row.Score, row.Energy, row.Cards, row.Land, row.Troops })
                     t.color = color;
             }
 

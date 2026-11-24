@@ -318,8 +318,7 @@ namespace UI
             var to = Nice(_pickTo.Name);
             _pickerTitle.text = Picker switch
             {
-                PickerMode.Attack => $"Attack <b>{to}</b> from <b>{from}</b>\n<size=75%>Max 3 dice total — each commander takes one of those slots (d8/d6). " +
-                                     "Losses hit MODs first; a commander dies only if no attacking MOD is left.</size>",
+                PickerMode.Attack => $"Attack <b>{to}</b> from <b>{from}</b>\n<size=72%>3 dice max. A commander takes one. MODs are lost first.</size>",
                 PickerMode.MoveIn => MoveTitle(from, to, true),
                 _ => MoveTitle(from, to, false),
             };
@@ -544,9 +543,10 @@ namespace UI
         public void ClickHire(CommanderType type)
         {
             var me = Me;
+            var place = PlaceCommander(type);
             Ask($"Hire a <b>{Map.MapBadges.FullName(type)}</b> for {Purchases.CommanderCost} energy?\n" +
-                $"<size=80%>{CommanderInfo(type)} Then click one of your territories to place it.</size>",
-                "Hire", () => Target($"Hire {Short(type)}: click one of your territories.",
+                $"<size=80%>{CommanderInfo(type)} {place}</size>",
+                "Hire", () => Target(place,
                 t => t.Owner == me && Purchases.CanStand(type, t),
                 t => { Act(new HireCommanderAction(me, _gm.Turn, type, t), _gm.Purchases.WhyCantHire(me, type, t), $"{Short(type)} hired in {Nice(t.Name)}."); return true; }));
         }
@@ -556,16 +556,25 @@ namespace UI
             CommanderType.Diplomat => "Opens the Diplomat deck. Defends with an 8-sided die; attacks with a normal one.",
             CommanderType.LandCommander => "Opens the Land deck. Attacks and defends with an 8-sided die.",
             CommanderType.NuclearCommander => "Opens the Nuclear deck. Attacks and defends with an 8-sided die.",
+            CommanderType.NavalCommander => "Opens the Naval deck. You need him to attack into or out of water.",
+            CommanderType.SpaceCommander => "Opens the Space deck. You need him to attack into or out of the Moon.",
             _ => "",
         };
+
+        // The shop line and the upper-right banner both show this while the map click is waiting.
+        public static string PlaceCommander(CommanderType type) =>
+            $"Click one of your territories to place your <b>{Map.MapBadges.FullName(type)}</b>.";
+
+        public const string PlaceStation =
+            "Click one of your land territories to place your <b>space station</b>.";
 
         public void ClickBuild()
         {
             var me = Me;
             Ask($"Build a <b>space station</b> for {Purchases.StationCost} energy?\n" +
                 "<size=80%>+1 unit there every turn, and all its defenders roll 8-sided dice. Max 4. " +
-                "Then click one of your territories without a station.</size>",
-                "Build", () => Target("Build a space station: click one of your territories without a station.",
+                PlaceStation + "</size>",
+                "Build", () => Target(PlaceStation,
                 t => t.Owner == me && t.Kind == Map.TerrainKind.Land && !t.containsSpaceStation,
                 t => { Act(new BuildSpaceStationAction(me, _gm.Turn, t), _gm.Purchases.WhyCantBuild(me, t), $"Space station built in {Nice(t.Name)}."); return true; }));
         }
@@ -968,19 +977,37 @@ namespace UI
                     }
                     break;
 
-                case PromptStage.Choose when d != null && d.Kind == DecisionKind.DefenseDice:
+                case PromptStage.Choose when d != null && d.Kind == DecisionKind.ConquestBonus:
                     PaintPrompt(defender);
-                    _promptTitleBase = "HOW MANY DICE?";
+                    _promptTitleBase = "FREE CARD";
                     _promptTitle.text = _promptTitleBase;
-                    _promptText.text = AttackRoute(attack) + "\nRoll 1 or 2. Each die you roll can lose you a unit.";
-                    GlowAttack(attack);
+                    _promptText.text = $"You took {InvadeEarth.Rules.IncomeRules.ConquestBonusTerritories} territories. " +
+                                       $"+{InvadeEarth.Rules.IncomeRules.ConquestBonusEnergy} energy. Which deck?";
                     PromptOptions = d.Options.ToList();
                     foreach (var option in d.Options)
                     {
                         var opt = option;
-                        MakeButton(_promptButtons, opt == "1" ? "1 die" : "2 dice",
-                            new Color(0.18f, 0.28f, 0.42f), true, () => Choose(opt), 180, 70);
+                        var deckName = opt.StartsWith(CommandCards.BonusDeckPrefix)
+                            ? opt.Substring(CommandCards.BonusDeckPrefix.Length) : opt;
+                        Enum.TryParse(deckName, out CommanderType deck);
+                        MakeButton(_promptButtons, $"{Short(deck)} deck", DeckColor(deck), true, () => Choose(opt), 160, 64);
                     }
+                    break;
+
+                case PromptStage.Choose when d != null && d.Kind == DecisionKind.DefenseDice:
+                    PaintPrompt(defender);
+                    _promptTitleBase = "HOW MANY DICE?";
+                    _promptTitle.text = _promptTitleBase;
+                    _promptText.text = AttackRoute(attack) + "\nEach die you roll can lose you a unit.";
+                    GlowAttack(attack);
+                    PromptOptions = d.Options.ToList();
+                    MakeButton(_promptButtons, "1 die", new Color(0.18f, 0.28f, 0.42f), true, () => Choose("1"), 100, 64);
+                    MakeButton(_promptButtons, "2 dice", new Color(0.18f, 0.28f, 0.42f), true, () => Choose("2"), 110, 64);
+                    MakeButton(_promptButtons, "Remember my choice\nfor 2 dice", new Color(0.12f, 0.38f, 0.32f), true, () =>
+                    {
+                        _gm.RememberTwoDefenseDice(defender);
+                        Choose("2");
+                    }, 220, 64);
                     break;
 
                 case PromptStage.Choose when d != null && attack != null:
@@ -1090,7 +1117,7 @@ namespace UI
             // Command bar: bottom centre (where the classic card bar was).
             var barImg = NewImage("CommandBar", transform, new Color(0.27f, 0.29f, 0.38f, 0.95f));
             _bar = barImg.rectTransform;
-            Place(_bar, new Vector2(0.12f, 0.004f), new Vector2(0.90f, 0.20f), Vector2.zero, Vector2.zero);
+            Place(_bar, new Vector2(0.22f, 0.004f), new Vector2(0.98f, 0.18f), Vector2.zero, Vector2.zero);
             barImg.raycastTarget = true; // clicks on the bar don't reach the map
 
             _actions = Row("Actions", _bar, new Vector2(0, 1), new Vector2(1, 1), new Vector2(10, -78), new Vector2(-10, -8), 8);
@@ -1120,15 +1147,18 @@ namespace UI
             _picker = pickerImg.rectTransform;
             _picker.anchorMin = _picker.anchorMax = new Vector2(0.5f, 0.5f);
             _picker.pivot = new Vector2(0.5f, 0.5f);
-            _picker.sizeDelta = new Vector2(480f, 240f);
+            _picker.sizeDelta = new Vector2(520f, 300f);
             pickerImg.raycastTarget = true;
             FramePopup(pickerImg, PopupFill).raycastTarget = true;
-            _pickerTitle = NewText("Title", _picker, 24, FontStyles.Normal, TextAlignmentOptions.Center);
-            Place(_pickerTitle.rectTransform, new Vector2(0, 0.66f), new Vector2(1, 1), new Vector2(14, 0), new Vector2(-14, -6));
+            _pickerTitle = NewText("Title", _picker, 22, FontStyles.Normal, TextAlignmentOptions.Center);
             _pickerTitle.textWrappingMode = TextWrappingModes.Normal;
-            _pickerAmount = NewText("Amount", _picker, 26, FontStyles.Bold, TextAlignmentOptions.Center);
-            Place(_pickerAmount.rectTransform, new Vector2(0, 0.50f), new Vector2(1, 0.66f), Vector2.zero, Vector2.zero);
-            _pickerToggles = Row("Commanders", _picker, new Vector2(0, 0.27f), new Vector2(1, 0.49f), new Vector2(14, 0), new Vector2(-14, 0), 8);
+            _pickerTitle.overflowMode = TextOverflowModes.Truncate;
+            Place(_pickerTitle.rectTransform, new Vector2(0, 0.74f), new Vector2(1, 1), new Vector2(12, 4), new Vector2(-12, -6));
+            _pickerAmount = NewText("Amount", _picker, 22, FontStyles.Bold, TextAlignmentOptions.Center);
+            _pickerAmount.textWrappingMode = TextWrappingModes.Normal;
+            _pickerAmount.overflowMode = TextOverflowModes.Truncate;
+            Place(_pickerAmount.rectTransform, new Vector2(0, 0.60f), new Vector2(1, 0.74f), new Vector2(12, 0), new Vector2(-12, 0));
+            _pickerToggles = Row("Commanders", _picker, new Vector2(0, 0.28f), new Vector2(1, 0.58f), new Vector2(12, 0), new Vector2(-12, 0), 8);
             _pickerToggles.GetComponent<HorizontalLayoutGroup>().childAlignment = TextAnchor.MiddleCenter;
             _pickerButtons = Row("Buttons", _picker, new Vector2(0, 0.03f), new Vector2(1, 0.25f), new Vector2(14, 0), new Vector2(-14, 0), 8);
             _pickerButtons.GetComponent<HorizontalLayoutGroup>().childAlignment = TextAnchor.MiddleCenter;
@@ -1244,7 +1274,8 @@ namespace UI
             CommanderType.Diplomat => new Color(0.05f, 0.45f, 0.35f),
             CommanderType.LandCommander => new Color(0.55f, 0.42f, 0.18f),
             CommanderType.NuclearCommander => new Color(0.9f, 0.45f, 0.08f),
-            _ => new Color(0.3f, 0.3f, 0.35f),
+            CommanderType.NavalCommander => new Color(0.12f, 0.32f, 0.62f),
+            _ => new Color(0.38f, 0.32f, 0.55f),
         };
 
         public static string Short(CommanderType t) => t switch

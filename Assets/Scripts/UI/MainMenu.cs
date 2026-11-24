@@ -207,6 +207,8 @@ namespace UI
             if (_quitModal != null) _quitModal.SetActive(false);
             if (_statusText != null) _statusText.text = "";
 
+            if (EventSystem.current != null)
+                EventSystem.current.SetSelectedGameObject(null);
             Clear(_content);
             _joinCode = null;
             _mailCode = null;
@@ -949,7 +951,7 @@ namespace UI
             var replace = MatchSave.HasSave ? "  ·  this replaces the saved game" : "";
             _lobbyTitle.text = kind == MatchKind.HotSeat
                 ? "Pass and Play  ·  add everyone on this device, then Start" + replace
-                : "Single Player  ·  you, plus bots in the other seats, then Start" + replace;
+                : "Single Player  ·  you and four bots, then Start" + replace;
             _lobby.gameObject.SetActive(true);
             _lobby.Prepare(kind);
         }
@@ -1229,8 +1231,14 @@ namespace UI
         static void Clear(Transform t)
         {
             if (t == null) return;
+            // The click that opened this page is still running on one of these buttons.
+            // Destroying it now makes EventSystem submit on a dead button.
             for (var i = t.childCount - 1; i >= 0; i--)
-                DestroyImmediate(t.GetChild(i).gameObject);
+            {
+                var go = t.GetChild(i).gameObject;
+                go.SetActive(false);
+                Destroy(go);
+            }
         }
 
         sealed class MenuRow : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, ISelectHandler, IDeselectHandler

@@ -62,6 +62,9 @@ namespace UI
             {
                 AddDefault(0, "Red", "You", "Human");
                 AddDefault(1, "Blue", "Bot", StandardBotName);
+                AddDefault(2, "Green", "Bot 2", StandardBotName);
+                AddDefault(3, "Yellow", "Bot 3", StandardBotName);
+                AddDefault(4, "Orange", "Bot 4", StandardBotName);
             }
             _startGameButton.interactable = PlayerCount >= 2;
         }
@@ -126,6 +129,28 @@ namespace UI
                     if (PlayerConfigurations[i] is BotConfiguration) return i;
             }
             return 0;
+        }
+
+        // Gray (Black) stays last, so a new seat takes red, blue, green… before it.
+        public int FirstFreeColor()
+        {
+            if (PlayerColors == null || PlayerColors.Length == 0) return 0;
+            var used = new System.Collections.Generic.HashSet<PlayerColor>();
+            if (_slots != null)
+            {
+                foreach (var slot in _slots)
+                    if (slot != null && slot.PlayerCreated && slot.PlayerCreationConfiguration.PlayerColor != null)
+                        used.Add(slot.PlayerCreationConfiguration.PlayerColor);
+            }
+            var black = -1;
+            for (var i = 0; i < PlayerColors.Length; i++)
+            {
+                var c = PlayerColors[i];
+                if (c == null || used.Contains(c)) continue;
+                if (c.name == "Black") { black = i; continue; }
+                return i;
+            }
+            return black >= 0 ? black : 0;
         }
 
         private int ColorIndex(string colorName)

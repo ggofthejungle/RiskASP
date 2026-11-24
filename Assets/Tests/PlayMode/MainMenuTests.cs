@@ -85,7 +85,7 @@ public class MainMenuTests
     }
 
     [UnityTest]
-    public IEnumerator SinglePlayer_ReusesTheSeatPicker_WithYouAndABot()
+    public IEnumerator SinglePlayer_ReusesTheSeatPicker_WithYouAndFourBots()
     {
         Click("Play");
         Click("Single Player");
@@ -93,11 +93,12 @@ public class MainMenuTests
 
         var lobby = Object.FindAnyObjectByType<UIPlayerCreationManager>();
         Assert.IsTrue(lobby.gameObject.activeInHierarchy);
-        Assert.AreEqual(2, lobby.PlayerCount);
+        Assert.AreEqual(5, lobby.PlayerCount);
         Assert.AreEqual("You", _config.PlayersConfiguration[0].PlayerName);
         Assert.AreEqual("Human", _config.PlayersConfiguration[0].PlayerConfiguration.Name);
         Assert.AreEqual("Bot", _config.PlayersConfiguration[1].PlayerName);
-        Assert.AreEqual(UIPlayerCreationManager.StandardBotName, _config.PlayersConfiguration[1].PlayerConfiguration.Name);
+        for (var i = 1; i <= 4; i++)
+            Assert.AreEqual(UIPlayerCreationManager.StandardBotName, _config.PlayersConfiguration[i].PlayerConfiguration.Name);
 
         Click("Back");
         Assert.IsFalse(MainMenu.Instance.LobbyOpen);

@@ -1,6 +1,8 @@
+using System;
 using System.Linq;
 using Cards;
 using Decisions;
+using Expansions;
 
 // Simple instant heuristic for an AI defender's reaction window (RW-4). C#, so it works on mobile too.
 public static class DefenderAI
@@ -60,6 +62,14 @@ public static class DefenderAI
                 .OrderByDescending(name => Map.TerritoryRepository.Instance.FromName(name).Troops)
                 .First();
 
+        // The free card after 3 conquests: the fullest deck, and nuclear ahead of the others when they match.
+        if (decision.Kind == DecisionKind.ConquestBonus)
+            return decision.Options
+                .OrderByDescending(option => DeckLeft(gm, option))
+                .ThenBy(option => option.Contains(nameof(CommanderType.NuclearCommander)) ? 0
+                    : option.Contains(nameof(CommanderType.LandCommander)) ? 1 : 2)
+                .First();
+
         // Armageddon: a bot plays every free nuclear card it can. A human who is away passes
         // (playing their cards for them would spend cards they may have wanted to keep).
         if (decision.Kind == DecisionKind.ArmageddonCard)
@@ -98,6 +108,13 @@ public static class DefenderAI
         if (Pick(CardType.StealthModsL) is { } mods) return mods;
 
         return DecisionOptions.Pass;
+    }
+
+    static int DeckLeft(GameManager gm, string option)
+    {
+        var name = option != null && option.StartsWith(CommandCards.BonusDeckPrefix)
+            ? option.Substring(CommandCards.BonusDeckPrefix.Length) : option;
+        return Enum.TryParse(name, out CommanderType deck) ? gm.CommandCards.CardsLeftInDeck(deck) : 0;
     }
 
     static float ContinentShare(Map.Continent continent, player.Player p)

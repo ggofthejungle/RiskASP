@@ -36,13 +36,12 @@ namespace Map
             if (repo.Territories.Any(t => t.Kind != TerrainKind.Land)) return;
             ClearLines();
             var byName = repo.Territories.ToDictionary(t => t.Name);
-            // Five water colonies. The bonus numbers are not printed in the manual, so a pair is +2
-            // and the three-territory Pacific is +3, the same kind of placeholder as the moon colonies.
-            var gulfStream = ContinentOf(repo, "gulf_stream", 2, new Color(0.12f, 0.32f, 0.48f));
-            var capeWaters = ContinentOf(repo, "cape_waters", 2, new Color(0.10f, 0.28f, 0.42f));
-            var monsoonSea = ContinentOf(repo, "monsoon_sea", 2, new Color(0.12f, 0.36f, 0.40f));
-            var pacificPassage = ContinentOf(repo, "pacific_passage", 3, new Color(0.16f, 0.34f, 0.55f));
-            var highIce = ContinentOf(repo, "high_ice", 2, new Color(0.45f, 0.58f, 0.68f));
+            // Water colonies: a pair pays +1, a group of three pays +2. Moon numbers are still placeholders.
+            var gulfStream = ContinentOf(repo, "gulf_stream", 1, new Color(0.12f, 0.32f, 0.48f));
+            var capeWaters = ContinentOf(repo, "cape_waters", 1, new Color(0.10f, 0.28f, 0.42f));
+            var monsoonSea = ContinentOf(repo, "monsoon_sea", 1, new Color(0.12f, 0.36f, 0.40f));
+            var pacificPassage = ContinentOf(repo, "pacific_passage", 2, new Color(0.16f, 0.34f, 0.55f));
+            var highIce = ContinentOf(repo, "high_ice", 1, new Color(0.45f, 0.58f, 0.68f));
             var ash = ContinentOf(repo, "ash_belt", 2, new Color(0.42f, 0.40f, 0.38f));
             var bright = ContinentOf(repo, "bright_sea", 2, new Color(0.55f, 0.55f, 0.62f));
             var scar = ContinentOf(repo, "south_scar", 3, new Color(0.48f, 0.42f, 0.40f));
@@ -432,7 +431,7 @@ namespace Map
         }
 
         static Sprite _disc;
-        static Sprite Disc()
+        internal static Sprite Disc()
         {
             if (_disc != null) return _disc;
             const int n = 64;
@@ -456,7 +455,6 @@ namespace Map
         Territory _territory;
         SpriteRenderer _sprite;
         TMP_Text _count;
-        TMP_Text _name;
         Color _base;
 
         public void Bind(Territory territory, SpriteRenderer sprite)
@@ -466,14 +464,6 @@ namespace Map
             _base = sprite.color;
             var font = Object.FindObjectsByType<TMP_Text>(FindObjectsInactive.Include).FirstOrDefault()?.font;
             _count = MakeText("Count", font, 4.6f, new Vector3(0f, -0.02f, 0f));
-            _name = MakeText("Name", font, 2.8f, Vector3.zero);
-            _name.text = territory.Name.Replace('_', ' ');
-            _name.enableWordWrapping = false;
-            _name.overflowMode = TextOverflowModes.Overflow;
-            _name.fontStyle = FontStyles.Bold;
-            _name.outlineWidth = 0.28f;
-            _name.rectTransform.sizeDelta = new Vector2(6.2f, 0.85f);
-            PlaceName();
             territory.OnTroopsChanged += (_, _) => Refresh();
             territory.OnOwnerChanged += (_, _) => Refresh();
             Refresh();
@@ -494,28 +484,6 @@ namespace Map
             text.rectTransform.sizeDelta = new Vector2(1.7f, 0.7f);
             text.sortingOrder = 8;
             return text;
-        }
-
-        void LateUpdate() => PlaceName();
-
-        // Sit the name in the open water, away from land and from the neighbouring disc, so it does not cover a country.
-        void PlaceName()
-        {
-            if (_name == null) return;
-            var scale = Mathf.Max(0.2f, transform.localScale.x);
-            var away = Vector3.zero;
-            foreach (var n in _territory.NeighbourTerritories)
-            {
-                if (n == null) continue;
-                var d = transform.position - n.transform.position;
-                if (d.sqrMagnitude < 0.01f) continue;
-                away += d.normalized * (n.Kind == TerrainKind.Land ? 1.6f : 0.45f);
-            }
-            if (away.sqrMagnitude < 0.04f)
-                away = transform.position.x >= 0f ? Vector3.right : Vector3.left;
-            away = away.normalized * 1.65f;
-            _name.transform.localScale = Vector3.one / scale;
-            _name.transform.localPosition = new Vector3(away.x / scale, away.y / scale, 0f);
         }
 
         void Refresh()

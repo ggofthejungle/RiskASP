@@ -325,6 +325,36 @@ public class GameManager : MonoBehaviour
         else return;
         HandlePlayerAction(new DecisionResponseAction(who, Turn, DefenderAI.Choose(this, d)));
     }
+
+    // Skip phase during a placement. Claims stay a click. Placing MODs, and the starting
+    // commander and station, finish for the player who clicked.
+    public bool SkipPlacesForMe()
+    {
+        var d = PendingDecision;
+        if (d == null || !IsLocal(InputPlayer)) return false;
+        if (IsDrafting && d.Kind == DecisionKind.PlaceStartingTroops)
+        {
+            if (!AutoDraft) FinishMyDraft();
+            return true;
+        }
+        if (_isPlacing && d.Kind == DecisionKind.PlaceStartingUnit)
+        {
+            if (_autoPlacePlayer == null) FinishMyStartingUnits();
+            return true;
+        }
+        return false;
+    }
+
+    Player _autoPlacePlayer;
+
+    void FinishMyStartingUnits()
+    {
+        var who = InputPlayer;
+        var d = PendingDecision;
+        if (who == null || d == null || d.Kind != DecisionKind.PlaceStartingUnit) return;
+        _autoPlacePlayer = who;
+        HandlePlayerAction(new DecisionResponseAction(who, Turn, DefenderAI.Choose(this, d)));
+    }
     // MODs the current player may still place in this batch of 3.
     public int DraftBatchLeft { get; private set; }
     public int DraftUnitsLeft(Player p) => _draftLeft != null && _draftLeft.TryGetValue(p, out var n) ? n : 0;
@@ -530,6 +560,17 @@ public class GameManager : MonoBehaviour
     // player's hand and prompts. null = every human plays on this device (local testing / hot-seat).
     public Player LocalPlayer { get; set; }
     public bool IsLocal(Player p) => p != null && !p.IsBot() && (LocalPlayer == null || LocalPlayer == p);
+
+    readonly HashSet<int> _rememberTwoDice = new();
+
+    // The defender asked not to be prompted again. Later attacks on them roll 2 dice.
+    public void RememberTwoDefenseDice(Player p)
+    {
+        if (p != null) _rememberTwoDice.Add(GetPlayerId(p));
+    }
+
+    public bool RemembersTwoDefenseDice(Player p) =>
+        p != null && _rememberTwoDice.Contains(GetPlayerId(p));
 
     // Hot-seat only (testing): cover screens "Pass the device to Bob" around a defender's decision.
     // Off by default because the real game is online, where each player has their own device.
@@ -773,6 +814,7 @@ public class GameManager : MonoBehaviour
         if (_placements.Count == 0)
         {
             _isPlacing = false;
+            _autoPlacePlayer = null;
             _startingUnitsPlaced = true;
             Debug.Log("Starting units placed.");
             StartNextPlayerTurn();
@@ -781,6 +823,8 @@ public class GameManager : MonoBehaviour
 
         var (player, unit, index) = _placements.Dequeue();
         PlacementIndex = index;
+        if (_autoPlacePlayer != null && _autoPlacePlayer != player)
+            _autoPlacePlayer = null;
         if (_currentPlayer != player)
         {
             var old = _currentPlayer;
@@ -1059,6 +1103,10 @@ public class GameManager : MonoBehaviour
             if (!player.Neutral) player.SetEnergy(IncomeRules.StartingEnergy);
     }
 
+    // Play Mode tests put the seats here. Editing the seat asset during Play Mode and then
+    // loading it makes Unity reimport that asset and the editor locks.
+    public static List<player.PlayerCreationConfiguration> SeatOverride;
+
     private void CreatePlayers()
     {
         if (Players.Count == 0)
@@ -1066,8 +1114,9 @@ public class GameManager : MonoBehaviour
 
         var playerCreator = PlayerCreator.Instance;
         
-        if (_startingPlayersConfiguration != null)
-            foreach (var playerCreationConfiguration in _startingPlayersConfiguration.PlayersConfiguration)
+        var seats = SeatOverride ?? _startingPlayersConfiguration?.PlayersConfiguration;
+        if (seats != null)
+            foreach (var playerCreationConfiguration in seats)
                 Players.Add(playerCreator.CreatePlayerFromConfiguration(playerCreationConfiguration));
 
         for (var i = Players.Count; i < NPlayers; i++)
@@ -1175,9 +1224,10 @@ public class GameManager : MonoBehaviour
             CommandCards.Buy(buy.Player, buy.Deck);
             return true;
         }
-        if (action is CloseShopAction)
+        if (action is CloseShopAction close)
         {
             ShopClosed = true;
+            CommandCards?.RevealBought(close.Player);
             return true;
         }
         if (action is PlayCommandCardAction play)
@@ -1219,15 +1269,22 @@ public class GameManager : MonoBehaviour
         var finishMine = IsDrafting && IsLocal(asked) && (
             (_draftHelp == DraftHelp.Claim && decision.Kind == DecisionKind.ClaimTerritory)
             || (_draftHelp == DraftHelp.Place && decision.Kind == DecisionKind.PlaceStartingTroops));
-        if (asked != null && (asked.IsBot() || !IsConnected(asked) || finishMine))
+        var finishUnits = _autoPlacePlayer == asked && decision.Kind == DecisionKind.PlaceStartingUnit;
+        if (asked != null && (asked.IsBot() || !IsConnected(asked) || finishMine || finishUnits))
         {
             // The AI may look at the player's hand, so online the host decides and the others use its answer.
             HandlePlayerAction(new DecisionResponseAction(asked, _turn, Secrets.Public(() => DefenderAI.Choose(this, decision))));
             return;
         }
+        if (decision.Kind == DecisionKind.DefenseDice && IsLocal(asked) && RemembersTwoDefenseDice(asked))
+        {
+            HandlePlayerAction(new DecisionResponseAction(asked, _turn, "2"));
+            return;
+        }
         if (decision.Kind is DecisionKind.DefenseReaction or DecisionKind.DefenseDice
             or DecisionKind.EvacuationDestination
-            or DecisionKind.ArmageddonCard or DecisionKind.ArmageddonTarget)
+            or DecisionKind.ArmageddonCard or DecisionKind.ArmageddonTarget
+            or DecisionKind.ConquestBonus)
             _decisionClock.Start(Time.realtimeSinceStartupAsDouble, ReactionTimeoutSeconds);
     }
 

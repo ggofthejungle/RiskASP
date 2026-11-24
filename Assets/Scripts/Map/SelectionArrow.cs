@@ -36,6 +36,7 @@ namespace Map
         private Territory _flashFrom, _flashTo;
         private Color _flashColor;
         private float _flashUntil = -1f;
+        private bool _flashPulse;
 
         // For tests.
         public bool IsVisible { get; private set; }
@@ -78,8 +79,10 @@ namespace Map
         {
             _flashFrom = result.Origin;
             _flashTo = result.Target;
-            _flashColor = ColorOf(result.Origin.Owner);
-            _flashUntil = Time.unscaledTime + FlashSeconds;
+            _flashColor = ColorOf(result.Origin != null ? result.Origin.Owner : null);
+            _flashPulse = result.Target != null && result.Target.Owner != null && _gm.IsLocal(result.Target.Owner)
+                && result.Origin != null && result.Origin.Owner != null && result.Origin.Owner.IsBot();
+            _flashUntil = Time.unscaledTime + (_flashPulse ? 2.4f : FlashSeconds);
         }
 
         private void LateUpdate()
@@ -97,7 +100,10 @@ namespace Map
             var pending = _gm.AttackPhase?.PendingAttack;
             if (_gm.CurrentPhase is AttackPhase && pending != null)
             {
-                Draw(pending.Origin, pending.Origin.transform.position, pending.Target, pending.Target.transform.position, color, 1f);
+                var aimedAtYou = pending.Target != null && pending.Target.Owner != null && _gm.IsLocal(pending.Target.Owner)
+                    && pending.Player != null && pending.Player.IsBot();
+                var pulse = aimedAtYou ? 0.35f + 0.65f * Mathf.PingPong(Time.unscaledTime * 2.4f, 1f) : 1f;
+                Draw(pending.Origin, pending.Origin.transform.position, pending.Target, pending.Target.transform.position, color, pulse);
                 return;
             }
 
@@ -128,7 +134,9 @@ namespace Map
             // 3) Recent attack (any player, including bots).
             if (_flashFrom != null && Time.unscaledTime < _flashUntil)
             {
-                var a = Mathf.Clamp01((_flashUntil - Time.unscaledTime) / 0.3f);
+                var a = _flashPulse
+                    ? 0.35f + 0.65f * Mathf.PingPong(Time.unscaledTime * 2.4f, 1f)
+                    : Mathf.Clamp01((_flashUntil - Time.unscaledTime) / 0.3f);
                 Draw(_flashFrom, _flashFrom.transform.position, _flashTo, _flashTo.transform.position, _flashColor, a);
                 return;
             }

@@ -12,9 +12,10 @@ public static class TestRunHelper
 {
     public const string ResultsPath = "Logs/test-results.txt";
     public const string FilterPath = "Logs/test-filter.txt";
-    // Survives the domain reload that Play Mode triggers. The native refresh counter does too,
-    // so this is only a "we already called Disallow" flag, not a second Disallow.
+    // Survives the domain reload that Play Mode triggers. DisallowAutoRefresh does not,
+    // so every load during a run has to call it again or the editor locks on the seat asset.
     const string RefreshHeld = "InvadeEarth.Tests.RefreshHeld";
+    static bool _heldThisDomain;
     private static readonly TestRunnerApi Api;
 
     static TestRunHelper()
@@ -22,9 +23,18 @@ public static class TestRunHelper
         Api = ScriptableObject.CreateInstance<TestRunnerApi>();
         Api.RegisterCallbacks(new ResultWriter());
         EditorApplication.playModeStateChanged += OnPlayMode;
-        // A killed test run can leave the flag set. This process never called Disallow, so just drop the flag.
-        if (!EditorApplication.isPlayingOrWillChangePlaymode)
-            EditorPrefs.SetBool(RefreshHeld, false);
+        // One hold per domain. The Play Mode reload clears the native counter, so the first
+        // test in that domain takes it again. Don't drop the flag here: this constructor
+        // also runs at the reload, and Play Mode is not always visible yet.
+        if (EditorPrefs.GetBool(RefreshHeld, false))
+            HoldThisDomain();
+    }
+
+    static void HoldThisDomain()
+    {
+        if (_heldThisDomain) return;
+        _heldThisDomain = true;
+        AssetDatabase.DisallowAutoRefresh();
     }
 
     // Play Mode tests edit StartingPlayersConfiguration while a scene is running. With auto-refresh on,
@@ -33,8 +43,6 @@ public static class TestRunHelper
     // A try/catch cannot catch that: LoadAssetAtPath does not return.
     static void HoldAssetRefresh()
     {
-        if (EditorPrefs.GetBool(RefreshHeld, false)) return;
-        AssetDatabase.DisallowAutoRefresh();
         EditorPrefs.SetBool(RefreshHeld, true);
     }
 
@@ -99,7 +107,14 @@ public static class TestRunHelper
         // Written before each test so a freeze shows which test was running (it's replaced by the result).
         public void TestStarted(ITestAdaptor test)
         {
-            if (!test.HasChildren) File.AppendAllText(ResultsPath, $"RUNNING {test.Name}\n");
+            // The test is about to edit StartingPlayersConfiguration in Play Mode. If that asset
+            // is still marked dirty, the next LoadAssetAtPath reimports it and the editor locks.
+            if (!test.HasChildren)
+            {
+                HoldThisDomain();
+                ForgetSeatEdits();
+                File.AppendAllText(ResultsPath, $"RUNNING {test.Name}\n");
+            }
         }
 
         public void TestFinished(ITestResultAdaptor result)
@@ -115,8 +130,18 @@ public static class TestRunHelper
         public void RunFinished(ITestResultAdaptor result)
         {
             File.AppendAllText(ResultsPath, $"FINISHED passed={result.PassCount} failed={result.FailCount} skipped={result.SkipCount}\n");
+            ForgetSeatEdits();
             if (!EditorApplication.isPlaying)
                 ReleaseAssetRefresh();
+        }
+
+        // In-memory seat lists are what the tests want. Clearing the dirty flag stops Unity
+        // from reimporting the asset while Play Mode is still running.
+        static void ForgetSeatEdits()
+        {
+            foreach (var obj in Resources.FindObjectsOfTypeAll<ScriptableObject>())
+                if (obj != null && obj.GetType().Name == "StartingPlayersConfiguration")
+                    EditorUtility.ClearDirty(obj);
         }
     }
 }

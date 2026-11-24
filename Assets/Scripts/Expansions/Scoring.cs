@@ -19,7 +19,8 @@ namespace Expansions
         // Players from first to last place.
         public static List<Player> Ranking(IEnumerable<Player> players)
         {
-            var list = players.ToList();
+            // The neutral army holds ground in a 2-player game. It never places, and it never wins.
+            var list = players.Where(p => p != null && !p.Neutral).ToList();
             var lines = list.Select(LineFor).ToArray();
             return ScoringRules.Rank(lines).Select(i => list[i]).ToList();
         }

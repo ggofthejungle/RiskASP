@@ -111,6 +111,10 @@ namespace TurnPhases
                 return;
             }
 
+            // The first invasion ends the buy window. Show anything still face-down so it can be played later.
+            if (_attackResults.Count == 0 && _pendingAttack == null)
+                _gm.CommandCards?.RevealBought(attackAction.Player);
+
             // 1) Declare. 2) Reaction window for the defender (if it applies). 3) Roll.
             var defender = attackAction.Target.Owner;
             if (defender != null && !_passedForTurn.Contains(defender) && ShouldOpenReactionWindow(attackAction))

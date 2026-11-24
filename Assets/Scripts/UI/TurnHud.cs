@@ -40,6 +40,7 @@ namespace UI
         private readonly TMP_Text[] _chipTexts = new TMP_Text[3];
         private RectTransform _orderPicker;
         private RectTransform _orderButtons;
+        private GridLayoutGroup _orderGrid;
         private RectTransform _bidPicker;
         private RectTransform _bidButtons;
         private string _bidPickerKey = "";
@@ -60,7 +61,7 @@ namespace UI
         private TMP_Text _sideTitle;
         private TMP_Text _sideSub;
         private float _sideTime = -1f;
-        private const float SideDuration = 2.6f;
+        private const float SideDuration = 1.15f;
 
         // For tests / other UI.
         public string TitleText => _title != null ? _title.text : "";
@@ -253,7 +254,7 @@ namespace UI
                 : _gm.IsChoosingOrder && p != null ? $"{p.Name.ToUpperInvariant()} CHOOSES"
                 : _gm.IsPlacingStartingUnits && p != null ? PlaceTitle(p)
                 : TurnTitle(p));
-            SetText(_sub, $"Year {_gm.Year}/{GameManager.MaxYears}  ·  Turn {Mathf.Max(_gm.Turn, 1)}");
+            SetText(_sub, $"Year {Mathf.Min(_gm.Year, GameManager.MaxYears)}/{GameManager.MaxYears}  ·  Turn {Mathf.Max(_gm.Turn, 1)}");
 
             // Phase stepper
             if (_gm.IsBidding || _gm.IsChoosingOrder || _gm.IsPlacingStartingUnits || _gm.GameState != GameState.Playing)
@@ -327,12 +328,12 @@ namespace UI
             _instructionBadge.gameObject.SetActive(show);
             if (!show)
             {
-                Place(_instruction.rectTransform, new Vector2(0, 0), new Vector2(1, 1), new Vector2(22, 14), new Vector2(-16, -128));
+                Place(_instruction.rectTransform, new Vector2(0, 0), new Vector2(1, 1), new Vector2(16, 4), new Vector2(-8, -78));
                 return;
             }
             _instructionBadge.color = fill;
             _instructionGlyph.sprite = icon;
-            Place(_instruction.rectTransform, new Vector2(0, 0), new Vector2(1, 1), new Vector2(64, 14), new Vector2(-16, -128));
+            Place(_instruction.rectTransform, new Vector2(0, 0), new Vector2(1, 1), new Vector2(42, 4), new Vector2(-8, -78));
         }
 
         // Buttons 0..energy while a human bids for turn order.
@@ -382,6 +383,7 @@ namespace UI
             _orderPickerKey = key;
 
             foreach (Transform child in _orderButtons) Destroy(child.gameObject);
+            FitOrderPicker(free.Count);
             foreach (var position in free)
             {
                 var pos = position;
@@ -390,14 +392,35 @@ namespace UI
                 var button = img.gameObject.AddComponent<Button>();
                 button.targetGraphic = img;
                 button.onClick.AddListener(() => _gm.ChooseTurnPosition(pos));
-                var label = NewText("Label", img.rectTransform, 24, FontStyles.Bold, TextAlignmentOptions.Center);
+                var label = NewText("Label", img.rectTransform, 22, FontStyles.Bold, TextAlignmentOptions.Center);
                 label.color = ReadableOn(color);
                 label.text = $"Play {GameManager.Ordinal(pos)}";
+                label.textWrappingMode = TextWrappingModes.NoWrap;
+                label.overflowMode = TextOverflowModes.Ellipsis;
                 Stretch(label.rectTransform);
-                var le = img.gameObject.AddComponent<LayoutElement>();
-                le.preferredWidth = 128f;
-                le.minWidth = 96f;
             }
+        }
+
+        // One row up to 3. Four is 2 by 2. Five and six wrap under that, still inside the gold border.
+        void FitOrderPicker(int count)
+        {
+            const float cellW = 136f;
+            const float cellH = 56f;
+            const float gap = 8f;
+            const float pad = 12f;
+            var columns = count <= 3 ? Mathf.Max(1, count) : count == 4 ? 2 : 3;
+            var rows = Mathf.CeilToInt(count / (float)columns);
+            if (_orderGrid != null)
+            {
+                _orderGrid.cellSize = new Vector2(cellW, cellH);
+                _orderGrid.spacing = new Vector2(gap, gap);
+                _orderGrid.padding = new RectOffset((int)pad, (int)pad, (int)pad, (int)pad);
+                _orderGrid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+                _orderGrid.constraintCount = columns;
+            }
+            var width = pad * 2f + columns * cellW + (columns - 1) * gap + PopupBorderThickness * 2f;
+            var height = pad * 2f + rows * cellH + (rows - 1) * gap + PopupBorderThickness * 2f;
+            _orderPicker.sizeDelta = new Vector2(width, height);
         }
 
         private void SetChip(int i, string text, bool active, Color playerColor, bool done = false)
@@ -421,6 +444,11 @@ namespace UI
         // What the player can do right now, in one or two short sentences.
         public string Instruction()
         {
+            // Hiring or building is a map click. The shop line already names the unit; this banner must say the same thing,
+            // not the reinforce "place MODs" line that is still true once the commander is down.
+            if (_sm != null && _sm.IsTargeting && _gm.CommandHud != null && !string.IsNullOrEmpty(_gm.CommandHud.Status))
+                return _gm.CommandHud.Status;
+
             if (!string.IsNullOrEmpty(_flash) && Time.unscaledTime < _flashUntil)
                 return $"<color=#FFD24D>{_flash}</color>";
             if (_gm.GameState == GameState.Over) return "The game is over.";
@@ -432,7 +460,7 @@ namespace UI
                 var unit = placing.Subject == "SpaceStation" ? "Space Station" : Map.MapBadges.FullName(
                     (Expansions.CommanderType)System.Enum.Parse(typeof(Expansions.CommanderType), placing.Subject));
                 return _gm.IsLocal(_gm.InputPlayer)
-                    ? $"<b>{_gm.InputPlayer.Name}</b>, click one of your territories for your <b>{unit}</b> ({_gm.PlacementIndex} of 3)."
+                    ? $"<b>{_gm.InputPlayer.Name}</b>, click one of your territories for your <b>{unit}</b> ({_gm.PlacementIndex} of 3). Press <b>Skip phase</b> to place the rest."
                     : $"Waiting for <b>{_gm.InputPlayer?.Name}</b> to place their {unit}…";
             }
 
@@ -445,7 +473,7 @@ namespace UI
                 return _gm.IsLocal(_gm.InputPlayer)
                     ? $"<b>{_gm.InputPlayer.Name}</b>, place <b>{_gm.DraftBatchLeft}</b> MOD{( _gm.DraftBatchLeft == 1 ? "" : "s")} now. " +
                       $"<b>{_gm.DraftUnitsLeft(_gm.InputPlayer)}</b> left of your starting army " +
-                      $"(the 1 on each territory you claimed already counts)."
+                      $"(the 1 on each territory you claimed already counts). Press <b>Skip phase</b> to place the rest."
                     : $"Waiting for <b>{_gm.InputPlayer?.Name}</b> to place MODs…";
 
             if (_gm.IsBidding)
@@ -482,6 +510,10 @@ namespace UI
                         : $"Waiting for <b>{_gm.InputPlayer?.Name}</b> to choose defense dice…{clock}";
                 if (_gm.PendingDecision.Kind == Decisions.DecisionKind.ArmageddonCard)
                     return $"<b>ARMAGEDDON</b>: waiting for <b>{_gm.InputPlayer?.Name}</b> to play nuclear cards for free…{clock}";
+                if (_gm.PendingDecision.Kind == Decisions.DecisionKind.ConquestBonus)
+                    return _gm.IsLocal(_gm.InputPlayer)
+                        ? $"<b>{_gm.InputPlayer.Name}</b>, 3 territories taken: +{InvadeEarth.Rules.IncomeRules.ConquestBonusEnergy} energy. Choose the deck for your free card."
+                        : $"Waiting for <b>{_gm.InputPlayer?.Name}</b> to choose a deck…{clock}";
                 return $"Waiting for <b>{_gm.InputPlayer?.Name}</b> to respond to the attack…{clock}";
             }
 
@@ -492,7 +524,7 @@ namespace UI
             {
                 case ReinforcePhase rp:
                     return rp.RemainingTroopsToPlace > 0
-                        ? $"Click your territories to place troops (1 per click). <b>{rp.RemainingTroopsToPlace}</b> left. Hire and buy below, then press <b>Done hiring</b>."
+                        ? $"Click your territories to place <b>{rp.RemainingTroopsToPlace}</b> MODs (1 per click). Hire and buy, then press <b>Done hiring</b>. <b>Skip phase</b> places the rest and moves on."
                         : _gm.ShopClosed
                             ? "Hiring is finished. Play cards, then press <b>Skip phase</b> to attack."
                             : "All troops placed. Hire and buy, then press <b>Done hiring</b> before you play cards.";
@@ -605,18 +637,22 @@ namespace UI
             }
             var noteLift = 0f;
             if (block > 0f && _sideCard != null)
-                noteLift = block * 0.5f + _sideCard.sizeDelta.y * 0.5f + 10f;
-            PlaceInOcean(_sideCard, noteLift);
+                noteLift = block * 0.5f + 10f;
+            ParkOnLeft(_sideCard, noteLift);
             if (_toast != null && _toast.gameObject.activeSelf)
-            {
-                var toastLift = noteLift + (_sideTime >= 0f
-                    ? _sideCard.sizeDelta.y * 0.5f + _toast.rectTransform.sizeDelta.y * 0.5f + 8f
-                    : 0f);
-                PlaceInOcean(_toast.rectTransform, toastLift);
-            }
+                PlaceInOcean(_toast.rectTransform, 0f);
         }
 
         private void PlaceInOcean(RectTransform card, float lift) => ParkBySouthAmerica(card, lift);
+
+        // The turn note sits on the left edge, above the player list, and leaves quickly.
+        static void ParkOnLeft(RectTransform card, float lift)
+        {
+            if (card == null) return;
+            card.anchorMin = card.anchorMax = new Vector2(0f, 0.58f);
+            card.pivot = new Vector2(0f, 0.5f);
+            card.anchoredPosition = new Vector2(12f, lift);
+        }
 
         // A card in the Pacific, left of South America. lift is pixels above that spot.
         public static void ParkBySouthAmerica(RectTransform card, float lift = 0f)
@@ -683,7 +719,7 @@ namespace UI
             // Banner panel in the empty top-right area, above the player panels.
             var panel = NewImage("TurnBanner", transform, PanelColor);
             var prt = panel.rectTransform;
-            prt.anchorMin = new Vector2(0.68f, 0.70f);
+            prt.anchorMin = new Vector2(0.72f, 0.855f);
             prt.anchorMax = new Vector2(0.995f, 0.99f);
             prt.offsetMin = prt.offsetMax = Vector2.zero;
             panel.raycastTarget = false;
@@ -694,16 +730,16 @@ namespace UI
             _colorBar = NewImage("PlayerColor", prt, Color.white);
             Place(_colorBar.rectTransform, new Vector2(0, 0), new Vector2(0, 1), new Vector2(0, 0), new Vector2(14, 0));
 
-            _title = NewText("Title", prt, 40, FontStyles.Bold, TextAlignmentOptions.Left);
-            Place(_title.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(28, -62), new Vector2(-170, -8));
+            _title = NewText("Title", prt, 26, FontStyles.Bold, TextAlignmentOptions.Left);
+            Place(_title.rectTransform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(22, -36), new Vector2(-118, -4));
 
-            _sub = NewText("YearTurn", prt, 20, FontStyles.Normal, TextAlignmentOptions.Right);
+            _sub = NewText("YearTurn", prt, 16, FontStyles.Normal, TextAlignmentOptions.Right);
             _sub.color = TextDim;
-            Place(_sub.rectTransform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-168, -46), new Vector2(-14, -10));
+            Place(_sub.rectTransform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-116, -32), new Vector2(-10, -6));
 
             var row = new GameObject("PhaseStepper", typeof(RectTransform)).GetComponent<RectTransform>();
             row.SetParent(prt, false);
-            Place(row, new Vector2(0, 1), new Vector2(1, 1), new Vector2(28, -118), new Vector2(-14, -70));
+            Place(row, new Vector2(0, 1), new Vector2(1, 1), new Vector2(18, -74), new Vector2(-10, -40));
             var layout = row.gameObject.AddComponent<HorizontalLayoutGroup>();
             layout.spacing = 6;
             layout.childControlWidth = layout.childControlHeight = true;
@@ -711,22 +747,22 @@ namespace UI
             for (int i = 0; i < 3; i++)
             {
                 _chips[i] = NewImage($"Phase{i + 1}", row, ChipIdle);
-                _chipTexts[i] = NewText("Label", _chips[i].rectTransform, 22, FontStyles.Normal, TextAlignmentOptions.Center);
+                _chipTexts[i] = NewText("Label", _chips[i].rectTransform, 16, FontStyles.Normal, TextAlignmentOptions.Center);
                 Stretch(_chipTexts[i].rectTransform);
                 _chipTexts[i].textWrappingMode = TextWrappingModes.NoWrap;
                 _chipTexts[i].overflowMode = TextOverflowModes.Ellipsis;
             }
 
             _instructionBadge = NewImage("InstructionBadge", prt, Color.white);
-            Place(_instructionBadge.rectTransform, new Vector2(0, 0), new Vector2(0, 0), new Vector2(28, 14), new Vector2(58, 44));
+            Place(_instructionBadge.rectTransform, new Vector2(0, 0), new Vector2(0, 0), new Vector2(16, 6), new Vector2(38, 28));
             _instructionBadge.preserveAspect = true;
             _instructionGlyph = NewImage("Glyph", _instructionBadge.rectTransform, Color.white);
             _instructionGlyph.preserveAspect = true;
             Place(_instructionGlyph.rectTransform, new Vector2(0.15f, 0.15f), new Vector2(0.85f, 0.85f), Vector2.zero, Vector2.zero);
             _instructionBadge.gameObject.SetActive(false);
 
-            _instruction = NewText("Instruction", prt, 24, FontStyles.Normal, TextAlignmentOptions.TopLeft);
-            Place(_instruction.rectTransform, new Vector2(0, 0), new Vector2(1, 1), new Vector2(22, 14), new Vector2(-16, -128));
+            _instruction = NewText("Instruction", prt, 16, FontStyles.Normal, TextAlignmentOptions.TopLeft);
+            Place(_instruction.rectTransform, new Vector2(0, 0), new Vector2(1, 1), new Vector2(16, 4), new Vector2(-8, -78));
             _instruction.textWrappingMode = TextWrappingModes.Normal;
             _instruction.overflowMode = TextOverflowModes.Ellipsis;
 
@@ -775,11 +811,9 @@ namespace UI
             _orderButtons = new GameObject("Buttons", typeof(RectTransform)).GetComponent<RectTransform>();
             _orderButtons.SetParent(orderFill.transform, false);
             Stretch(_orderButtons);
-            var pickerLayout = _orderButtons.gameObject.AddComponent<HorizontalLayoutGroup>();
-            pickerLayout.spacing = 8;
-            pickerLayout.padding = new RectOffset(12, 12, 10, 10);
-            pickerLayout.childControlWidth = pickerLayout.childControlHeight = true;
-            pickerLayout.childForceExpandWidth = pickerLayout.childForceExpandHeight = true;
+            _orderGrid = _orderButtons.gameObject.AddComponent<GridLayoutGroup>();
+            _orderGrid.childAlignment = TextAnchor.MiddleCenter;
+            FitOrderPicker(3);
             _orderPicker.gameObject.SetActive(false);
 
             // Splash (full-width band in the middle of the screen; never blocks clicks).

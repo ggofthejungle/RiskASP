@@ -90,7 +90,9 @@ namespace TurnPhases
 
         public void End(Player player)
         {
-            _gm.CommandCards?.RevealBought(player);
+            // Buying continues into the attack phase until the player looks, closes the shop, or invades.
+            if (_gm.ShopClosed)
+                _gm.CommandCards?.RevealBought(player);
         }
     }
 }

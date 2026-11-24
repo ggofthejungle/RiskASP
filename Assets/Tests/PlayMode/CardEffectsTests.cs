@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Actions;
 using Cards;
+using Decisions;
 using Expansions;
 using Map;
 using NUnit.Framework;
@@ -12,18 +13,10 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 using Object = UnityEngine.Object;
-#if UNITY_EDITOR
-using UnityEditor;
-#endif
 
 // CC-4: the remaining playable command cards (land-only map) and end-of-game scoring.
 public class CardEffectsTests
 {
-    private const string ConfigPath = "Assets/ScriptableObjects/StartingPlayersConfiguration.asset";
-    private const string HumanConfigPath = "Assets/ScriptableObjects/PlayerConfig/Human_Player_conf.asset";
-
-    private StartingPlayersConfiguration _config;
-    private List<PlayerCreationConfiguration> _savedConfig;
     private GameManager _gm;
     private CardRepository _cr;
     private Player _alice, _bob;
@@ -33,16 +26,7 @@ public class CardEffectsTests
     {
         GameManager.AutoPlaceStartingUnits = true; // start right at bidding
         UnityEngine.Debug.Log($"[TEST] start {NUnit.Framework.TestContext.CurrentContext.Test.Name}");
-#if UNITY_EDITOR
-        _config = AssetDatabase.LoadAssetAtPath<StartingPlayersConfiguration>(ConfigPath);
-        var human = AssetDatabase.LoadAssetAtPath<PlayerConfiguration>(HumanConfigPath);
-        var red = AssetDatabase.LoadAssetAtPath<PlayerColor>("Assets/ScriptableObjects/PlayerColors/Red.asset");
-        var blue = AssetDatabase.LoadAssetAtPath<PlayerColor>("Assets/ScriptableObjects/PlayerColors/Blue.asset");
-        _savedConfig = new List<PlayerCreationConfiguration>(_config.PlayersConfiguration);
-        _config.PlayersConfiguration.Clear();
-        _config.PlayersConfiguration.Add(new PlayerCreationConfiguration { PlayerConfiguration = human, PlayerName = "Alice", PlayerColor = red });
-        _config.PlayersConfiguration.Add(new PlayerCreationConfiguration { PlayerConfiguration = human, PlayerName = "Bob", PlayerColor = blue });
-#endif
+        TestSeats.AliceAndBob();
         yield return SceneManager.LoadSceneAsync("Main");
         for (int i = 0; i < 300; i++)
         {
@@ -60,17 +44,15 @@ public class CardEffectsTests
         Assert.AreEqual(_alice, _gm.CurrentPlayer);
         _alice.SetEnergy(20);
         _alice.Territories.First().AddCommander(new Commander(CommanderType.NuclearCommander)); // Diplomat + Land from the start
+        if (_gm.IsCommandStep(_alice))
+            _gm.HandlePlayerAction(new CloseShopAction(_alice, _gm.Turn));
     }
 
     [TearDown]
     public void TearDown()
     {
         UnityEngine.Debug.Log($"[TEST] end {NUnit.Framework.TestContext.CurrentContext.Test.Name}");
-        if (_config != null && _savedConfig != null)
-        {
-            _config.PlayersConfiguration.Clear();
-            _config.PlayersConfiguration.AddRange(_savedConfig);
-        }
+        TestSeats.Clear();
     }
 
     // ---------- Diplomat ----------
@@ -374,6 +356,49 @@ public class CardEffectsTests
 
     private bool Play(Card card, params object[] targets) =>
         _gm.HandlePlayerAction(new PlayCommandCardAction(_alice, _gm.Turn, card, targets));
+
+    [UnityTest]
+    public IEnumerator ConquestBonus_AsksWhichDeck_ThenDrawsTheOneYouPick()
+    {
+        var energy = _alice.GetEnergy();
+        var hand = _alice.Cards.Count;
+        _gm.CommandCards.GrantConquestBonus(_alice);
+        Assert.AreEqual(energy + 1, _alice.GetEnergy());
+        var decision = _gm.PendingDecision;
+        Assert.AreEqual(DecisionKind.ConquestBonus, decision.Kind);
+        Assert.IsTrue(decision.HasOption(CommandCards.BonusDeckPrefix + CommanderType.LandCommander));
+        Assert.IsTrue(decision.HasOption(CommandCards.BonusDeckPrefix + CommanderType.Diplomat));
+        Assert.IsTrue(_gm.HandlePlayerAction(new DecisionResponseAction(
+            _alice, _gm.Turn, CommandCards.BonusDeckPrefix + CommanderType.LandCommander)));
+        Assert.IsNull(_gm.PendingDecision);
+        Assert.AreEqual(hand + 1, _alice.Cards.Count);
+        Assert.AreEqual(CommanderType.LandCommander, _alice.Cards[_alice.Cards.Count - 1].Commander);
+        yield break;
+    }
+
+    [UnityTest]
+    public IEnumerator ConquestBonus_DrawsAtOnce_WhenOnlyOneDeckIsLegal()
+    {
+        foreach (var territory in _alice.Territories.ToList())
+            foreach (var commander in territory.CommandersList.Where(c => c.CommanderType != CommanderType.Diplomat).ToList())
+                territory.RemoveCommander(commander);
+        var hand = _alice.Cards.Count;
+        _gm.CommandCards.GrantConquestBonus(_alice);
+        Assert.IsNull(_gm.PendingDecision);
+        Assert.AreEqual(hand + 1, _alice.Cards.Count);
+        Assert.AreEqual(CommanderType.Diplomat, _alice.Cards[_alice.Cards.Count - 1].Commander);
+        yield break;
+    }
+
+    [UnityTest]
+    public IEnumerator NeutralArmy_IsLeftOutOfTheRanking()
+    {
+        Assert.IsTrue(_gm.Players.Any(p => p.Neutral));
+        var ranking = Scoring.Ranking(_gm.Players);
+        Assert.IsFalse(ranking.Any(p => p.Neutral));
+        Assert.AreEqual(_gm.Players.Count(p => !p.Neutral), ranking.Count);
+        yield break;
+    }
 
     private void EndPhase() => _gm.HandlePlayerAction(new EndPhaseAction(_gm.CurrentPlayer, _gm.Turn));
 

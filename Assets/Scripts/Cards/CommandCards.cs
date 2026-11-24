@@ -705,18 +705,41 @@ namespace Cards
         }
 
         public Action<Player, Card> OnConquestBonus;
+        public const string BonusDeckPrefix = "Deck:";
 
-        // Free card for the conquest bonus: from a deck whose commander the player has in play if possible,
-        // otherwise from any deck in play. null when every deck is empty.
-        public Card GrantConquestBonus(Player p)
+        // Decks this player may draw the free conquest card from: commander in play, and the deck is not empty.
+        public List<CommanderType> BonusDecks(Player p) =>
+            DeckLists.DecksInPlay.Where(d => p.HasCommanderInPlay(d) && CardsLeftInDeck(d) > 0).ToList();
+
+        // +1 energy at once. One legal deck is drawn immediately. Two or more ask the player which deck.
+        public void GrantConquestBonus(Player p)
         {
             p.SetEnergy(p.GetEnergy() + IncomeRules.ConquestBonusEnergy);
-            var anyPreferred = DeckLists.DecksInPlay.Any(d => p.HasCommanderInPlay(d) && CardsLeftInDeck(d) > 0);
-            var card = Draw(p, c => IsDeckInPlay(c.Commander) && (!anyPreferred || p.HasCommanderInPlay(c.Commander)));
+            var decks = BonusDecks(p);
+            if (decks.Count <= 1)
+            {
+                FinishBonus(p, decks.Count == 1 ? decks[0] : (CommanderType?)null);
+                return;
+            }
+            _gm.OpenDecision(
+                new PendingDecision(_gm.GetPlayerId(p), DecisionKind.ConquestBonus, decks.Select(d => BonusDeckPrefix + d)),
+                response => FinishBonus(p, DeckFromOption(response.Option) ?? decks[0]));
+        }
+
+        static CommanderType? DeckFromOption(string option)
+        {
+            if (option == null || !option.StartsWith(BonusDeckPrefix)) return null;
+            return Enum.TryParse(option.Substring(BonusDeckPrefix.Length), out CommanderType deck) ? deck : null;
+        }
+
+        void FinishBonus(Player p, CommanderType? deck)
+        {
+            Card card = null;
+            if (deck is { } chosen && BonusDecks(p).Contains(chosen))
+                card = Draw(p, c => c.Commander == chosen);
             Debug.Log($"{p.Name} conquered {IncomeRules.ConquestBonusTerritories} territories: +{IncomeRules.ConquestBonusEnergy} energy" +
                       (card != null ? $" and a {card.Commander} card." : " (no cards left to draw)."));
             OnConquestBonus?.Invoke(p, card);
-            return card;
         }
 
         public void Play(Player p, Card card, object[] targets)
