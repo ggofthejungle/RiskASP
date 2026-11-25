@@ -81,7 +81,11 @@ namespace Map
         public void Unselect() => SetSelected(false);
 
         public void Disable() => SetDisabled(true);
-        public void Enable() => SetDisabled(false);
+        public void Enable()
+        {
+            if (_territory != null && _territory.Devastated) return;
+            SetDisabled(false);
+        }
 
         // The moon board calls this. A grey territory does not answer, same as a click on the map.
         public void ClickFromUi()

@@ -1117,7 +1117,7 @@ namespace UI
             // Command bar: bottom centre (where the classic card bar was).
             var barImg = NewImage("CommandBar", transform, new Color(0.27f, 0.29f, 0.38f, 0.95f));
             _bar = barImg.rectTransform;
-            Place(_bar, new Vector2(0.22f, 0.004f), new Vector2(0.98f, 0.18f), Vector2.zero, Vector2.zero);
+            Place(_bar, new Vector2(0f, 0.004f), new Vector2(0.87f, 0.18f), new Vector2(Scoreboard.RightClearance, 0f), Vector2.zero);
             barImg.raycastTarget = true; // clicks on the bar don't reach the map
 
             _actions = Row("Actions", _bar, new Vector2(0, 1), new Vector2(1, 1), new Vector2(10, -78), new Vector2(-10, -8), 8);

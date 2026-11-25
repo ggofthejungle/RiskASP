@@ -227,9 +227,22 @@ namespace Map
             if (_tooltipPanel != null) _tooltipPanel.gameObject.SetActive(t != null);
             if (t == null) { _tooltipPlain = ""; return; }
 
+            if (t.Devastated)
+            {
+                var plainGone = new List<string> { TurnHud.Nice(t.Name), "Devastated" };
+                _tooltipHeader.text = TurnHud.Nice(t.Name);
+                _tooltipHeader.color = new Color(0.72f, 0.55f, 0.42f, 1f);
+                _tooltipNote.text = "Devastated. Out of the game.";
+                _tooltipNote.gameObject.SetActive(true);
+                var goneLe = _tooltipNote.GetComponent<LayoutElement>();
+                if (goneLe != null) goneLe.preferredHeight = 40f;
+                _tooltipPlain = string.Join("\n", plainGone);
+                _tooltipPanel.sizeDelta = new Vector2(300f, 96f);
+                return;
+            }
+
             var owner = t.Owner;
-            var who = t.Devastated ? "Devastated"
-                : owner == null ? "Unclaimed"
+            var who = owner == null ? "Unclaimed"
                 : owner.Neutral ? "Neutral"
                 : owner.Name;
             var units = t.Troops == 1 ? "1 unit" : t.Troops + " units";

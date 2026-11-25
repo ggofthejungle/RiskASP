@@ -24,6 +24,13 @@ namespace TurnPhases.Selection
         private TerritorySelection _from;
         private TerritorySelection _to;
 
+        // The last attack, so a double-click on that enemy rolls again from the same origin.
+        Territory _repeatFrom;
+        Territory _repeatTo;
+        Territory _clickTerritory;
+        float _clickTime;
+        public Territory RepeatTarget => CanRepeat(_repeatFrom, _repeatTo) ? _repeatTo : null;
+
         private int _reinforcementsToMove;
 
         public AttackSelectionPhase(GameManager gm, SelectionManager sm, ActionReader ar)
@@ -38,8 +45,11 @@ namespace TurnPhases.Selection
         {
             if (State == AttackState.Attacking)
             {
+                var againFrom = _from != null ? _from.Territory : _repeatFrom;
+                var againTo = _to != null ? _to.Territory : _repeatTo;
                 UnselectAll();
                 EnableTerritoriesToAttackFrom(_gm.CurrentPlayer);
+                RememberRepeat(againFrom, againTo);
             }
             else if (State == AttackState.Fortifying)
             {
@@ -69,6 +79,18 @@ namespace TurnPhases.Selection
         public void OnClicked(Player player, TerritorySelection selection)
         {
             if (selection == null) throw new ArgumentNullException(selection.Territory.Name);
+
+            var repeat = State == AttackState.Attacking && _from == null
+                && selection.Territory == _clickTerritory
+                && Time.unscaledTime - _clickTime <= 0.4f
+                && CanRepeat(_repeatFrom, selection.Territory);
+            _clickTerritory = selection.Territory;
+            _clickTime = Time.unscaledTime;
+            if (repeat)
+            {
+                RepeatAttack(player, selection);
+                return;
+            }
 
             if (!selection.IsSelected) OnSelected(player, selection);
             else OnUnselected(player, selection);
@@ -132,6 +154,40 @@ namespace TurnPhases.Selection
             _ar.AddAction(new AttackAction(player, _gm.Turn, _attackPhase.AttackTurn, from, to, t, Array.Empty<Expansions.CommanderType>()));
         }
 
+        // The click that started this attack must not count as half of the next double-click.
+        void RememberRepeat(Territory from, Territory to)
+        {
+            _clickTerritory = null;
+            _repeatFrom = from;
+            _repeatTo = to;
+            if (!CanRepeat(from, to)) return;
+            _sm.EnableTerritory(to);
+        }
+
+        bool CanRepeat(Territory from, Territory to)
+        {
+            var player = _gm.CurrentPlayer;
+            if (from == null || to == null || player == null || State != AttackState.Attacking) return false;
+            if (from.Owner != player || from.GetAvailableTroops() < 1) return false;
+            if (to.Owner == null || to.Owner == player || to.Devastated) return false;
+            if (_gm.AttackPhase.IsCeaseFireAgainst(to.Owner)) return false;
+            if (Expansions.Purchases.WhyCantEnterBattle(player, from, to) != null) return false;
+            var neighbour = from.NeighbourTerritories.Contains(to);
+            var surface = from.Kind == TerrainKind.Moon && to.Kind == TerrainKind.Land
+                && _gm.CommandCards != null && _gm.CommandCards.AllowsSurfaceAttack(player, from, to);
+            return neighbour || surface;
+        }
+
+        void RepeatAttack(Player player, TerritorySelection target)
+        {
+            if (!_sm.TerritoryToSelectionMap.TryGetValue(_repeatFrom, out var origin)) return;
+            _from = origin;
+            _from.Select();
+            _to = target;
+            _to.Select();
+            CreateAttackAction(player);
+        }
+
         // Back to "choose a target" (keeps the attacking territory selected).
         public void CancelTarget()
         {
@@ -190,6 +246,9 @@ namespace TurnPhases.Selection
 
         public void End(Player player)
         {
+            _repeatFrom = null;
+            _repeatTo = null;
+            _clickTerritory = null;
             UnselectAll();
         }
 

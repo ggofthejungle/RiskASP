@@ -127,39 +127,53 @@ public static class PlayFabLogin
     public static System.Threading.Tasks.Task PushDisplayName()
     {
         var tcs = new System.Threading.Tasks.TaskCompletionSource<bool>();
+        PushDisplayName((ok, _) => tcs.TrySetResult(ok));
+        return tcs.Task;
+    }
+
+    public static void PushDisplayName(Action<bool, string> done)
+    {
         var name = DisplayName;
-        if (!LoggedIn || name == null || name.Length < 3)
+        if (!LoggedIn) { done?.Invoke(false, "Sign in first."); return; }
+        if (string.IsNullOrEmpty(name) || name.Length < 3)
         {
-            tcs.TrySetResult(false);
-            return tcs.Task;
+            done?.Invoke(false, "Display name needs at least 3 characters.");
+            return;
         }
-        PlayFabClientAPI.UpdateUserTitleDisplayName(new UpdateUserTitleDisplayNameRequest { DisplayName = name.Length > 25 ? name.Substring(0, 25) : name },
-            _ => tcs.TrySetResult(true),
+        var trimmed = name.Length > 25 ? name.Substring(0, 25) : name;
+        PlayFabClientAPI.UpdateUserTitleDisplayName(new UpdateUserTitleDisplayNameRequest { DisplayName = trimmed },
+            _ => done?.Invoke(true, null),
             error =>
             {
                 Debug.LogWarning("Display name not saved: " + error.ErrorMessage);
-                tcs.TrySetResult(false);
+                done?.Invoke(false, error.ErrorMessage);
             });
-        return tcs.Task;
     }
 
     public static void RegisterUsername(string username, string email, string password, Action<bool, string> done)
     {
-        if (!LoggedIn) { done?.Invoke(false, "Sign in first."); return; }
-        PlayFabClientAPI.AddUsernamePassword(new AddUsernamePasswordRequest
+        EnsureLoggedIn((ok, err) =>
         {
-            Username = username,
-            Email = email,
-            Password = password,
-        }, result =>
-        {
-            Username = result.Username;
-            done?.Invoke(true, null);
-        }, error => done?.Invoke(false, error.ErrorMessage));
+            if (!ok) { done?.Invoke(false, string.IsNullOrEmpty(err) ? "Sign in first." : err); return; }
+            var why = WhyUsernameWontWork(username, password);
+            if (why != null) { done?.Invoke(false, why); return; }
+            PlayFabClientAPI.AddUsernamePassword(new AddUsernamePasswordRequest
+            {
+                Username = username,
+                Email = string.IsNullOrWhiteSpace(email) ? null : email.Trim(),
+                Password = password,
+            }, result =>
+            {
+                Username = result.Username;
+                done?.Invoke(true, null);
+            }, error => done?.Invoke(false, error.ErrorMessage));
+        });
     }
 
     public static void SignInWithUsername(string username, string password, Action<bool, string> done)
     {
+        var why = WhyUsernameWontWork(username, password);
+        if (why != null) { done?.Invoke(false, why); return; }
         PlayFabClientAPI.ForgetAllCredentials();
         PlayFabId = null;
         PlayFabClientAPI.LoginWithPlayFab(new LoginWithPlayFabRequest { Username = username, Password = password }, result =>
@@ -169,19 +183,21 @@ public static class PlayFabLogin
             EntityType = result.EntityToken?.Entity?.Type;
             NewlyCreated = result.NewlyCreated;
             Username = username;
-            PlayFabClientAPI.LinkCustomID(new LinkCustomIDRequest { CustomId = DeviceId(), ForceLink = false },
-                _ =>
-                {
-                    RefreshAccount((_, __) => { });
-                    done?.Invoke(true, null);
-                },
-                error =>
-                {
-                    Debug.LogWarning("Couldn't link this device: " + error.ErrorMessage);
-                    RefreshAccount((_, __) => { });
-                    done?.Invoke(true, null);
-                });
+            // This device's id must point at the account just signed in, or the next launch
+            // opens the old anonymous one again.
+            PlayFabClientAPI.LinkCustomID(new LinkCustomIDRequest { CustomId = DeviceId(), ForceLink = true },
+                _ => RefreshAccount((_, __) => done?.Invoke(true, null)),
+                error => done?.Invoke(false, "Signed in, but this device could not keep the account: " + error.ErrorMessage));
         }, error => done?.Invoke(false, error.ErrorMessage));
+    }
+
+    static string WhyUsernameWontWork(string username, string password)
+    {
+        if (string.IsNullOrWhiteSpace(username) || username.Trim().Length < 3 || username.Trim().Length > 20)
+            return "Username must be 3 to 20 characters.";
+        if (string.IsNullOrEmpty(password) || password.Length < 6)
+            return "Password must be at least 6 characters.";
+        return null;
     }
 
     static string DeviceId()

@@ -13,7 +13,10 @@ namespace UI
     public class Scoreboard : MonoBehaviour
     {
         const float RowHeight = 38f;
-        const float Width = 478f;
+        public const float PanelLeft = 8f;
+        public const float PanelWidth = 478f;
+        // Shop bar starts past this, so the troop column does not cover Hire.
+        public const float RightClearance = PanelLeft + PanelWidth + 16f;
         const float HeaderHeight = 36f;
         static readonly Color Dim = new(1f, 1f, 1f, 0.38f);
         static readonly Color Muted = new(0.70f, 0.73f, 0.80f, 1f);
@@ -50,7 +53,7 @@ namespace UI
             _panel = panel.rectTransform;
             _panel.anchorMin = _panel.anchorMax = new Vector2(0f, 0f);
             _panel.pivot = new Vector2(0f, 0f);
-            _panel.anchoredPosition = new Vector2(8f, 8f);
+            _panel.anchoredPosition = new Vector2(PanelLeft, 8f);
             TurnHud.FramePopup(panel, TurnHud.PopupFill, 2f);
 
             _header = TurnHud.NewText("Header", _panel, 20, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
@@ -149,7 +152,7 @@ namespace UI
             }
 
             var visible = Mathf.Min(order.Count, _rows.Count);
-            _panel.sizeDelta = new Vector2(Width, HeaderHeight + 32f + visible * RowHeight);
+            _panel.sizeDelta = new Vector2(PanelWidth, HeaderHeight + 32f + visible * RowHeight);
         }
     }
 }

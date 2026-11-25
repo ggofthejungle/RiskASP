@@ -141,8 +141,11 @@ namespace Map
             Devastated.Add(territory);
             territory.MarkDevastated();
             Frontiers.DropLinks(territory);
+            // The collider stays on so a hover can still name the territory. Clicks do not.
             var collider = territory.GetComponent<Collider2D>();
-            if (collider != null) collider.enabled = false;
+            if (collider != null) collider.enabled = true;
+            var selection = territory.GetComponent<TerritorySelection>();
+            if (selection != null) selection.Disable();
             CalculateTerritoryReachability();
         }
 

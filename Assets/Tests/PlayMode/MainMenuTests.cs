@@ -11,7 +11,7 @@ using UnityEngine.UI;
 using UnityEditor;
 #endif
 
-// The Menu scene's front door: Play / Options / Credits / Quit, Discord,
+// The Menu scene's front door: the game modes, Options, Credits, Quit, Discord,
 // and the existing seat picker for single player and pass-and-play.
 public class MainMenuTests
 {
@@ -76,7 +76,11 @@ public class MainMenuTests
     {
         Assert.IsNotNull(MainMenu.Instance, "Main menu should build itself on the Menu scene");
         Assert.AreEqual("Root", MainMenu.Instance.PageName);
-        Assert.IsNotNull(GameObject.Find("Play"));
+        Assert.IsNull(GameObject.Find("Play"));
+        Assert.IsNotNull(GameObject.Find("Single Player"));
+        Assert.IsNotNull(GameObject.Find("Pass and Play"));
+        Assert.IsNotNull(GameObject.Find("Multiplayer"));
+        Assert.IsNotNull(GameObject.Find("Match rules"));
         Assert.IsNotNull(GameObject.Find("Options"));
         Assert.IsNotNull(GameObject.Find("Credits"));
         Assert.IsNotNull(GameObject.Find("Quit"));
@@ -87,7 +91,6 @@ public class MainMenuTests
     [UnityTest]
     public IEnumerator SinglePlayer_ReusesTheSeatPicker_WithYouAndFourBots()
     {
-        Click("Play");
         Click("Single Player");
         Assert.IsTrue(MainMenu.Instance.LobbyOpen);
 
@@ -102,14 +105,13 @@ public class MainMenuTests
 
         Click("Back");
         Assert.IsFalse(MainMenu.Instance.LobbyOpen);
-        Assert.AreEqual("Play", MainMenu.Instance.PageName);
+        Assert.AreEqual("Root", MainMenu.Instance.PageName);
         yield return null;
     }
 
     [UnityTest]
     public IEnumerator PassAndPlay_PrefillsTwoHumans()
     {
-        Click("Play");
         Click("Pass and Play");
         Assert.AreEqual(2, _config.PlayersConfiguration.Count);
         Assert.AreEqual("Human", _config.PlayersConfiguration[0].PlayerConfiguration.Name);
@@ -120,16 +122,15 @@ public class MainMenuTests
     }
 
     [UnityTest]
-    public IEnumerator Multiplayer_ExplainsThatRoomsAreNotConnected()
+    public IEnumerator Multiplayer_OpensTheLiveRoomPage()
     {
-        Click("Play");
         Click("Multiplayer");
         Assert.IsNotNull(GameObject.Find("Play at your own pace"));
         Click("Play live");
         Assert.IsNotNull(GameObject.Find("Host private room"));
         Assert.IsNotNull(GameObject.Find("Join code"));
         Click("Host private room");
-        StringAssert.Contains("aren't connected", MainMenu.Instance.StatusText);
+        StringAssert.Contains("room", MainMenu.Instance.StatusText.ToLowerInvariant());
         yield return null;
     }
 

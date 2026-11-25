@@ -545,8 +545,11 @@ namespace UI
                         var raid = _gm.CommandCards == null ? ""
                             : string.Join(", ", _gm.CommandCards.SurfaceLands(p).Select(t => "<b>" + Nice(t.Name) + "</b>"));
                         var extra = raid.Length > 0 ? $" Invade Surface: attack {raid} from the Moon." : "";
+                        var again = sel != null && sel.RepeatTarget != null
+                            ? $" Double-click <b>{Nice(sel.RepeatTarget.Name)}</b> to attack it again."
+                            : "";
                         return "Click one of your territories (2+ troops) to attack <b>from</b>. " +
-                               "Press <b>Skip phase</b> when you're done attacking." + extra;
+                               "Press <b>Skip phase</b> when you're done attacking." + again + extra;
                     }
                     if (to == null)
                     {

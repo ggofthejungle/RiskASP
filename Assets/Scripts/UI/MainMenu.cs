@@ -8,14 +8,14 @@ using UnityEngine.UI;
 namespace UI
 {
     // Front door for the Menu scene. Built in code on the existing canvas.
-    // Play → Single Player or Pass and Play opens the seat picker already in the scene.
-    // Multiplayer is the online entry (host / join code) until the lobby service is connected.
+    // Single Player and Pass and Play open the seat picker already in the scene.
+    // Multiplayer is correspondence (PlayFab) or a live room (UGS).
     public class MainMenu : MonoBehaviour
     {
         public static MainMenu Instance { get; private set; }
         public static bool IsRunning => Instance != null;
 
-        enum Page { Root, Play, Online, Room, Options, Credits, Licenses, Rules, Mail, MailRoom, Account, Live }
+        enum Page { Root, Online, Room, Options, Credits, Licenses, Rules, Mail, MailRoom, Account, Live }
 
         static readonly Color Bg = new(0.045f, 0.05f, 0.075f, 1f);
         static readonly Color Column = new(0.07f, 0.08f, 0.11f, 1f);
@@ -217,27 +217,20 @@ namespace UI
             {
                 case Page.Root:
                     _kicker.text = "";
-                    _hint.text = "Five years. Bid for turn order, then take the map.";
-                    Stack(
-                        Row("Play", () => Show(Page.Play), true),
-                        Row("Options", () => Show(Page.Options), false),
-                        Row("Credits", () => Show(Page.Credits), false),
-                        Row("Quit", () => _quitModal.SetActive(true), false));
-                    break;
-                case Page.Play:
-                    _kicker.text = "PLAY";
                     var saved = MatchSave.HasSave;
                     _hint.text = saved
-                        ? "Saved game: " + MatchSave.ContinueSummary + ". Starting a new one replaces it."
+                        ? "Saved game: " + MatchSave.ContinueSummary + ". A new game replaces it."
                         : "Single player is you against bots. Pass and Play shares this device.";
-                    var playRows = new System.Collections.Generic.List<RowSpec>();
-                    if (saved) playRows.Add(Row("Continue", ResumeSaved, true));
-                    playRows.Add(Row("Single Player", () => OpenLobby(MatchKind.SinglePlayer), !saved));
-                    playRows.Add(Row("Multiplayer", () => Show(Page.Online), false));
-                    playRows.Add(Row("Pass and Play", () => OpenLobby(MatchKind.HotSeat), false));
-                    playRows.Add(Row("Match rules", () => Show(Page.Rules), false));
-                    playRows.Add(Row("Back", () => Show(Page.Root), false));
-                    Stack(playRows.ToArray());
+                    var rootRows = new List<RowSpec>();
+                    if (saved) rootRows.Add(Row("Continue", ResumeSaved, true));
+                    rootRows.Add(Row("Single Player", () => OpenLobby(MatchKind.SinglePlayer), !saved));
+                    rootRows.Add(Row("Pass and Play", () => OpenLobby(MatchKind.HotSeat), false));
+                    rootRows.Add(Row("Multiplayer", () => Show(Page.Online), false));
+                    rootRows.Add(Row("Match rules", () => Show(Page.Rules), false));
+                    rootRows.Add(Row("Options", () => Show(Page.Options), false));
+                    rootRows.Add(Row("Credits", () => Show(Page.Credits), false));
+                    rootRows.Add(Row("Quit", () => _quitModal.SetActive(true), false));
+                    Stack(rootRows.ToArray());
                     break;
                 case Page.Rules:
                     _kicker.text = "MATCH RULES";
@@ -251,7 +244,7 @@ namespace UI
                         Row("Play at your own pace", () => Show(Page.Mail), true),
                         Row("Play live", () => Show(Page.Live), false),
                         Row("Account", () => Show(Page.Account), false),
-                        Row("Back", () => Show(Page.Play), false));
+                        Row("Back", () => Show(Page.Root), false));
                     SignIn();
                     break;
                 case Page.Mail:
@@ -649,10 +642,10 @@ namespace UI
             {
                 PlayFabLogin.DisplayName = _nameField.text;
                 SetStatus("Saving…");
-                PlayFabLogin.PushDisplayName().ContinueWith(_ =>
+                PlayFabLogin.PushDisplayName((ok, err) =>
                 {
-                    if (this != null) SetStatus("Display name saved.");
-                }, System.Threading.Tasks.TaskScheduler.FromCurrentSynchronizationContext());
+                    if (this != null) SetStatus(ok ? "Display name saved." : err);
+                });
             }, true);
             var register = MakeRow(_content, "Create username", () =>
             {
@@ -693,8 +686,11 @@ namespace UI
             SetStatus("Signing in…");
             PlayFabLogin.EnsureLoggedIn((ok, error) =>
             {
-                if (this == null || _page != Page.Online) return;
-                SetStatus(ok ? "Signed in." : "Couldn't sign in: " + error);
+                if (this == null) return;
+                if (_page != Page.Online && _page != Page.Account && _page != Page.Live
+                    && _page != Page.Mail && _page != Page.MailRoom) return;
+                var who = string.IsNullOrEmpty(PlayFabLogin.Username) ? PlayFabLogin.DisplayName : PlayFabLogin.Username;
+                SetStatus(ok ? "Signed in" + (string.IsNullOrEmpty(who) ? "." : " as " + who + ".") : "Couldn't sign in: " + error);
             });
         }
 
@@ -830,7 +826,7 @@ namespace UI
                         "Take turns: players claim empty territories one at a time, then place their army 3 MODs at a time. " +
                         "Seas and Moon adds ocean zones, left empty at the start, and a moon west of the Americas. Click the moon to open its board. A space station can attack the three landing sites.";
             rows.Add(note);
-            var back = MakeRow(_content, "Back", () => Show(Page.Play), false);
+            var back = MakeRow(_content, "Back", () => Show(Page.Root), false);
             rows.Add(back);
             buttons.Add(back.GetComponent<Button>());
             LayoutRows(rows.ToArray());
@@ -916,7 +912,7 @@ namespace UI
             if (!MatchSave.TryLoad(out var file))
             {
                 SetStatus("No saved game.");
-                Show(Page.Play);
+                Show(Page.Root);
                 return;
             }
             if (_lobby == null)
@@ -943,7 +939,7 @@ namespace UI
             }
             MatchSession.Select(kind);
             _lobbyOpen = true;
-            _page = Page.Play;
+            _page = Page.Root;
             _background.gameObject.SetActive(false);
             _shell.gameObject.SetActive(false);
             _quitModal.SetActive(false);
@@ -963,7 +959,7 @@ namespace UI
                 _lobby.ClearAll();
                 _lobby.gameObject.SetActive(false);
             }
-            Show(Page.Play);
+            Show(Page.Root);
         }
 
         void OpenDiscord()
@@ -997,13 +993,13 @@ namespace UI
             }
             if (_lobbyOpen) CloseLobby();
             else if (_page == Page.Root) _quitModal.SetActive(true);
-            else if (_page == Page.Online) Show(Page.Play);
+            else if (_page == Page.Online) Show(Page.Root);
             else if (_page == Page.Live) Show(Page.Online);
             else if (_page == Page.Mail) Show(Page.Online);
             else if (_page == Page.MailRoom) RunMail("Leaving…", Correspondence.LeaveLobbyAsync(), Page.Mail);
             else if (_page == Page.Account) Show(Page.Online);
             else if (_page == Page.Licenses) Show(Page.Credits);
-            else if (_page == Page.Rules) Show(Page.Play);
+            else if (_page == Page.Rules) Show(Page.Root);
             else if (_page == Page.Room) RunRoomTask("Leaving…", LeaveRoom());
             else Show(Page.Root);
         }
